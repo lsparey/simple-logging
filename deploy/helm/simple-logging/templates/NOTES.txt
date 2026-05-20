@@ -1,0 +1,19 @@
+simple-logging has been deployed to namespace {{ .Release.Namespace }}.
+
+  Release:   {{ .Release.Name }}
+  Namespace: {{ .Release.Namespace }}
+
+The gRPC-Web API is available inside the cluster at:
+
+  {{ include "simple-logging.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+To access it from outside the cluster, forward the port:
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ include "simple-logging.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+
+{{- if not .Values.persistence.enabled }}
+
+WARNING: persistence is disabled. Logs are stored in an emptyDir and will be
+lost when the pod is restarted. Set persistence.enabled=true for production use.
+{{- end }}

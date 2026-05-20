@@ -1,0 +1,72 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: simple-logging
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Application configuration — all values map 1:1 to environment variables.
+config:
+  logsRoot: /var/pod-logs
+  grpcWebPort: 8080
+  retentionDays: 30
+  retentionCheckInterval: "24h"
+  logLevel: info
+
+# Persistent storage for log files.
+persistence:
+  enabled: true
+  # storageClass: "" uses the cluster default. Set to a specific class if needed.
+  storageClass: ""
+  size: 20Gi
+  accessMode: ReadWriteOnce
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Pod-level security context.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532   # distroless/nonroot UID
+  fsGroup: 65532
+
+serviceAccount:
+  # Set to false to use an existing service account.
+  create: true
+  # Leave blank to default to the chart fullname.
+  name: ""
+
+# RBAC — creates a ClusterRole + ClusterRoleBinding so the app can read pod logs
+# across all namespaces. Disable if you manage RBAC externally.
+rbac:
+  create: true
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Extra environment variables to inject into the container.
+# e.g. extraEnv:
+#   - name: REST_DEBUG
+#     value: "true"
+extraEnv: []
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 30

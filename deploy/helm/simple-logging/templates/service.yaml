@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simple-logging.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "simple-logging.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "simple-logging.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: grpc-web
+      port: {{ .Values.service.port }}
+      targetPort: grpc-web
+      protocol: TCP

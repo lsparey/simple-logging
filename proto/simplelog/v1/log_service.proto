@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package simplelog.v1;
+
+option go_package = "github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1";
+
+// LogService exposes pod log data collected by simple-logging to frontend
+// clients over gRPC-Web.
+service LogService {
+  // ListNamespaces returns all namespaces for which log files exist on disk.
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+
+  // ListPods returns all pods within a namespace for which log files exist,
+  // along with whether each pod is currently being streamed (active).
+  rpc ListPods(ListPodsRequest) returns (ListPodsResponse);
+
+  // GetLogs returns a paginated, optionally time-filtered page of log lines
+  // for a specific pod.
+  rpc GetLogs(GetLogsRequest) returns (GetLogsResponse);
+}
+
+// ── ListNamespaces ────────────────────────────────────────────────────────────
+
+message ListNamespacesRequest {}
+
+message ListNamespacesResponse {
+  repeated string namespaces = 1;
+}
+
+// ── ListPods ──────────────────────────────────────────────────────────────────
+
+message ListPodsRequest {
+  // namespace is required; use "*" is not supported — call ListNamespaces first.
+  string namespace = 1;
+}
+
+message PodInfo {
+  string name      = 1;
+  string namespace = 2;
+  // active is true when the pod is currently running and logs are being streamed.
+  bool active = 3;
+}
+
+message ListPodsResponse {
+  repeated PodInfo pods = 1;
+}
+
+// ── GetLogs ───────────────────────────────────────────────────────────────────
+
+message GetLogsRequest {
+  string namespace = 1;
+  string pod       = 2;
+
+  // start_time and end_time are Unix timestamps (seconds).
+  // A value of 0 means no bound on that side.
+  int64 start_time = 3;
+  int64 end_time   = 4;
+
+  // page_size is the maximum number of log lines to return.
+  // Defaults to 200 if unset or 0; capped at a server-defined maximum.
+  int32 page_size = 5;
+
+  // page_token is an opaque cursor returned by a previous GetLogs call.
+  // Leave empty to start from the beginning (or the earliest line matching
+  // the time filter).
+  string page_token = 6;
+}
+
+message GetLogsResponse {
+  repeated string lines = 1;
+
+  // next_page_token is the cursor to pass in the next request.
+  // An empty value means this is the last page.
+  string next_page_token = 2;
+}

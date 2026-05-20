@@ -1,0 +1,16 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  # Include release namespace in name to support multiple installs on the same cluster.
+  name: {{ include "simple-logging.fullname" . }}-{{ .Release.Namespace }}
+  labels:
+    {{- include "simple-logging.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+{{- end }}
