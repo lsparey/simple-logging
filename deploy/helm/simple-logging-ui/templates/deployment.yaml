@@ -27,7 +27,13 @@ spec:
               protocol: TCP
           env:
             - name: GRPC_WEB_URL
+              {{- if .Values.grpcWebUrl }}
               value: {{ .Values.grpcWebUrl | quote }}
+              {{- else if and .Values.ingress.enabled .Values.ingress.host }}
+              value: {{ printf "http://%s" .Values.ingress.host | quote }}
+              {{- else }}
+              value: "http://simple-logging:8080"
+              {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

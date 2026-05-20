@@ -6,9 +6,19 @@ image:
   tag: "latest"
   pullPolicy: IfNotPresent
 
-# In-cluster URL of the simple-logging gRPC-Web backend.
-# Injected into the container as GRPC_WEB_URL and written to /config.js at startup.
-grpcWebUrl: "http://simple-logging:8080"
+# URL the browser uses to reach the gRPC-Web backend.
+# When ingress.enabled=true and ingress.host is set, this is derived automatically
+# as http://<ingress.host> so gRPC-Web traffic is proxied through the same origin.
+# Set explicitly only when you need a different host or scheme.
+grpcWebUrl: ""
+
+# In-cluster routing of gRPC-Web calls through the Ingress.
+# The pathPrefix matches the proto package path so Traefik can distinguish
+# gRPC-Web requests from static asset requests on the same hostname.
+backend:
+  service: "simple-logging"
+  port: 8080
+  pathPrefix: "/simplelog.v1."
 
 service:
   type: ClusterIP

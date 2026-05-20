@@ -24,6 +24,14 @@ spec:
       {{- end }}
       http:
         paths:
+          # Route gRPC-Web calls to the backend — must come before the / catch-all.
+          - path: {{ .Values.backend.pathPrefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Values.backend.service }}
+                port:
+                  number: {{ .Values.backend.port }}
           - path: /
             pathType: Prefix
             backend:
