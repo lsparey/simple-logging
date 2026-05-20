@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file simplelog/v1/log_service.proto.
  */
 export const file_simplelog_v1_log_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch5zaW1wbGVsb2cvdjEvbG9nX3NlcnZpY2UucHJvdG8SDHNpbXBsZWxvZy52MSIXChVMaXN0TmFtZXNwYWNlc1JlcXVlc3QiLAoWTGlzdE5hbWVzcGFjZXNSZXNwb25zZRISCgpuYW1lc3BhY2VzGAEgAygJIiQKD0xpc3RQb2RzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkiOgoHUG9kSW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgiNwoQTGlzdFBvZHNSZXNwb25zZRIjCgRwb2RzGAEgAygLMhUuc2ltcGxlbG9nLnYxLlBvZEluZm8ifQoOR2V0TG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCRISCgpzdGFydF90aW1lGAMgASgDEhAKCGVuZF90aW1lGAQgASgDEhEKCXBhZ2Vfc2l6ZRgFIAEoBRISCgpwYWdlX3Rva2VuGAYgASgJIjkKD0dldExvZ3NSZXNwb25zZRINCgVsaW5lcxgBIAMoCRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiMwoRU3RyZWFtTG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCSIiChJTdHJlYW1Mb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCTLPAgoKTG9nU2VydmljZRJbCg5MaXN0TmFtZXNwYWNlcxIjLnNpbXBsZWxvZy52MS5MaXN0TmFtZXNwYWNlc1JlcXVlc3QaJC5zaW1wbGVsb2cudjEuTGlzdE5hbWVzcGFjZXNSZXNwb25zZRJJCghMaXN0UG9kcxIdLnNpbXBsZWxvZy52MS5MaXN0UG9kc1JlcXVlc3QaHi5zaW1wbGVsb2cudjEuTGlzdFBvZHNSZXNwb25zZRJGCgdHZXRMb2dzEhwuc2ltcGxlbG9nLnYxLkdldExvZ3NSZXF1ZXN0Gh0uc2ltcGxlbG9nLnYxLkdldExvZ3NSZXNwb25zZRJRCgpTdHJlYW1Mb2dzEh8uc2ltcGxlbG9nLnYxLlN0cmVhbUxvZ3NSZXF1ZXN0GiAuc2ltcGxlbG9nLnYxLlN0cmVhbUxvZ3NSZXNwb25zZTABQkBaPmdpdGh1Yi5jb20vbHNwYXJleS9zaW1wbGUtbG9nZ2luZy9nZW4vc2ltcGxlbG9nL3YxO3NpbXBsZWxvZ3YxYgZwcm90bzM");
+  fileDesc("Ch5zaW1wbGVsb2cvdjEvbG9nX3NlcnZpY2UucHJvdG8SDHNpbXBsZWxvZy52MSIXChVMaXN0TmFtZXNwYWNlc1JlcXVlc3QiLAoWTGlzdE5hbWVzcGFjZXNSZXNwb25zZRISCgpuYW1lc3BhY2VzGAEgAygJIiQKD0xpc3RQb2RzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkiOgoHUG9kSW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgiNwoQTGlzdFBvZHNSZXNwb25zZRIjCgRwb2RzGAEgAygLMhUuc2ltcGxlbG9nLnYxLlBvZEluZm8ifQoOR2V0TG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCRISCgpzdGFydF90aW1lGAMgASgDEhAKCGVuZF90aW1lGAQgASgDEhEKCXBhZ2Vfc2l6ZRgFIAEoBRISCgpwYWdlX3Rva2VuGAYgASgJIjkKD0dldExvZ3NSZXNwb25zZRINCgVsaW5lcxgBIAMoCRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiMwoRU3RyZWFtTG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCSIiChJTdHJlYW1Mb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCSIrChZMaXN0RGVwbG95bWVudHNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCSJBCg5EZXBsb3ltZW50SW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgiTAoXTGlzdERlcGxveW1lbnRzUmVzcG9uc2USMQoLZGVwbG95bWVudHMYASADKAsyHC5zaW1wbGVsb2cudjEuRGVwbG95bWVudEluZm8ijgEKGEdldERlcGxveW1lbnRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEgoKZGVwbG95bWVudBgCIAEoCRISCgpzdGFydF90aW1lGAMgASgDEhAKCGVuZF90aW1lGAQgASgDEhEKCXBhZ2Vfc2l6ZRgFIAEoBRISCgpwYWdlX3Rva2VuGAYgASgJIkMKGUdldERlcGxveW1lbnRMb2dzUmVzcG9uc2USDQoFbGluZXMYASADKAkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIkQKG1N0cmVhbURlcGxveW1lbnRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEgoKZGVwbG95bWVudBgCIAEoCSIsChxTdHJlYW1EZXBsb3ltZW50TG9nc1Jlc3BvbnNlEgwKBGxpbmUYASABKAkyhgUKCkxvZ1NlcnZpY2USWwoOTGlzdE5hbWVzcGFjZXMSIy5zaW1wbGVsb2cudjEuTGlzdE5hbWVzcGFjZXNSZXF1ZXN0GiQuc2ltcGxlbG9nLnYxLkxpc3ROYW1lc3BhY2VzUmVzcG9uc2USSQoITGlzdFBvZHMSHS5zaW1wbGVsb2cudjEuTGlzdFBvZHNSZXF1ZXN0Gh4uc2ltcGxlbG9nLnYxLkxpc3RQb2RzUmVzcG9uc2USRgoHR2V0TG9ncxIcLnNpbXBsZWxvZy52MS5HZXRMb2dzUmVxdWVzdBodLnNpbXBsZWxvZy52MS5HZXRMb2dzUmVzcG9uc2USUQoKU3RyZWFtTG9ncxIfLnNpbXBsZWxvZy52MS5TdHJlYW1Mb2dzUmVxdWVzdBogLnNpbXBsZWxvZy52MS5TdHJlYW1Mb2dzUmVzcG9uc2UwARJeCg9MaXN0RGVwbG95bWVudHMSJC5zaW1wbGVsb2cudjEuTGlzdERlcGxveW1lbnRzUmVxdWVzdBolLnNpbXBsZWxvZy52MS5MaXN0RGVwbG95bWVudHNSZXNwb25zZRJkChFHZXREZXBsb3ltZW50TG9ncxImLnNpbXBsZWxvZy52MS5HZXREZXBsb3ltZW50TG9nc1JlcXVlc3QaJy5zaW1wbGVsb2cudjEuR2V0RGVwbG95bWVudExvZ3NSZXNwb25zZRJvChRTdHJlYW1EZXBsb3ltZW50TG9ncxIpLnNpbXBsZWxvZy52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1JlcXVlc3QaKi5zaW1wbGVsb2cudjEuU3RyZWFtRGVwbG95bWVudExvZ3NSZXNwb25zZTABQkBaPmdpdGh1Yi5jb20vbHNwYXJleS9zaW1wbGUtbG9nZ2luZy9nZW4vc2ltcGxlbG9nL3YxO3NpbXBsZWxvZ3YxYgZwcm90bzM");
 
 /**
  * @generated from message simplelog.v1.ListNamespacesRequest
@@ -224,6 +224,184 @@ export const StreamLogsResponseSchema: GenMessage<StreamLogsResponse> = /*@__PUR
   messageDesc(file_simplelog_v1_log_service, 8);
 
 /**
+ * @generated from message simplelog.v1.ListDeploymentsRequest
+ */
+export type ListDeploymentsRequest = Message<"simplelog.v1.ListDeploymentsRequest"> & {
+  /**
+   * @generated from field: string namespace = 1;
+   */
+  namespace: string;
+};
+
+/**
+ * Describes the message simplelog.v1.ListDeploymentsRequest.
+ * Use `create(ListDeploymentsRequestSchema)` to create a new message.
+ */
+export const ListDeploymentsRequestSchema: GenMessage<ListDeploymentsRequest> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 9);
+
+/**
+ * @generated from message simplelog.v1.DeploymentInfo
+ */
+export type DeploymentInfo = Message<"simplelog.v1.DeploymentInfo"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string namespace = 2;
+   */
+  namespace: string;
+
+  /**
+   * active is true when at least one pod in the deployment is currently running.
+   *
+   * @generated from field: bool active = 3;
+   */
+  active: boolean;
+};
+
+/**
+ * Describes the message simplelog.v1.DeploymentInfo.
+ * Use `create(DeploymentInfoSchema)` to create a new message.
+ */
+export const DeploymentInfoSchema: GenMessage<DeploymentInfo> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 10);
+
+/**
+ * @generated from message simplelog.v1.ListDeploymentsResponse
+ */
+export type ListDeploymentsResponse = Message<"simplelog.v1.ListDeploymentsResponse"> & {
+  /**
+   * @generated from field: repeated simplelog.v1.DeploymentInfo deployments = 1;
+   */
+  deployments: DeploymentInfo[];
+};
+
+/**
+ * Describes the message simplelog.v1.ListDeploymentsResponse.
+ * Use `create(ListDeploymentsResponseSchema)` to create a new message.
+ */
+export const ListDeploymentsResponseSchema: GenMessage<ListDeploymentsResponse> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 11);
+
+/**
+ * @generated from message simplelog.v1.GetDeploymentLogsRequest
+ */
+export type GetDeploymentLogsRequest = Message<"simplelog.v1.GetDeploymentLogsRequest"> & {
+  /**
+   * @generated from field: string namespace = 1;
+   */
+  namespace: string;
+
+  /**
+   * @generated from field: string deployment = 2;
+   */
+  deployment: string;
+
+  /**
+   * start_time and end_time are Unix timestamps (seconds).
+   * A value of 0 means no bound on that side.
+   *
+   * @generated from field: int64 start_time = 3;
+   */
+  startTime: bigint;
+
+  /**
+   * @generated from field: int64 end_time = 4;
+   */
+  endTime: bigint;
+
+  /**
+   * page_size is the maximum number of log lines to return.
+   * Defaults to 200 if unset or 0; capped at a server-defined maximum.
+   *
+   * @generated from field: int32 page_size = 5;
+   */
+  pageSize: number;
+
+  /**
+   * page_token is an opaque cursor returned by a previous GetDeploymentLogs call.
+   * Leave empty to start from the beginning.
+   *
+   * @generated from field: string page_token = 6;
+   */
+  pageToken: string;
+};
+
+/**
+ * Describes the message simplelog.v1.GetDeploymentLogsRequest.
+ * Use `create(GetDeploymentLogsRequestSchema)` to create a new message.
+ */
+export const GetDeploymentLogsRequestSchema: GenMessage<GetDeploymentLogsRequest> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 12);
+
+/**
+ * @generated from message simplelog.v1.GetDeploymentLogsResponse
+ */
+export type GetDeploymentLogsResponse = Message<"simplelog.v1.GetDeploymentLogsResponse"> & {
+  /**
+   * @generated from field: repeated string lines = 1;
+   */
+  lines: string[];
+
+  /**
+   * next_page_token is the cursor to pass in the next request.
+   * An empty value means this is the last page.
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+};
+
+/**
+ * Describes the message simplelog.v1.GetDeploymentLogsResponse.
+ * Use `create(GetDeploymentLogsResponseSchema)` to create a new message.
+ */
+export const GetDeploymentLogsResponseSchema: GenMessage<GetDeploymentLogsResponse> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 13);
+
+/**
+ * @generated from message simplelog.v1.StreamDeploymentLogsRequest
+ */
+export type StreamDeploymentLogsRequest = Message<"simplelog.v1.StreamDeploymentLogsRequest"> & {
+  /**
+   * @generated from field: string namespace = 1;
+   */
+  namespace: string;
+
+  /**
+   * @generated from field: string deployment = 2;
+   */
+  deployment: string;
+};
+
+/**
+ * Describes the message simplelog.v1.StreamDeploymentLogsRequest.
+ * Use `create(StreamDeploymentLogsRequestSchema)` to create a new message.
+ */
+export const StreamDeploymentLogsRequestSchema: GenMessage<StreamDeploymentLogsRequest> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 14);
+
+/**
+ * @generated from message simplelog.v1.StreamDeploymentLogsResponse
+ */
+export type StreamDeploymentLogsResponse = Message<"simplelog.v1.StreamDeploymentLogsResponse"> & {
+  /**
+   * @generated from field: string line = 1;
+   */
+  line: string;
+};
+
+/**
+ * Describes the message simplelog.v1.StreamDeploymentLogsResponse.
+ * Use `create(StreamDeploymentLogsResponseSchema)` to create a new message.
+ */
+export const StreamDeploymentLogsResponseSchema: GenMessage<StreamDeploymentLogsResponse> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 15);
+
+/**
  * LogService exposes pod log data collected by simple-logging to frontend
  * clients over gRPC-Web.
  *
@@ -272,6 +450,40 @@ export const LogService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamLogsRequestSchema;
     output: typeof StreamLogsResponseSchema;
+  },
+  /**
+   * ListDeployments returns all deployments (groups of pods sharing the same
+   * deployment name) within a namespace for which log files exist.
+   *
+   * @generated from rpc simplelog.v1.LogService.ListDeployments
+   */
+  listDeployments: {
+    methodKind: "unary";
+    input: typeof ListDeploymentsRequestSchema;
+    output: typeof ListDeploymentsResponseSchema;
+  },
+  /**
+   * GetDeploymentLogs returns a paginated, optionally time-filtered page of
+   * log lines merged from all pods belonging to a deployment, sorted by time.
+   *
+   * @generated from rpc simplelog.v1.LogService.GetDeploymentLogs
+   */
+  getDeploymentLogs: {
+    methodKind: "unary";
+    input: typeof GetDeploymentLogsRequestSchema;
+    output: typeof GetDeploymentLogsResponseSchema;
+  },
+  /**
+   * StreamDeploymentLogs tails all active pods for a deployment and streams
+   * merged log lines in real time. The stream stays open until the client
+   * cancels it.
+   *
+   * @generated from rpc simplelog.v1.LogService.StreamDeploymentLogs
+   */
+  streamDeploymentLogs: {
+    methodKind: "server_streaming";
+    input: typeof StreamDeploymentLogsRequestSchema;
+    output: typeof StreamDeploymentLogsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_simplelog_v1_log_service, 0);

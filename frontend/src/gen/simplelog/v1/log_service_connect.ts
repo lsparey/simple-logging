@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetLogsRequest, GetLogsResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
+import { GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -60,6 +60,43 @@ export const LogService = {
       name: "StreamLogs",
       I: StreamLogsRequest,
       O: StreamLogsResponse,
+      kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * ListDeployments returns all deployments (groups of pods sharing the same
+     * deployment name) within a namespace for which log files exist.
+     *
+     * @generated from rpc simplelog.v1.LogService.ListDeployments
+     */
+    listDeployments: {
+      name: "ListDeployments",
+      I: ListDeploymentsRequest,
+      O: ListDeploymentsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetDeploymentLogs returns a paginated, optionally time-filtered page of
+     * log lines merged from all pods belonging to a deployment, sorted by time.
+     *
+     * @generated from rpc simplelog.v1.LogService.GetDeploymentLogs
+     */
+    getDeploymentLogs: {
+      name: "GetDeploymentLogs",
+      I: GetDeploymentLogsRequest,
+      O: GetDeploymentLogsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * StreamDeploymentLogs tails all active pods for a deployment and streams
+     * merged log lines in real time. The stream stays open until the client
+     * cancels it.
+     *
+     * @generated from rpc simplelog.v1.LogService.StreamDeploymentLogs
+     */
+    streamDeploymentLogs: {
+      name: "StreamDeploymentLogs",
+      I: StreamDeploymentLogsRequest,
+      O: StreamDeploymentLogsResponse,
       kind: MethodKind.ServerStreaming,
     },
   }

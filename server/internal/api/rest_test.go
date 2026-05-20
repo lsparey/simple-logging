@@ -12,7 +12,7 @@ import (
 
 func newDebugMux(t *testing.T, dir string, active map[string]bool) *http.ServeMux {
 	t.Helper()
-	svc := NewLogService(dir, &fakeChecker{active: active})
+	svc := NewLogService(dir, &fakeChecker{active: active}, noopDeploymentMapper{})
 	mux := http.NewServeMux()
 	registerDebugRoutes(mux, svc)
 	return mux

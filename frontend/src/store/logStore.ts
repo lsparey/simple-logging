@@ -8,6 +8,10 @@ interface LogStore {
   selectedPod: string | null;
   setSelectedPod: (namespace: string, pod: string) => void;
 
+  // Deployment selection (mutually exclusive with pod selection)
+  selectedDeployment: string | null;
+  setSelectedDeployment: (namespace: string, deployment: string) => void;
+
   // Display mode
   mode: DisplayMode;
   setMode: (mode: DisplayMode) => void;
@@ -44,6 +48,22 @@ export const useLogStore = create<LogStore>((set) => ({
     set({
       selectedNamespace: namespace,
       selectedPod: pod,
+      selectedDeployment: null,
+      mode: 'loading',
+      lines: [],
+      prevPageToken: '',
+      nextPageToken: '',
+      searchText: '',
+      startTime: 0,
+      endTime: 0,
+    }),
+
+  selectedDeployment: null,
+  setSelectedDeployment: (namespace, deployment) =>
+    set({
+      selectedNamespace: namespace,
+      selectedPod: null,
+      selectedDeployment: deployment,
       mode: 'loading',
       lines: [],
       prevPageToken: '',

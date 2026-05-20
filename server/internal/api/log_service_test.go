@@ -26,6 +26,13 @@ func (f *fakeChecker) IsActive(namespace, pod string) bool {
 	return f.active[namespace+"/"+pod]
 }
 
+// noopDeploymentMapper is a no-op DeploymentMapper for tests that don't
+// exercise deployment functionality.
+type noopDeploymentMapper struct{}
+
+func (noopDeploymentMapper) GetDeploymentName(_, _ string) (string, bool) { return "", false }
+func (noopDeploymentMapper) ListKnownDeployments(_ string) []string        { return nil }
+
 func writeLogFile(t *testing.T, dir, namespace, pod string, lines []string) {
 	t.Helper()
 	nsDir := filepath.Join(dir, namespace)
@@ -50,7 +57,7 @@ func TestListNamespaces(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "default"), 0755)
 	os.MkdirAll(filepath.Join(dir, "kube-system"), 0755)
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.ListNamespaces(context.Background(), &pb.ListNamespacesRequest{})
 	if err != nil {
 		t.Fatalf("ListNamespaces: %v", err)
@@ -73,7 +80,7 @@ func TestListPods(t *testing.T) {
 	writeLogFile(t, dir, "default", "pod-b", []string{"line"})
 
 	checker := &fakeChecker{active: map[string]bool{"default/pod-a": true}}
-	svc := NewLogService(dir, checker)
+	svc := NewLogService(dir, checker, noopDeploymentMapper{})
 	resp, err := svc.ListPods(context.Background(), &pb.ListPodsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListPods: %v", err)
@@ -97,7 +104,7 @@ func TestListPods(t *testing.T) {
 
 func TestListPods_UnknownNamespace(t *testing.T) {
 	dir := t.TempDir()
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.ListPods(context.Background(), &pb.ListPodsRequest{Namespace: "nonexistent"})
 	if err != nil {
 		t.Fatalf("ListPods: %v", err)
@@ -118,7 +125,7 @@ func TestGetLogs_Basic(t *testing.T) {
 	}
 	writeLogFile(t, dir, "default", "pod", lines)
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace: "default",
 		Pod:       "pod",
@@ -142,7 +149,7 @@ func TestGetLogs_Pagination(t *testing.T) {
 	}
 	writeLogFile(t, dir, "default", "pod", lines)
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 
 	// First page of 2.
 	resp1, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
@@ -199,7 +206,7 @@ func TestGetLogs_TimeRangeFilter(t *testing.T) {
 	}
 	writeLogFile(t, dir, "default", "pod", lines)
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 
 	start := time.Date(2026, 5, 20, 9, 30, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 20, 10, 30, 0, 0, time.UTC)
@@ -225,7 +232,7 @@ func TestGetLogs_InvalidPageToken(t *testing.T) {
 	dir := t.TempDir()
 	writeLogFile(t, dir, "default", "pod", []string{"line"})
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	_, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod", PageToken: "notvalidbase64!!!",
 	})
@@ -236,7 +243,7 @@ func TestGetLogs_InvalidPageToken(t *testing.T) {
 
 func TestGetLogs_NotFound(t *testing.T) {
 	dir := t.TempDir()
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	_, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace: "default", Pod: "nonexistent",
 	})
@@ -253,7 +260,7 @@ func TestGetLogs_DefaultPageSize(t *testing.T) {
 	}
 	writeLogFile(t, dir, "default", "pod", lines)
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod",
 		// PageSize intentionally zero — should default to 200.
@@ -306,7 +313,7 @@ func TestStreamLogs_OnlyNewLines(t *testing.T) {
 
 	logPath := filepath.Join(dir, "default", "mypod.log")
 
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -355,7 +362,7 @@ func TestStreamLogs_OnlyNewLines(t *testing.T) {
 
 func TestStreamLogs_NotFound(t *testing.T) {
 	dir := t.TempDir()
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	ctx := context.Background()
 	stream := newFakeStreamLogsServer(ctx)
 	err := svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "ghost"}, stream)
@@ -366,7 +373,7 @@ func TestStreamLogs_NotFound(t *testing.T) {
 
 func TestStreamLogs_MissingArgs(t *testing.T) {
 	dir := t.TempDir()
-	svc := NewLogService(dir, &fakeChecker{})
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
 	ctx := context.Background()
 	stream := newFakeStreamLogsServer(ctx)
 	err := svc.StreamLogs(&pb.StreamLogsRequest{}, stream)

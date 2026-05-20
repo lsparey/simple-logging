@@ -7,12 +7,15 @@ import LogToolbar from './LogToolbar.js';
 import LogList from './LogList.js';
 import { useLogHistory } from '../../hooks/useLogHistory.js';
 import { useLogStream } from '../../hooks/useLogStream.js';
+import { useDeploymentLogHistory } from '../../hooks/useDeploymentLogHistory.js';
+import { useDeploymentLogStream } from '../../hooks/useDeploymentLogStream.js';
 import { useLogStore, useFilteredLines } from '../../store/logStore.js';
 
 export default function LogPanel() {
   const {
     selectedNamespace: namespace,
     selectedPod: pod,
+    selectedDeployment: deployment,
     mode,
     nextPageToken,
     prevPageToken,
@@ -27,14 +30,23 @@ export default function LogPanel() {
 
   const filters = { startTime, endTime, pageToken };
 
-  const { loading } = useLogHistory(
-    liveEnabled ? null : namespace,
-    liveEnabled ? null : pod,
+  // Pod-mode hooks (disabled when a deployment is selected)
+  const { loading: podLoading } = useLogHistory(
+    !deployment && !liveEnabled ? namespace : null,
+    !deployment && !liveEnabled ? pod : null,
     filters,
   );
+  useLogStream(namespace, !deployment ? pod : null, liveEnabled);
 
-  useLogStream(namespace, pod, liveEnabled);
+  // Deployment-mode hooks (disabled when a pod is selected)
+  const { loading: deploymentLoading } = useDeploymentLogHistory(
+    deployment && !liveEnabled ? namespace : null,
+    deployment && !liveEnabled ? deployment : null,
+    filters,
+  );
+  useDeploymentLogStream(namespace, deployment && liveEnabled ? deployment : null, liveEnabled);
 
+  const loading = deployment ? deploymentLoading : podLoading;
   const filteredLines = useFilteredLines();
 
   const handleLiveToggle = useCallback((on: boolean) => {
@@ -42,7 +54,7 @@ export default function LogPanel() {
     if (!on) setPageToken('');
   }, []);
 
-  if (!namespace || !pod) {
+  if (!namespace || (!pod && !deployment)) {
     return (
       <Box
         sx={{
@@ -53,7 +65,7 @@ export default function LogPanel() {
           color: 'text.disabled',
         }}
       >
-        <Typography>Select a pod from the sidebar to view logs.</Typography>
+        <Typography>Select a pod or deployment from the sidebar to view logs.</Typography>
       </Box>
     );
   }
@@ -62,7 +74,8 @@ export default function LogPanel() {
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <LogToolbar
         namespace={namespace}
-        pod={pod}
+        pod={pod ?? undefined}
+        deployment={deployment ?? undefined}
         liveEnabled={liveEnabled}
         onLiveToggle={handleLiveToggle}
       />

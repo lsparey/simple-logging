@@ -11,13 +11,19 @@ import { useLogStore } from '../../store/logStore.js';
 
 interface Props {
   namespace: string;
-  pod: string;
+  /** Either `pod` or `deployment` is set, not both. */
+  pod?: string;
+  deployment?: string;
   liveEnabled: boolean;
   onLiveToggle: (on: boolean) => void;
 }
 
-export default function LogToolbar({ namespace, pod, liveEnabled, onLiveToggle }: Props) {
+export default function LogToolbar({ namespace, pod, deployment, liveEnabled, onLiveToggle }: Props) {
   const { searchText, setSearchText, startTime, endTime, setTimeRange } = useLogStore();
+
+  const label = deployment
+    ? `${namespace} / ${deployment} (deployment)`
+    : `${namespace} / ${pod}`;
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -34,7 +40,7 @@ export default function LogToolbar({ namespace, pod, liveEnabled, onLiveToggle }
         }}
       >
         <Chip
-          label={`${namespace} / ${pod}`}
+          label={label}
           size="small"
           variant="outlined"
           sx={{ fontFamily: 'monospace' }}

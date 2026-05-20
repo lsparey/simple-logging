@@ -492,6 +492,395 @@ func (x *StreamLogsResponse) GetLine() string {
 	return ""
 }
 
+type ListDeploymentsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeploymentsRequest) Reset() {
+	*x = ListDeploymentsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeploymentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeploymentsRequest) ProtoMessage() {}
+
+func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeploymentsRequest.ProtoReflect.Descriptor instead.
+func (*ListDeploymentsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListDeploymentsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+type DeploymentInfo struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// active is true when at least one pod in the deployment is currently running.
+	Active        bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeploymentInfo) Reset() {
+	*x = DeploymentInfo{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeploymentInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeploymentInfo) ProtoMessage() {}
+
+func (x *DeploymentInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeploymentInfo.ProtoReflect.Descriptor instead.
+func (*DeploymentInfo) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DeploymentInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DeploymentInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *DeploymentInfo) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+type ListDeploymentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Deployments   []*DeploymentInfo      `protobuf:"bytes,1,rep,name=deployments,proto3" json:"deployments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListDeploymentsResponse) Reset() {
+	*x = ListDeploymentsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListDeploymentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListDeploymentsResponse) ProtoMessage() {}
+
+func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListDeploymentsResponse.ProtoReflect.Descriptor instead.
+func (*ListDeploymentsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListDeploymentsResponse) GetDeployments() []*DeploymentInfo {
+	if x != nil {
+		return x.Deployments
+	}
+	return nil
+}
+
+type GetDeploymentLogsRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Namespace  string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Deployment string                 `protobuf:"bytes,2,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	// start_time and end_time are Unix timestamps (seconds).
+	// A value of 0 means no bound on that side.
+	StartTime int64 `protobuf:"varint,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime   int64 `protobuf:"varint,4,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	// page_size is the maximum number of log lines to return.
+	// Defaults to 200 if unset or 0; capped at a server-defined maximum.
+	PageSize int32 `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token is an opaque cursor returned by a previous GetDeploymentLogs call.
+	// Leave empty to start from the beginning.
+	PageToken     string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeploymentLogsRequest) Reset() {
+	*x = GetDeploymentLogsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeploymentLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeploymentLogsRequest) ProtoMessage() {}
+
+func (x *GetDeploymentLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeploymentLogsRequest.ProtoReflect.Descriptor instead.
+func (*GetDeploymentLogsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetDeploymentLogsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *GetDeploymentLogsRequest) GetDeployment() string {
+	if x != nil {
+		return x.Deployment
+	}
+	return ""
+}
+
+func (x *GetDeploymentLogsRequest) GetStartTime() int64 {
+	if x != nil {
+		return x.StartTime
+	}
+	return 0
+}
+
+func (x *GetDeploymentLogsRequest) GetEndTime() int64 {
+	if x != nil {
+		return x.EndTime
+	}
+	return 0
+}
+
+func (x *GetDeploymentLogsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *GetDeploymentLogsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type GetDeploymentLogsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Lines []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	// next_page_token is the cursor to pass in the next request.
+	// An empty value means this is the last page.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDeploymentLogsResponse) Reset() {
+	*x = GetDeploymentLogsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDeploymentLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDeploymentLogsResponse) ProtoMessage() {}
+
+func (x *GetDeploymentLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDeploymentLogsResponse.ProtoReflect.Descriptor instead.
+func (*GetDeploymentLogsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetDeploymentLogsResponse) GetLines() []string {
+	if x != nil {
+		return x.Lines
+	}
+	return nil
+}
+
+func (x *GetDeploymentLogsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+type StreamDeploymentLogsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Deployment    string                 `protobuf:"bytes,2,opt,name=deployment,proto3" json:"deployment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamDeploymentLogsRequest) Reset() {
+	*x = StreamDeploymentLogsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamDeploymentLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamDeploymentLogsRequest) ProtoMessage() {}
+
+func (x *StreamDeploymentLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamDeploymentLogsRequest.ProtoReflect.Descriptor instead.
+func (*StreamDeploymentLogsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *StreamDeploymentLogsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *StreamDeploymentLogsRequest) GetDeployment() string {
+	if x != nil {
+		return x.Deployment
+	}
+	return ""
+}
+
+type StreamDeploymentLogsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Line          string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamDeploymentLogsResponse) Reset() {
+	*x = StreamDeploymentLogsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamDeploymentLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamDeploymentLogsResponse) ProtoMessage() {}
+
+func (x *StreamDeploymentLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamDeploymentLogsResponse.ProtoReflect.Descriptor instead.
+func (*StreamDeploymentLogsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *StreamDeploymentLogsResponse) GetLine() string {
+	if x != nil {
+		return x.Line
+	}
+	return ""
+}
+
 var File_simplelog_v1_log_service_proto protoreflect.FileDescriptor
 
 const file_simplelog_v1_log_service_proto_rawDesc = "" +
@@ -526,14 +915,46 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03pod\x18\x02 \x01(\tR\x03pod\"(\n" +
 	"\x12StreamLogsResponse\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\tR\x04line2\xcf\x02\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line\"6\n" +
+	"\x16ListDeploymentsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"Z\n" +
+	"\x0eDeploymentInfo\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x16\n" +
+	"\x06active\x18\x03 \x01(\bR\x06active\"Y\n" +
+	"\x17ListDeploymentsResponse\x12>\n" +
+	"\vdeployments\x18\x01 \x03(\v2\x1c.simplelog.v1.DeploymentInfoR\vdeployments\"\xce\x01\n" +
+	"\x18GetDeploymentLogsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1e\n" +
+	"\n" +
+	"deployment\x18\x02 \x01(\tR\n" +
+	"deployment\x12\x1d\n" +
+	"\n" +
+	"start_time\x18\x03 \x01(\x03R\tstartTime\x12\x19\n" +
+	"\bend_time\x18\x04 \x01(\x03R\aendTime\x12\x1b\n" +
+	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x06 \x01(\tR\tpageToken\"Y\n" +
+	"\x19GetDeploymentLogsResponse\x12\x14\n" +
+	"\x05lines\x18\x01 \x03(\tR\x05lines\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"[\n" +
+	"\x1bStreamDeploymentLogsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1e\n" +
+	"\n" +
+	"deployment\x18\x02 \x01(\tR\n" +
+	"deployment\"2\n" +
+	"\x1cStreamDeploymentLogsResponse\x12\x12\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line2\x86\x05\n" +
 	"\n" +
 	"LogService\x12[\n" +
 	"\x0eListNamespaces\x12#.simplelog.v1.ListNamespacesRequest\x1a$.simplelog.v1.ListNamespacesResponse\x12I\n" +
 	"\bListPods\x12\x1d.simplelog.v1.ListPodsRequest\x1a\x1e.simplelog.v1.ListPodsResponse\x12F\n" +
 	"\aGetLogs\x12\x1c.simplelog.v1.GetLogsRequest\x1a\x1d.simplelog.v1.GetLogsResponse\x12Q\n" +
 	"\n" +
-	"StreamLogs\x12\x1f.simplelog.v1.StreamLogsRequest\x1a .simplelog.v1.StreamLogsResponse0\x01B@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
+	"StreamLogs\x12\x1f.simplelog.v1.StreamLogsRequest\x1a .simplelog.v1.StreamLogsResponse0\x01\x12^\n" +
+	"\x0fListDeployments\x12$.simplelog.v1.ListDeploymentsRequest\x1a%.simplelog.v1.ListDeploymentsResponse\x12d\n" +
+	"\x11GetDeploymentLogs\x12&.simplelog.v1.GetDeploymentLogsRequest\x1a'.simplelog.v1.GetDeploymentLogsResponse\x12o\n" +
+	"\x14StreamDeploymentLogs\x12).simplelog.v1.StreamDeploymentLogsRequest\x1a*.simplelog.v1.StreamDeploymentLogsResponse0\x01B@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
 
 var (
 	file_simplelog_v1_log_service_proto_rawDescOnce sync.Once
@@ -547,33 +968,47 @@ func file_simplelog_v1_log_service_proto_rawDescGZIP() []byte {
 	return file_simplelog_v1_log_service_proto_rawDescData
 }
 
-var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_simplelog_v1_log_service_proto_goTypes = []any{
-	(*ListNamespacesRequest)(nil),  // 0: simplelog.v1.ListNamespacesRequest
-	(*ListNamespacesResponse)(nil), // 1: simplelog.v1.ListNamespacesResponse
-	(*ListPodsRequest)(nil),        // 2: simplelog.v1.ListPodsRequest
-	(*PodInfo)(nil),                // 3: simplelog.v1.PodInfo
-	(*ListPodsResponse)(nil),       // 4: simplelog.v1.ListPodsResponse
-	(*GetLogsRequest)(nil),         // 5: simplelog.v1.GetLogsRequest
-	(*GetLogsResponse)(nil),        // 6: simplelog.v1.GetLogsResponse
-	(*StreamLogsRequest)(nil),      // 7: simplelog.v1.StreamLogsRequest
-	(*StreamLogsResponse)(nil),     // 8: simplelog.v1.StreamLogsResponse
+	(*ListNamespacesRequest)(nil),        // 0: simplelog.v1.ListNamespacesRequest
+	(*ListNamespacesResponse)(nil),       // 1: simplelog.v1.ListNamespacesResponse
+	(*ListPodsRequest)(nil),              // 2: simplelog.v1.ListPodsRequest
+	(*PodInfo)(nil),                      // 3: simplelog.v1.PodInfo
+	(*ListPodsResponse)(nil),             // 4: simplelog.v1.ListPodsResponse
+	(*GetLogsRequest)(nil),               // 5: simplelog.v1.GetLogsRequest
+	(*GetLogsResponse)(nil),              // 6: simplelog.v1.GetLogsResponse
+	(*StreamLogsRequest)(nil),            // 7: simplelog.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),           // 8: simplelog.v1.StreamLogsResponse
+	(*ListDeploymentsRequest)(nil),       // 9: simplelog.v1.ListDeploymentsRequest
+	(*DeploymentInfo)(nil),               // 10: simplelog.v1.DeploymentInfo
+	(*ListDeploymentsResponse)(nil),      // 11: simplelog.v1.ListDeploymentsResponse
+	(*GetDeploymentLogsRequest)(nil),     // 12: simplelog.v1.GetDeploymentLogsRequest
+	(*GetDeploymentLogsResponse)(nil),    // 13: simplelog.v1.GetDeploymentLogsResponse
+	(*StreamDeploymentLogsRequest)(nil),  // 14: simplelog.v1.StreamDeploymentLogsRequest
+	(*StreamDeploymentLogsResponse)(nil), // 15: simplelog.v1.StreamDeploymentLogsResponse
 }
 var file_simplelog_v1_log_service_proto_depIdxs = []int32{
-	3, // 0: simplelog.v1.ListPodsResponse.pods:type_name -> simplelog.v1.PodInfo
-	0, // 1: simplelog.v1.LogService.ListNamespaces:input_type -> simplelog.v1.ListNamespacesRequest
-	2, // 2: simplelog.v1.LogService.ListPods:input_type -> simplelog.v1.ListPodsRequest
-	5, // 3: simplelog.v1.LogService.GetLogs:input_type -> simplelog.v1.GetLogsRequest
-	7, // 4: simplelog.v1.LogService.StreamLogs:input_type -> simplelog.v1.StreamLogsRequest
-	1, // 5: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
-	4, // 6: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
-	6, // 7: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
-	8, // 8: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
-	5, // [5:9] is the sub-list for method output_type
-	1, // [1:5] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3,  // 0: simplelog.v1.ListPodsResponse.pods:type_name -> simplelog.v1.PodInfo
+	10, // 1: simplelog.v1.ListDeploymentsResponse.deployments:type_name -> simplelog.v1.DeploymentInfo
+	0,  // 2: simplelog.v1.LogService.ListNamespaces:input_type -> simplelog.v1.ListNamespacesRequest
+	2,  // 3: simplelog.v1.LogService.ListPods:input_type -> simplelog.v1.ListPodsRequest
+	5,  // 4: simplelog.v1.LogService.GetLogs:input_type -> simplelog.v1.GetLogsRequest
+	7,  // 5: simplelog.v1.LogService.StreamLogs:input_type -> simplelog.v1.StreamLogsRequest
+	9,  // 6: simplelog.v1.LogService.ListDeployments:input_type -> simplelog.v1.ListDeploymentsRequest
+	12, // 7: simplelog.v1.LogService.GetDeploymentLogs:input_type -> simplelog.v1.GetDeploymentLogsRequest
+	14, // 8: simplelog.v1.LogService.StreamDeploymentLogs:input_type -> simplelog.v1.StreamDeploymentLogsRequest
+	1,  // 9: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
+	4,  // 10: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
+	6,  // 11: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
+	8,  // 12: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
+	11, // 13: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
+	13, // 14: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
+	15, // 15: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
+	9,  // [9:16] is the sub-list for method output_type
+	2,  // [2:9] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_simplelog_v1_log_service_proto_init() }
@@ -587,7 +1022,7 @@ func file_simplelog_v1_log_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simplelog_v1_log_service_proto_rawDesc), len(file_simplelog_v1_log_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

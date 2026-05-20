@@ -29,16 +29,26 @@ type ActiveChecker interface {
 	IsActive(namespace, pod string) bool
 }
 
+// DeploymentMapper resolves the deployment that owns a pod and enumerates
+// deployments seen in a namespace.
+type DeploymentMapper interface {
+	// GetDeploymentName returns the deployment name for a pod if known.
+	GetDeploymentName(namespace, podName string) (string, bool)
+	// ListKnownDeployments returns all deployment names observed in the namespace.
+	ListKnownDeployments(namespace string) []string
+}
+
 // LogService implements the generated pb.LogServiceServer interface.
 type LogService struct {
 	pb.UnimplementedLogServiceServer
-	logsRoot string
-	active   ActiveChecker
+	logsRoot    string
+	active      ActiveChecker
+	deployments DeploymentMapper
 }
 
 // NewLogService creates a LogService backed by files in logsRoot.
-func NewLogService(logsRoot string, active ActiveChecker) *LogService {
-	return &LogService{logsRoot: logsRoot, active: active}
+func NewLogService(logsRoot string, active ActiveChecker, deployments DeploymentMapper) *LogService {
+	return &LogService{logsRoot: logsRoot, active: active, deployments: deployments}
 }
 
 // ListNamespaces returns the names of all namespace subdirectories under logsRoot.

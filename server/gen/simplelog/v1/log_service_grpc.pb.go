@@ -19,10 +19,13 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	LogService_ListNamespaces_FullMethodName = "/simplelog.v1.LogService/ListNamespaces"
-	LogService_ListPods_FullMethodName       = "/simplelog.v1.LogService/ListPods"
-	LogService_GetLogs_FullMethodName        = "/simplelog.v1.LogService/GetLogs"
-	LogService_StreamLogs_FullMethodName     = "/simplelog.v1.LogService/StreamLogs"
+	LogService_ListNamespaces_FullMethodName       = "/simplelog.v1.LogService/ListNamespaces"
+	LogService_ListPods_FullMethodName             = "/simplelog.v1.LogService/ListPods"
+	LogService_GetLogs_FullMethodName              = "/simplelog.v1.LogService/GetLogs"
+	LogService_StreamLogs_FullMethodName           = "/simplelog.v1.LogService/StreamLogs"
+	LogService_ListDeployments_FullMethodName      = "/simplelog.v1.LogService/ListDeployments"
+	LogService_GetDeploymentLogs_FullMethodName    = "/simplelog.v1.LogService/GetDeploymentLogs"
+	LogService_StreamDeploymentLogs_FullMethodName = "/simplelog.v1.LogService/StreamDeploymentLogs"
 )
 
 // LogServiceClient is the client API for LogService service.
@@ -43,6 +46,16 @@ type LogServiceClient interface {
 	// StreamLogs tails a pod's log file and streams new lines as they are
 	// written. The stream stays open until the client cancels it.
 	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
+	// ListDeployments returns all deployments (groups of pods sharing the same
+	// deployment name) within a namespace for which log files exist.
+	ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error)
+	// GetDeploymentLogs returns a paginated, optionally time-filtered page of
+	// log lines merged from all pods belonging to a deployment, sorted by time.
+	GetDeploymentLogs(ctx context.Context, in *GetDeploymentLogsRequest, opts ...grpc.CallOption) (*GetDeploymentLogsResponse, error)
+	// StreamDeploymentLogs tails all active pods for a deployment and streams
+	// merged log lines in real time. The stream stays open until the client
+	// cancels it.
+	StreamDeploymentLogs(ctx context.Context, in *StreamDeploymentLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDeploymentLogsResponse], error)
 }
 
 type logServiceClient struct {
@@ -102,6 +115,45 @@ func (c *logServiceClient) StreamLogs(ctx context.Context, in *StreamLogsRequest
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LogService_StreamLogsClient = grpc.ServerStreamingClient[StreamLogsResponse]
 
+func (c *logServiceClient) ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListDeploymentsResponse)
+	err := c.cc.Invoke(ctx, LogService_ListDeployments_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logServiceClient) GetDeploymentLogs(ctx context.Context, in *GetDeploymentLogsRequest, opts ...grpc.CallOption) (*GetDeploymentLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDeploymentLogsResponse)
+	err := c.cc.Invoke(ctx, LogService_GetDeploymentLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logServiceClient) StreamDeploymentLogs(ctx context.Context, in *StreamDeploymentLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDeploymentLogsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &LogService_ServiceDesc.Streams[1], LogService_StreamDeploymentLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamDeploymentLogsRequest, StreamDeploymentLogsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_StreamDeploymentLogsClient = grpc.ServerStreamingClient[StreamDeploymentLogsResponse]
+
 // LogServiceServer is the server API for LogService service.
 // All implementations should embed UnimplementedLogServiceServer
 // for forward compatibility.
@@ -120,6 +172,16 @@ type LogServiceServer interface {
 	// StreamLogs tails a pod's log file and streams new lines as they are
 	// written. The stream stays open until the client cancels it.
 	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
+	// ListDeployments returns all deployments (groups of pods sharing the same
+	// deployment name) within a namespace for which log files exist.
+	ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error)
+	// GetDeploymentLogs returns a paginated, optionally time-filtered page of
+	// log lines merged from all pods belonging to a deployment, sorted by time.
+	GetDeploymentLogs(context.Context, *GetDeploymentLogsRequest) (*GetDeploymentLogsResponse, error)
+	// StreamDeploymentLogs tails all active pods for a deployment and streams
+	// merged log lines in real time. The stream stays open until the client
+	// cancels it.
+	StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error
 }
 
 // UnimplementedLogServiceServer should be embedded to have
@@ -140,6 +202,15 @@ func (UnimplementedLogServiceServer) GetLogs(context.Context, *GetLogsRequest) (
 }
 func (UnimplementedLogServiceServer) StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamLogs not implemented")
+}
+func (UnimplementedLogServiceServer) ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListDeployments not implemented")
+}
+func (UnimplementedLogServiceServer) GetDeploymentLogs(context.Context, *GetDeploymentLogsRequest) (*GetDeploymentLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDeploymentLogs not implemented")
+}
+func (UnimplementedLogServiceServer) StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamDeploymentLogs not implemented")
 }
 func (UnimplementedLogServiceServer) testEmbeddedByValue() {}
 
@@ -226,6 +297,53 @@ func _LogService_StreamLogs_Handler(srv interface{}, stream grpc.ServerStream) e
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LogService_StreamLogsServer = grpc.ServerStreamingServer[StreamLogsResponse]
 
+func _LogService_ListDeployments_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListDeploymentsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).ListDeployments(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_ListDeployments_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).ListDeployments(ctx, req.(*ListDeploymentsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogService_GetDeploymentLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDeploymentLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).GetDeploymentLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_GetDeploymentLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).GetDeploymentLogs(ctx, req.(*GetDeploymentLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogService_StreamDeploymentLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamDeploymentLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LogServiceServer).StreamDeploymentLogs(m, &grpc.GenericServerStream[StreamDeploymentLogsRequest, StreamDeploymentLogsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_StreamDeploymentLogsServer = grpc.ServerStreamingServer[StreamDeploymentLogsResponse]
+
 // LogService_ServiceDesc is the grpc.ServiceDesc for LogService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -245,11 +363,24 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetLogs",
 			Handler:    _LogService_GetLogs_Handler,
 		},
+		{
+			MethodName: "ListDeployments",
+			Handler:    _LogService_ListDeployments_Handler,
+		},
+		{
+			MethodName: "GetDeploymentLogs",
+			Handler:    _LogService_GetDeploymentLogs_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "StreamLogs",
 			Handler:       _LogService_StreamLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamDeploymentLogs",
+			Handler:       _LogService_StreamDeploymentLogs_Handler,
 			ServerStreams: true,
 		},
 	},

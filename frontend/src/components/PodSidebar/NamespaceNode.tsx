@@ -9,15 +9,19 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import FolderIcon from '@mui/icons-material/Folder';
 import List from '@mui/material/List';
 import { usePodList } from '../../hooks/usePodList.js';
+import { useDeploymentList } from '../../hooks/useDeploymentList.js';
 import PodNode from './PodNode.js';
+import DeploymentNode from './DeploymentNode.js';
 
 interface Props {
   namespace: string;
+  viewMode: 'pods' | 'deployments';
 }
 
-export default function NamespaceNode({ namespace }: Props) {
+export default function NamespaceNode({ namespace, viewMode }: Props) {
   const [open, setOpen] = useState(false);
-  const { pods } = usePodList(open ? namespace : null);
+  const { pods } = usePodList(open && viewMode === 'pods' ? namespace : null);
+  const { deployments } = useDeploymentList(open && viewMode === 'deployments' ? namespace : null);
 
   return (
     <>
@@ -35,9 +39,9 @@ export default function NamespaceNode({ namespace }: Props) {
       </ListItem>
       <Collapse in={open} unmountOnExit>
         <List disablePadding>
-          {pods.map((p) => (
-            <PodNode key={p.name} pod={p} />
-          ))}
+          {viewMode === 'pods'
+            ? pods.map((p) => <PodNode key={p.name} pod={p} />)
+            : deployments.map((d) => <DeploymentNode key={d.name} deployment={d} />)}
         </List>
       </Collapse>
     </>
