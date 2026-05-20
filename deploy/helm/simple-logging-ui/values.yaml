@@ -1,0 +1,53 @@
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: simple-logging-ui
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# In-cluster URL of the simple-logging gRPC-Web backend.
+# Injected into the container as GRPC_WEB_URL and written to /config.js at startup.
+grpcWebUrl: "http://simple-logging:8080"
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # host: ui.example.com
+  host: ""
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 64Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101   # nginx UID in nginx:alpine
+  runAsGroup: 101
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 30
+
+# Extra environment variables to inject into the container.
+extraEnv: []

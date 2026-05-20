@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/metadata"
+
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
 )
 
@@ -264,5 +266,111 @@ func TestGetLogs_DefaultPageSize(t *testing.T) {
 	}
 	if resp.NextPageToken == "" {
 		t.Error("expected next_page_token when more lines remain")
+	}
+}
+
+// ── StreamLogs ────────────────────────────────────────────────────────────────
+
+// fakeStreamLogsServer captures sent lines and honours a cancellable context.
+type fakeStreamLogsServer struct {
+	ctx    context.Context
+	lines  []string
+	sendCh chan string
+}
+
+func newFakeStreamLogsServer(ctx context.Context) *fakeStreamLogsServer {
+	return &fakeStreamLogsServer{ctx: ctx, sendCh: make(chan string, 64)}
+}
+
+func (f *fakeStreamLogsServer) Send(resp *pb.StreamLogsResponse) error {
+	select {
+	case <-f.ctx.Done():
+		return f.ctx.Err()
+	case f.sendCh <- resp.Line:
+		return nil
+	}
+}
+func (f *fakeStreamLogsServer) Context() context.Context          { return f.ctx }
+func (f *fakeStreamLogsServer) SetHeader(metadata.MD) error       { return nil }
+func (f *fakeStreamLogsServer) SendHeader(metadata.MD) error      { return nil }
+func (f *fakeStreamLogsServer) SetTrailer(metadata.MD)            {}
+func (f *fakeStreamLogsServer) SendMsg(any) error                 { return nil }
+func (f *fakeStreamLogsServer) RecvMsg(any) error                 { return nil }
+
+func TestStreamLogs_OnlyNewLines(t *testing.T) {
+	dir := t.TempDir()
+	// Write existing content — StreamLogs must NOT replay these.
+	writeLogFile(t, dir, "default", "mypod", []string{
+		"2026-05-20T10:00:00Z [default/mypod/app] existing line",
+	})
+
+	logPath := filepath.Join(dir, "default", "mypod.log")
+
+	svc := NewLogService(dir, &fakeChecker{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newFakeStreamLogsServer(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "mypod"}, stream)
+	}()
+
+	// Give the goroutine time to open and seek to EOF.
+	time.Sleep(50 * time.Millisecond)
+
+	// Append two new lines.
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("open for append: %v", err)
+	}
+	fmt.Fprintln(f, "2026-05-20T10:00:01Z [default/mypod/app] new line 1")
+	fmt.Fprintln(f, "2026-05-20T10:00:02Z [default/mypod/app] new line 2")
+	f.Close()
+
+	// Collect two lines then cancel.
+	var received []string
+	deadline := time.After(2 * time.Second)
+	for len(received) < 2 {
+		select {
+		case line := <-stream.sendCh:
+			received = append(received, line)
+		case <-deadline:
+			t.Fatalf("timed out waiting for streamed lines; got: %v", received)
+		}
+	}
+	cancel()
+	<-errCh
+
+	if len(received) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %v", len(received), received)
+	}
+	if !strings.Contains(received[0], "new line 1") {
+		t.Errorf("unexpected first line: %q", received[0])
+	}
+	if !strings.Contains(received[1], "new line 2") {
+		t.Errorf("unexpected second line: %q", received[1])
+	}
+}
+
+func TestStreamLogs_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewLogService(dir, &fakeChecker{})
+	ctx := context.Background()
+	stream := newFakeStreamLogsServer(ctx)
+	err := svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "ghost"}, stream)
+	if err == nil {
+		t.Fatal("expected error for missing log file")
+	}
+}
+
+func TestStreamLogs_MissingArgs(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewLogService(dir, &fakeChecker{})
+	ctx := context.Background()
+	stream := newFakeStreamLogsServer(ctx)
+	err := svc.StreamLogs(&pb.StreamLogsRequest{}, stream)
+	if err == nil {
+		t.Fatal("expected error for empty namespace/pod")
 	}
 }

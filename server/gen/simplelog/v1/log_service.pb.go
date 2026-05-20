@@ -396,6 +396,102 @@ func (x *GetLogsResponse) GetNextPageToken() string {
 	return ""
 }
 
+type StreamLogsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Pod           string                 `protobuf:"bytes,2,opt,name=pod,proto3" json:"pod,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamLogsRequest) Reset() {
+	*x = StreamLogsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamLogsRequest) ProtoMessage() {}
+
+func (x *StreamLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamLogsRequest.ProtoReflect.Descriptor instead.
+func (*StreamLogsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *StreamLogsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *StreamLogsRequest) GetPod() string {
+	if x != nil {
+		return x.Pod
+	}
+	return ""
+}
+
+type StreamLogsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Line          string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StreamLogsResponse) Reset() {
+	*x = StreamLogsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamLogsResponse) ProtoMessage() {}
+
+func (x *StreamLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamLogsResponse.ProtoReflect.Descriptor instead.
+func (*StreamLogsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *StreamLogsResponse) GetLine() string {
+	if x != nil {
+		return x.Line
+	}
+	return ""
+}
+
 var File_simplelog_v1_log_service_proto protoreflect.FileDescriptor
 
 const file_simplelog_v1_log_service_proto_rawDesc = "" +
@@ -425,12 +521,19 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"page_token\x18\x06 \x01(\tR\tpageToken\"O\n" +
 	"\x0fGetLogsResponse\x12\x14\n" +
 	"\x05lines\x18\x01 \x03(\tR\x05lines\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xfc\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"C\n" +
+	"\x11StreamLogsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03pod\x18\x02 \x01(\tR\x03pod\"(\n" +
+	"\x12StreamLogsResponse\x12\x12\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line2\xcf\x02\n" +
 	"\n" +
 	"LogService\x12[\n" +
 	"\x0eListNamespaces\x12#.simplelog.v1.ListNamespacesRequest\x1a$.simplelog.v1.ListNamespacesResponse\x12I\n" +
 	"\bListPods\x12\x1d.simplelog.v1.ListPodsRequest\x1a\x1e.simplelog.v1.ListPodsResponse\x12F\n" +
-	"\aGetLogs\x12\x1c.simplelog.v1.GetLogsRequest\x1a\x1d.simplelog.v1.GetLogsResponseB@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
+	"\aGetLogs\x12\x1c.simplelog.v1.GetLogsRequest\x1a\x1d.simplelog.v1.GetLogsResponse\x12Q\n" +
+	"\n" +
+	"StreamLogs\x12\x1f.simplelog.v1.StreamLogsRequest\x1a .simplelog.v1.StreamLogsResponse0\x01B@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
 
 var (
 	file_simplelog_v1_log_service_proto_rawDescOnce sync.Once
@@ -444,7 +547,7 @@ func file_simplelog_v1_log_service_proto_rawDescGZIP() []byte {
 	return file_simplelog_v1_log_service_proto_rawDescData
 }
 
-var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*ListNamespacesRequest)(nil),  // 0: simplelog.v1.ListNamespacesRequest
 	(*ListNamespacesResponse)(nil), // 1: simplelog.v1.ListNamespacesResponse
@@ -453,17 +556,21 @@ var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*ListPodsResponse)(nil),       // 4: simplelog.v1.ListPodsResponse
 	(*GetLogsRequest)(nil),         // 5: simplelog.v1.GetLogsRequest
 	(*GetLogsResponse)(nil),        // 6: simplelog.v1.GetLogsResponse
+	(*StreamLogsRequest)(nil),      // 7: simplelog.v1.StreamLogsRequest
+	(*StreamLogsResponse)(nil),     // 8: simplelog.v1.StreamLogsResponse
 }
 var file_simplelog_v1_log_service_proto_depIdxs = []int32{
 	3, // 0: simplelog.v1.ListPodsResponse.pods:type_name -> simplelog.v1.PodInfo
 	0, // 1: simplelog.v1.LogService.ListNamespaces:input_type -> simplelog.v1.ListNamespacesRequest
 	2, // 2: simplelog.v1.LogService.ListPods:input_type -> simplelog.v1.ListPodsRequest
 	5, // 3: simplelog.v1.LogService.GetLogs:input_type -> simplelog.v1.GetLogsRequest
-	1, // 4: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
-	4, // 5: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
-	6, // 6: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
-	4, // [4:7] is the sub-list for method output_type
-	1, // [1:4] is the sub-list for method input_type
+	7, // 4: simplelog.v1.LogService.StreamLogs:input_type -> simplelog.v1.StreamLogsRequest
+	1, // 5: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
+	4, // 6: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
+	6, // 7: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
+	8, // 8: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
+	5, // [5:9] is the sub-list for method output_type
+	1, // [1:5] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -480,7 +587,7 @@ func file_simplelog_v1_log_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simplelog_v1_log_service_proto_rawDesc), len(file_simplelog_v1_log_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

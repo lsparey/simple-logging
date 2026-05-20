@@ -17,6 +17,10 @@ service LogService {
   // GetLogs returns a paginated, optionally time-filtered page of log lines
   // for a specific pod.
   rpc GetLogs(GetLogsRequest) returns (GetLogsResponse);
+
+  // StreamLogs tails a pod's log file and streams new lines as they are
+  // written. The stream stays open until the client cancels it.
+  rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
 }
 
 // ── ListNamespaces ────────────────────────────────────────────────────────────
@@ -72,4 +76,15 @@ message GetLogsResponse {
   // next_page_token is the cursor to pass in the next request.
   // An empty value means this is the last page.
   string next_page_token = 2;
+}
+
+// ── StreamLogs ────────────────────────────────────────────────────────────────
+
+message StreamLogsRequest {
+  string namespace = 1;
+  string pod       = 2;
+}
+
+message StreamLogsResponse {
+  string line = 1;
 }

@@ -22,6 +22,7 @@ const (
 	LogService_ListNamespaces_FullMethodName = "/simplelog.v1.LogService/ListNamespaces"
 	LogService_ListPods_FullMethodName       = "/simplelog.v1.LogService/ListPods"
 	LogService_GetLogs_FullMethodName        = "/simplelog.v1.LogService/GetLogs"
+	LogService_StreamLogs_FullMethodName     = "/simplelog.v1.LogService/StreamLogs"
 )
 
 // LogServiceClient is the client API for LogService service.
@@ -39,6 +40,9 @@ type LogServiceClient interface {
 	// GetLogs returns a paginated, optionally time-filtered page of log lines
 	// for a specific pod.
 	GetLogs(ctx context.Context, in *GetLogsRequest, opts ...grpc.CallOption) (*GetLogsResponse, error)
+	// StreamLogs tails a pod's log file and streams new lines as they are
+	// written. The stream stays open until the client cancels it.
+	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
 }
 
 type logServiceClient struct {
@@ -79,6 +83,25 @@ func (c *logServiceClient) GetLogs(ctx context.Context, in *GetLogsRequest, opts
 	return out, nil
 }
 
+func (c *logServiceClient) StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &LogService_ServiceDesc.Streams[0], LogService_StreamLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamLogsRequest, StreamLogsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_StreamLogsClient = grpc.ServerStreamingClient[StreamLogsResponse]
+
 // LogServiceServer is the server API for LogService service.
 // All implementations should embed UnimplementedLogServiceServer
 // for forward compatibility.
@@ -94,6 +117,9 @@ type LogServiceServer interface {
 	// GetLogs returns a paginated, optionally time-filtered page of log lines
 	// for a specific pod.
 	GetLogs(context.Context, *GetLogsRequest) (*GetLogsResponse, error)
+	// StreamLogs tails a pod's log file and streams new lines as they are
+	// written. The stream stays open until the client cancels it.
+	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
 }
 
 // UnimplementedLogServiceServer should be embedded to have
@@ -111,6 +137,9 @@ func (UnimplementedLogServiceServer) ListPods(context.Context, *ListPodsRequest)
 }
 func (UnimplementedLogServiceServer) GetLogs(context.Context, *GetLogsRequest) (*GetLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetLogs not implemented")
+}
+func (UnimplementedLogServiceServer) StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamLogs not implemented")
 }
 func (UnimplementedLogServiceServer) testEmbeddedByValue() {}
 
@@ -186,6 +215,17 @@ func _LogService_GetLogs_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LogService_StreamLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LogServiceServer).StreamLogs(m, &grpc.GenericServerStream[StreamLogsRequest, StreamLogsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_StreamLogsServer = grpc.ServerStreamingServer[StreamLogsResponse]
+
 // LogService_ServiceDesc is the grpc.ServiceDesc for LogService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -206,6 +246,12 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _LogService_GetLogs_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamLogs",
+			Handler:       _LogService_StreamLogs_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "simplelog/v1/log_service.proto",
 }

@@ -212,3 +212,55 @@ func (cr *countingReader) Read(p []byte) (n int, err error) {
 	cr.total += int64(n)
 	return
 }
+
+// StreamLogs tails a pod's log file and streams new lines as they arrive.
+// It seeks to EOF on open so that only lines written after the call begins are
+// delivered. The stream runs until the client cancels the context.
+func (s *LogService) StreamLogs(req *pb.StreamLogsRequest, stream pb.LogService_StreamLogsServer) error {
+	if req.Namespace == "" || req.Pod == "" {
+		return status.Error(codes.InvalidArgument, "namespace and pod are required")
+	}
+
+	logPath := filepath.Join(s.logsRoot, req.Namespace, req.Pod+".log")
+	f, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return status.Errorf(codes.NotFound, "no logs found for pod %s/%s", req.Namespace, req.Pod)
+		}
+		return status.Errorf(codes.Internal, "open log file: %v", err)
+	}
+	defer f.Close()
+
+	// Start from the current end of file so we only send new content.
+	if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		return status.Errorf(codes.Internal, "seek log file: %v", err)
+	}
+
+	br := bufio.NewReader(f)
+	ctx := stream.Context()
+
+	for {
+		line, readErr := br.ReadString('\n')
+		if len(line) > 0 {
+			trimmed := strings.TrimRight(line, "\r\n")
+			if sendErr := stream.Send(&pb.StreamLogsResponse{Line: trimmed}); sendErr != nil {
+				return sendErr
+			}
+		}
+		if readErr == nil {
+			// There may be more data immediately; loop without sleeping.
+			continue
+		}
+		if readErr != io.EOF {
+			return status.Errorf(codes.Internal, "read log file: %v", readErr)
+		}
+		// Reached EOF — wait briefly for new data or client cancellation.
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(250 * time.Millisecond):
+			// Reset the reader so the next ReadString picks up new bytes.
+			br.Reset(f)
+		}
+	}
+}

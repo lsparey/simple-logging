@@ -2,9 +2,9 @@
 
 ## generate: regenerate gRPC/protobuf Go stubs from proto/
 ##   Requires: buf (https://buf.build/docs/installation)
-##   Outputs Go stubs to server/gen/
+##   Outputs Go stubs to gen/  (buf.gen.yaml lives in proto/)
 generate:
-	buf generate
+	cd ../proto && buf generate
 
 ## build: compile the server binary into bin/
 build:
