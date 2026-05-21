@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="frontend/public/logo.svg" alt="simple-logging logo" width="180" />
+</p>
+
 # simple-logging
 
 Simple, lightweight log aggregation for Kubernetes. simple-logging automatically collects logs from every pod across all namespaces, persists them to disk, and surfaces them in a clean web UI — no external dependencies, no complex configuration.
