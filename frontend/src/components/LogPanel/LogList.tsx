@@ -52,7 +52,7 @@ export default function LogList({
   );
 
   return (
-    <Box sx={{ flex: 1, overflow: "hidden", fontFamily: "monospace", height: "100%" }}>
+    <Box sx={{ flex: 1, overflow: "hidden", fontFamily: "monospace", height: "100%", bgcolor: "background.default" }}>
       {lines.length === 0 ? (
         <Box
           sx={{

@@ -32,7 +32,7 @@ export default function NamespaceNode({ namespace, viewMode }: Props) {
           </ListItemIcon>
           <ListItemText
             primary={namespace}
-            slotProps={{ primary: { variant: 'body2', sx: { fontFamily: 'monospace' } } }}
+            slotProps={{ primary: { variant: 'body2' } }}
           />
           {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </ListItemButton>

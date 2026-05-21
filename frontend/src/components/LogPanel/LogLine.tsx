@@ -169,8 +169,8 @@ export default function LogLine({ line, darkMode }: Props) {
         fontFamily: 'inherit',
         fontSize: '0.75rem',
         lineHeight: 1.6,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all',
+        whiteSpace: 'pre',
+        overflow: 'hidden',
         color: colour,
         '&:hover': { bgcolor: 'action.hover' },
       }}

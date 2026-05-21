@@ -35,7 +35,7 @@ export default function DeploymentNode({ deployment }: Props) {
         />
         <ListItemText
           primary={deployment.name}
-          slotProps={{ primary: { variant: 'body2', sx: { fontFamily: 'monospace' } } }}
+          slotProps={{ primary: { variant: 'body2' } }}
         />
       </ListItemButton>
     </ListItem>

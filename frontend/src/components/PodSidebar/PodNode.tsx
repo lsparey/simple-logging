@@ -33,7 +33,7 @@ export default function PodNode({ pod }: Props) {
         />
         <ListItemText
           primary={pod.name}
-          slotProps={{ primary: { variant: 'body2', sx: { fontFamily: 'monospace' } } }}
+          slotProps={{ primary: { variant: 'body2' } }}
         />
       </ListItemButton>
     </ListItem>
