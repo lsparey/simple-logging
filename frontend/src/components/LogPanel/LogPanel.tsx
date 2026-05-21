@@ -17,6 +17,7 @@ export default function LogPanel() {
     selectedPod: pod,
     selectedDeployment: deployment,
     mode,
+    setMode,
     nextPageToken,
     prevPageToken,
     startTime,
@@ -31,7 +32,7 @@ export default function LogPanel() {
   const filters = { startTime, endTime, pageToken };
 
   // Pod-mode hooks (disabled when a deployment is selected)
-  const { loading: podLoading } = useLogHistory(
+  useLogHistory(
     !deployment && !liveEnabled ? namespace : null,
     !deployment && !liveEnabled ? pod : null,
     filters,
@@ -39,14 +40,13 @@ export default function LogPanel() {
   useLogStream(namespace, !deployment ? pod : null, liveEnabled);
 
   // Deployment-mode hooks (disabled when a pod is selected)
-  const { loading: deploymentLoading } = useDeploymentLogHistory(
+  useDeploymentLogHistory(
     deployment && !liveEnabled ? namespace : null,
     deployment && !liveEnabled ? deployment : null,
     filters,
   );
   useDeploymentLogStream(namespace, deployment && liveEnabled ? deployment : null, liveEnabled);
 
-  const loading = deployment ? deploymentLoading : podLoading;
   const filteredLines = useFilteredLines();
 
   const handleLiveToggle = useCallback((on: boolean) => {
@@ -80,7 +80,7 @@ export default function LogPanel() {
         onLiveToggle={handleLiveToggle}
       />
 
-      {mode === 'loading' && loading ? (
+      {mode === 'loading' ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress size={32} />
         </Box>
@@ -108,14 +108,14 @@ export default function LogPanel() {
           <Button
             size="small"
             disabled={!prevPageToken}
-            onClick={() => setPageToken(prevPageToken)}
+            onClick={() => { setMode('loading'); setPageToken(prevPageToken); }}
           >
             ← Load earlier
           </Button>
           <Button
             size="small"
             disabled={!nextPageToken}
-            onClick={() => setPageToken(nextPageToken)}
+            onClick={() => { setMode('loading'); setPageToken(nextPageToken); }}
           >
             Load later →
           </Button>

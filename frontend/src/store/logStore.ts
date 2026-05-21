@@ -13,6 +13,9 @@ interface LogStore {
   selectedDeployment: string | null;
   setSelectedDeployment: (namespace: string, deployment: string) => void;
 
+  // Increments on every selection (even re-selecting the same resource)
+  selectionKey: number;
+
   // Display mode
   mode: DisplayMode;
   setMode: (mode: DisplayMode) => void;
@@ -45,8 +48,9 @@ const stored = localStorage.getItem('simple-logging.theme');
 export const useLogStore = create<LogStore>((set) => ({
   selectedNamespace: null,
   selectedPod: null,
+  selectionKey: 0,
   setSelectedPod: (namespace, pod) =>
-    set({
+    set((s) => ({
       selectedNamespace: namespace,
       selectedPod: pod,
       selectedDeployment: null,
@@ -57,11 +61,12 @@ export const useLogStore = create<LogStore>((set) => ({
       searchText: '',
       startTime: 0,
       endTime: 0,
-    }),
+      selectionKey: s.selectionKey + 1,
+    })),
 
   selectedDeployment: null,
   setSelectedDeployment: (namespace, deployment) =>
-    set({
+    set((s) => ({
       selectedNamespace: namespace,
       selectedPod: null,
       selectedDeployment: deployment,
@@ -72,7 +77,8 @@ export const useLogStore = create<LogStore>((set) => ({
       searchText: '',
       startTime: 0,
       endTime: 0,
-    }),
+      selectionKey: s.selectionKey + 1,
+    })),
 
   mode: 'idle',
   setMode: (mode) => set({ mode }),

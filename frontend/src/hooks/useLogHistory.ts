@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { logClient } from '../grpc/client.js';
 import { useLogStore } from '../store/logStore.js';
 
@@ -13,13 +13,10 @@ export function useLogHistory(
   pod: string | null,
   filters: Filters,
 ) {
-  const [loading, setLoading] = useState(false);
   const { setLines, setPaginationTokens, setMode } = useLogStore.getState();
 
   const load = useCallback(async () => {
     if (!namespace || !pod) return;
-    setLoading(true);
-    setMode('loading');
     try {
       const resp = await logClient.getLogs({
         namespace,
@@ -35,8 +32,6 @@ export function useLogHistory(
       setMode('history');
     } catch {
       setMode('history');
-    } finally {
-      setLoading(false);
     }
   }, [namespace, pod, filters.startTime, filters.endTime, filters.pageToken, setLines, setPaginationTokens, setMode]);
 
@@ -44,5 +39,5 @@ export function useLogHistory(
     load();
   }, [load]);
 
-  return { loading, reload: load };
+  return { reload: load };
 }

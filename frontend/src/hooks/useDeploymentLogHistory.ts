@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { logClient } from '../grpc/client.js';
 import { useLogStore } from '../store/logStore.js';
 
@@ -13,13 +13,10 @@ export function useDeploymentLogHistory(
   deployment: string | null,
   filters: Filters,
 ) {
-  const [loading, setLoading] = useState(false);
   const { setLines, setPaginationTokens, setMode } = useLogStore.getState();
 
   const load = useCallback(async () => {
     if (!namespace || !deployment) return;
-    setLoading(true);
-    setMode('loading');
     try {
       const resp = await logClient.getDeploymentLogs({
         namespace,
@@ -34,8 +31,6 @@ export function useDeploymentLogHistory(
       setMode('history');
     } catch {
       setMode('history');
-    } finally {
-      setLoading(false);
     }
   }, [namespace, deployment, filters.startTime, filters.endTime, filters.pageToken, setLines, setPaginationTokens, setMode]);
 
@@ -43,5 +38,5 @@ export function useDeploymentLogHistory(
     load();
   }, [load]);
 
-  return { loading, reload: load };
+  return { reload: load };
 }

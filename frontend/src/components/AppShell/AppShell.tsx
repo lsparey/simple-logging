@@ -13,7 +13,7 @@ import { useLogStore } from '../../store/logStore.js';
 const DRAWER_WIDTH = 260;
 
 export default function AppShell() {
-  const { darkMode, toggleDarkMode } = useLogStore();
+  const { darkMode, toggleDarkMode, selectionKey } = useLogStore();
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -62,7 +62,7 @@ export default function AppShell() {
           overflow: 'hidden',
         }}
       >
-        <LogPanel />
+        <LogPanel key={selectionKey} />
       </Box>
     </Box>
   );
