@@ -2,8 +2,8 @@ import { useEffect, useCallback, useState } from "react";
 import { List, useListRef, type RowComponentProps } from "react-window";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import LogLine from "./LogLine.js";
-import { useLogStore } from "../../store/logStore.js";
 
 const ROW_HEIGHT = 22;
 const NEAR_BOTTOM_THRESHOLD = 15;
@@ -21,6 +21,10 @@ interface Props {
   lines: string[];
   darkMode: boolean;
   autoScroll: boolean;
+  liveEnabled?: boolean;
+  isFetchingMore?: boolean;
+  hasMore?: boolean;
+  lineCount?: number;
   onScrollUp: () => void;
   onScrollBottom: () => void;
   onNearBottom?: () => void;
@@ -30,12 +34,15 @@ export default function LogList({
   lines,
   darkMode,
   autoScroll,
+  liveEnabled = false,
+  isFetchingMore = false,
+  hasMore = false,
+  lineCount = 0,
   onScrollUp,
   onScrollBottom,
   onNearBottom,
 }: Props) {
   const listRef = useListRef(null);
-  const mode = useLogStore((s) => s.mode);
 
   // Tracks the currently visible row range for the scroll indicator.
   const [scrollInfo, setScrollInfo] = useState<{ ts: string | null; start: number; stop: number }>(
@@ -43,14 +50,14 @@ export default function LogList({
   );
 
   useEffect(() => {
-    if (autoScroll && mode === "live" && lines.length > 0) {
+    if (liveEnabled && autoScroll && lines.length > 0) {
       try {
         listRef.current?.scrollToRow({ index: lines.length - 1, align: "end" });
       } catch {
         // ignore RangeError during rapid re-renders
       }
     }
-  }, [lines.length, autoScroll, mode, listRef]);
+  }, [liveEnabled, lines.length, autoScroll, listRef]);
 
   const RowComponent = useCallback(
     ({ index, style }: RowComponentProps) => (
@@ -93,6 +100,35 @@ export default function LogList({
     `Page ${pageNum} / ${totalPages}`,
   ].filter(Boolean).join('  ·  ');
 
+  const liveChipLabel = (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box
+        sx={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          bgcolor: 'success.main',
+          flexShrink: 0,
+          '@keyframes livePulse': {
+            '0%': { boxShadow: '0 0 0 0 rgba(102, 187, 106, 0.8)' },
+            '70%': { boxShadow: '0 0 0 6px rgba(102, 187, 106, 0)' },
+            '100%': { boxShadow: '0 0 0 0 rgba(102, 187, 106, 0)' },
+          },
+          animation: 'livePulse 1.6s ease-out infinite',
+        }}
+      />
+      <Box component="span" sx={{ color: 'success.main', fontWeight: 700, letterSpacing: 0.6 }}>LIVE</Box>
+    </Box>
+  );
+
+  const leftChipLabel = isFetchingMore ? (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box component="span">{lineCount} line{lineCount !== 1 ? 's' : ''}</Box>
+      <CircularProgress size={10} sx={{ color: 'inherit' }} />
+      <Box component="span">Loading more…</Box>
+    </Box>
+  ) : `${lineCount} line${lineCount !== 1 ? 's' : ''}  ·  ${hasMore ? '↓ Scroll for more' : 'End of log'}`;
+
   return (
     <Box sx={{ flex: 1, overflow: "hidden", fontFamily: "monospace", height: "100%", bgcolor: "background.default", position: "relative" }}>
       {lines.length === 0 ? (
@@ -121,21 +157,62 @@ export default function LogList({
           />
           <Chip
             size="small"
-            label={chipLabel}
+            label={liveEnabled ? liveChipLabel : chipLabel}
             sx={{
               position: "absolute",
               bottom: 8,
-              right: 8,
+              right: 16,
               pointerEvents: "none",
-              opacity: 0.82,
+              opacity: 0.92,
               fontSize: "0.68rem",
               height: 22,
               zIndex: 1,
               bgcolor: "background.paper",
               border: 1,
-              borderColor: "divider",
+              borderColor: liveEnabled ? 'success.main' : 'divider',
             }}
           />
+
+          {/* Left status chip */}
+          {!liveEnabled && (
+            <Chip
+              size="small"
+              label={leftChipLabel}
+              sx={{
+                position: 'absolute',
+                bottom: 8,
+                left: 8,
+                pointerEvents: 'none',
+                opacity: 0.92,
+                fontSize: '0.68rem',
+                height: 22,
+                zIndex: 1,
+                bgcolor: 'background.paper',
+                border: 1,
+                borderColor: 'divider',
+              }}
+            />
+          )}
+
+          {liveEnabled && !autoScroll && (
+            <Chip
+              size="small"
+              label="↑ Scroll to bottom to resume"
+              sx={{
+                position: 'absolute',
+                bottom: 8,
+                left: 8,
+                pointerEvents: 'none',
+                opacity: 0.92,
+                fontSize: '0.68rem',
+                height: 22,
+                zIndex: 1,
+                bgcolor: 'background.paper',
+                border: 1,
+                borderColor: 'divider',
+              }}
+            />
+          )}
         </>
       )}
     </Box>

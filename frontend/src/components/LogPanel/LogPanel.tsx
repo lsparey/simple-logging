@@ -50,6 +50,9 @@ export default function LogPanel() {
 
   const handleLiveToggle = useCallback((on: boolean) => {
     setLiveEnabled(on);
+    // When entering live mode, force auto-scroll so the list jumps to the
+    // bottom immediately (the scroll effect in LogList fires when mode -> 'live').
+    if (on) setAutoScroll(true);
   }, []);
 
   // Loads the next page and appends it to the existing lines.
@@ -139,38 +142,14 @@ export default function LogPanel() {
           lines={filteredLines}
           darkMode={darkMode}
           autoScroll={autoScroll}
+          liveEnabled={liveEnabled}
+          isFetchingMore={isFetchingMore}
+          hasMore={!!nextPageToken}
+          lineCount={filteredLines.length}
           onScrollUp={handleScrollUp}
           onScrollBottom={handleScrollBottom}
           onNearBottom={!liveEnabled ? loadMore : undefined}
         />
-      )}
-
-      {!liveEnabled && mode !== 'loading' && (
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            px: 2,
-            py: 0.5,
-            borderTop: 1,
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {filteredLines.length} line{filteredLines.length !== 1 ? 's' : ''} loaded
-          </Typography>
-          {isFetchingMore ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <CircularProgress size={12} />
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Loading more…</Typography>
-            </Box>
-          ) : nextPageToken ? (
-            <Typography variant="caption" sx={{ color: 'text.disabled' }}>↓ Scroll for more</Typography>
-          ) : (
-            <Typography variant="caption" sx={{ color: 'text.disabled' }}>End of log</Typography>
-          )}
-        </Box>
       )}
     </Box>
   );
