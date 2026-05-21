@@ -23,9 +23,12 @@ export default function AppShell() {
         sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}
       >
         <Toolbar variant="dense">
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontFamily: 'monospace' }}>
-            simple-logging
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 1 }}>
+            <img src="/logo.svg" alt="logo" style={{ height: 28, width: 28 }} />
+            <Typography variant="h6" component="div" sx={{ fontFamily: 'monospace' }}>
+              simple-logging
+            </Typography>
+          </Box>
           <IconButton color="inherit" onClick={toggleDarkMode} size="small">
             {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
