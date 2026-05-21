@@ -32,7 +32,7 @@ jobs:
             git switch --orphan gh-pages
             git commit --allow-empty -m "Initialize gh-pages branch"
             git push origin gh-pages
-            git switch -
+            git switch main
           fi
 
       - name: Install Helm
