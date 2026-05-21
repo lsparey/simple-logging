@@ -14,6 +14,22 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 - **Simple helm install** — deploy the full stack (backend + UI) with two `helm install` commands
 - **Very low resource requirements** — the backend requests only 100m CPU / 128Mi memory; the UI requests 50m CPU / 32Mi memory
 
+## Tech stack
+
+### Backend — Go
+
+The log collection service is written in Go and runs as a single pod inside your cluster. It uses the official `client-go` library to connect to the Kubernetes API in-cluster and opens a streaming log connection (`follow=true`) for every running pod across all namespaces. A shared Kubernetes Informer watches for pod add/delete events, so new pods are picked up automatically without any polling. Each pod's log stream is handled by a dedicated goroutine, and lines are written directly to disk on the PVC in the format:
+
+```
+2026-05-20T14:32:01Z [default/my-api-pod/my-api] INFO server started on :8080
+```
+
+Logs are served to the frontend over a gRPC-Web API (HTTP/1.1 with gRPC-Web framing), which means the browser can connect directly without a separate REST gateway. A background retention process runs daily and removes log files that have not been written to in the last 30 days.
+
+### Frontend — React
+
+The UI is a React 19 single-page application built with Vite and TypeScript, served by a minimal nginx container. It connects to the backend using `@connectrpc/connect-web` — the same protobuf-first transport used by the server — so there is no REST translation layer at all. The component library is MUI (Material UI), virtual scrolling is handled by `react-window` to keep rendering fast even with large log volumes, and global state is managed with Zustand. The built static assets are tiny, and the running container requests just 50m CPU and 32Mi memory.
+
 ## Architecture
 
 ```
