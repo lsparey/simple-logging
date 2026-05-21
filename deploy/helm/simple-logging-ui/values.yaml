@@ -2,7 +2,7 @@ nameOverride: ""
 fullnameOverride: ""
 
 image:
-  repository: simple-logging-ui
+  repository: lsparey/simple-logging-ui
   tag: "latest"
   pullPolicy: IfNotPresent
 

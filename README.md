@@ -54,10 +54,17 @@ Kubernetes Cluster
 - A default StorageClass (or specify one explicitly)
 - An Ingress controller (e.g. Traefik, nginx) if you want the UI exposed externally
 
-### 1. Install the backend
+### 1. Add the Helm repository
 
 ```bash
-helm install simple-logging ./deploy/helm/simple-logging \
+helm repo add simple-logging https://lsparey.github.io/simple-logging
+helm repo update
+```
+
+### 2. Install the backend
+
+```bash
+helm install simple-logging simple-logging/simple-logging \
   --namespace simple-logging \
   --create-namespace
 ```
@@ -71,10 +78,10 @@ Key values you may want to override:
 | `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
 | `resources.requests.memory` | `128Mi` | Memory request for the backend pod |
 
-### 2. Install the UI
+### 3. Install the UI
 
 ```bash
-helm install simple-logging-ui ./deploy/helm/simple-logging-ui \
+helm install simple-logging-ui simple-logging/simple-logging-ui \
   --namespace simple-logging \
   --set ingress.enabled=true \
   --set ingress.host=logs.example.com \
@@ -89,14 +96,14 @@ Once both charts are running, open `http://logs.example.com` in your browser to 
 
 ```bash
 # Backend — larger PVC, 60-day retention
-helm install simple-logging ./deploy/helm/simple-logging \
+helm install simple-logging simple-logging/simple-logging \
   --namespace simple-logging \
   --create-namespace \
   --set persistence.size=50Gi \
   --set config.retentionDays=60
 
 # UI — exposed on a custom hostname via nginx ingress
-helm install simple-logging-ui ./deploy/helm/simple-logging-ui \
+helm install simple-logging-ui simple-logging/simple-logging-ui \
   --namespace simple-logging \
   --set ingress.enabled=true \
   --set ingress.host=logs.example.com \
@@ -106,8 +113,9 @@ helm install simple-logging-ui ./deploy/helm/simple-logging-ui \
 ### Upgrading
 
 ```bash
-helm upgrade simple-logging ./deploy/helm/simple-logging --namespace simple-logging
-helm upgrade simple-logging-ui ./deploy/helm/simple-logging-ui --namespace simple-logging
+helm repo update
+helm upgrade simple-logging simple-logging/simple-logging --namespace simple-logging
+helm upgrade simple-logging-ui simple-logging/simple-logging-ui --namespace simple-logging
 ```
 
 ### Uninstalling
