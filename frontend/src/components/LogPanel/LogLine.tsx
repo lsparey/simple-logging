@@ -1,6 +1,36 @@
 import { useMemo } from 'react';
 import Box from '@mui/material/Box';
 
+// Matches: "TIMESTAMP [namespace/pod/container] message"
+const PREFIX_RE = /^(\S+) \[([^/\]]+)\/([^/\]]+)\/[^\]]+\] ([\s\S]*)/;
+
+// Deterministic colour palette for pod name badges.
+const POD_BADGE_COLOURS = [
+  '#1565c0', '#2e7d32', '#6a1b9a', '#c62828', '#4e342e',
+  '#00695c', '#0277bd', '#558b2f', '#ad1457', '#e65100',
+  '#283593', '#37474f', '#4a148c', '#880e4f', '#bf360c',
+  '#00838f', '#f57f17', '#4527a0', '#0d47a1', '#1b5e20',
+];
+
+function podBadgeColour(podName: string): string {
+  let h = 0;
+  for (let i = 0; i < podName.length; i++) {
+    h = (h * 31 + podName.charCodeAt(i)) >>> 0;
+  }
+  return POD_BADGE_COLOURS[h % POD_BADGE_COLOURS.length];
+}
+
+interface ParsedPrefix {
+  podName: string;
+  message: string;
+}
+
+function parsePrefix(line: string): ParsedPrefix | null {
+  const m = PREFIX_RE.exec(line);
+  if (!m) return null;
+  return { podName: m[3], message: m[4] };
+}
+
 const ESC = String.fromCharCode(27);
 const ANSI_ESCAPE_RE = new RegExp(ESC + '\\[[0-9;]*m', 'g');
 const LEVEL_RE = /\b(TRACE|DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL|CRITICAL)\b/i;
@@ -113,13 +143,20 @@ interface Props {
 }
 
 export default function LogLine({ line, darkMode }: Props) {
-  const { colour, segments } = useMemo(() => {
-    const stripped = line.replace(ANSI_ESCAPE_RE, '');
+  const { colour, prefix, message, segments } = useMemo(() => {
+    const parsed = parsePrefix(line);
+    const displayMessage = parsed ? parsed.message : line;
+    const stripped = displayMessage.replace(ANSI_ESCAPE_RE, '');
     const match = LEVEL_RE.exec(stripped);
     const palette = darkMode ? DARK_COLOURS : LIGHT_COLOURS;
     const colour = match ? (palette[match[0].toUpperCase()] ?? 'inherit') : 'inherit';
-    const segments = HAS_ANSI_RE.test(line) ? parseAnsi(line) : null;
-    return { colour, segments };
+    const segments = HAS_ANSI_RE.test(displayMessage) ? parseAnsi(displayMessage) : null;
+    return {
+      colour,
+      prefix: parsed ? { podName: parsed.podName } : null,
+      message: displayMessage,
+      segments,
+    };
   }, [line, darkMode]);
 
   return (
@@ -138,6 +175,27 @@ export default function LogLine({ line, darkMode }: Props) {
         '&:hover': { bgcolor: 'action.hover' },
       }}
     >
+      {prefix && (
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-block',
+            bgcolor: podBadgeColour(prefix.podName),
+            color: '#fff',
+            borderRadius: '4px',
+            px: 0.75,
+            py: 0,
+            mr: 0.75,
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            lineHeight: 1.5,
+            verticalAlign: 'middle',
+            userSelect: 'none',
+          }}
+        >
+          {prefix.podName}
+        </Box>
+      )}
       {segments
         ? segments.map((seg, i) => (
             <span
@@ -154,7 +212,7 @@ export default function LogLine({ line, darkMode }: Props) {
               {seg.text}
             </span>
           ))
-        : line}
+        : message}
     </Box>
   );
 }
