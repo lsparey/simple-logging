@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 
 export type DisplayMode = 'idle' | 'loading' | 'history' | 'live';
@@ -106,9 +107,11 @@ export const useLogStore = create<LogStore>((set) => ({
 
 /** Derived: lines filtered by current searchText */
 export function useFilteredLines(): string[] {
-  return useLogStore((s) => {
-    if (!s.searchText) return s.lines;
-    const lower = s.searchText.toLowerCase();
-    return s.lines.filter((l) => l.toLowerCase().includes(lower));
-  });
+  const lines = useLogStore((s) => s.lines);
+  const searchText = useLogStore((s) => s.searchText);
+  return useMemo(() => {
+    if (!searchText) return lines;
+    const lower = searchText.toLowerCase();
+    return lines.filter((l) => l.toLowerCase().includes(lower));
+  }, [lines, searchText]);
 }
