@@ -30,6 +30,11 @@ interface LogStore {
   prevPageToken: string;
   nextPageToken: string;
   setPaginationTokens: (prev: string, next: string) => void;
+  setNextPageToken: (token: string) => void;
+
+  // Infinite scroll fetch state
+  isFetchingMore: boolean;
+  setIsFetchingMore: (fetching: boolean) => void;
 
   // Filters
   searchText: string;
@@ -93,6 +98,10 @@ export const useLogStore = create<LogStore>((set) => ({
   nextPageToken: '',
   setPaginationTokens: (prev, next) =>
     set({ prevPageToken: prev, nextPageToken: next }),
+  setNextPageToken: (token) => set({ nextPageToken: token }),
+
+  isFetchingMore: false,
+  setIsFetchingMore: (isFetchingMore) => set({ isFetchingMore }),
 
   searchText: '',
   setSearchText: (searchText) => set({ searchText }),
