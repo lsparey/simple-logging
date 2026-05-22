@@ -1,4 +1,4 @@
-name: Build & Push Server
+name: Build & Push
 
 on:
   push:
@@ -8,11 +8,14 @@ on:
       - 'v*.*.*'
     paths:
       - 'server/**'
-      - '.github/workflows/build-server.yml'
+      - 'frontend/**'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - '.github/workflows/build.yml'
 
 jobs:
   build:
-    name: Build and push server image
+    name: Build and push combined image
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,7 +47,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./server
+          context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

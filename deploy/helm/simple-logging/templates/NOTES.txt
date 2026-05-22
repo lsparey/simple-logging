@@ -3,14 +3,28 @@ simple-logging has been deployed to namespace {{ .Release.Namespace }}.
   Release:   {{ .Release.Name }}
   Namespace: {{ .Release.Namespace }}
 
+Frontend (nginx) is available inside the cluster at:
+
+  http://{{ include "simple-logging.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.httpPort }}
+
 The gRPC-Web API is available inside the cluster at:
 
-  {{ include "simple-logging.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+  {{ include "simple-logging.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.grpcWebPort }}
 
-To access it from outside the cluster, forward the port:
+{{- if .Values.ingress.enabled }}
+
+The application is exposed via Ingress at:
+
+  http://{{ .Values.ingress.host }}
+
+{{- else }}
+
+To access the frontend from outside the cluster, forward the port:
 
   kubectl port-forward -n {{ .Release.Namespace }} \
-    svc/{{ include "simple-logging.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+    svc/{{ include "simple-logging.fullname" . }} {{ .Values.service.httpPort }}:{{ .Values.service.httpPort }}
+
+{{- end }}
 
 {{- if not .Values.persistence.enabled }}
 

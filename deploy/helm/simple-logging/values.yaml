@@ -6,6 +6,21 @@ image:
   tag: "latest"
   pullPolicy: IfNotPresent
 
+# URL the browser uses to reach the gRPC-Web backend.
+# When ingress.enabled=true and ingress.host is set this is derived automatically
+# as http://<host>. Set explicitly only when you need a different host or scheme.
+grpcWebUrl: ""
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # host: logging.example.com
+  host: ""
+  tls: []
+  # Path prefix used to route gRPC-Web calls to port 8080 (must precede / catch-all).
+  grpcPathPrefix: "/simplelog.v1."
+
 # Application configuration — all values map 1:1 to environment variables.
 config:
   logsRoot: /var/pod-logs
@@ -24,21 +39,20 @@ persistence:
 
 service:
   type: ClusterIP
-  port: 8080
+  httpPort: 80      # nginx frontend
+  grpcWebPort: 8080 # gRPC-Web backend
 
 resources:
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 150m
+    memory: 160Mi
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 700m
+    memory: 576Mi
 
 # Pod-level security context.
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 65532   # distroless/nonroot UID
-  fsGroup: 65532
+# The combined image uses nginx:alpine which starts as root to bind port 80.
+podSecurityContext: {}
 
 serviceAccount:
   # Set to false to use an existing service account.
@@ -53,8 +67,8 @@ rbac:
 
 readinessProbe:
   httpGet:
-    path: /healthz
-    port: 8080
+    path: /
+    port: 80
   initialDelaySeconds: 5
   periodSeconds: 10
 
@@ -66,7 +80,7 @@ extraEnv: []
 
 livenessProbe:
   httpGet:
-    path: /healthz
-    port: 8080
+    path: /
+    port: 80
   initialDelaySeconds: 15
   periodSeconds: 30

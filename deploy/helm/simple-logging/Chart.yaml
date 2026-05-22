@@ -1,6 +1,6 @@
 apiVersion: v2
 name: simple-logging
-description: Collects Kubernetes pod logs, stores them on a PVC, and exposes them via a gRPC-Web API.
+description: Combined image — collects Kubernetes pod logs, stores them on a PVC, exposes a gRPC-Web API on port 8080, and serves the React frontend via nginx on port 80.
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

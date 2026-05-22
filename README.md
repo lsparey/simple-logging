@@ -6,13 +6,18 @@
 
 Simple, lightweight log aggregation for Kubernetes. simple-logging automatically collects logs from every pod across all namespaces, persists them to disk, and surfaces them in a clean web UI — no external dependencies, no complex configuration.
 
+| | |
+|---|---|
+| **Helm chart** | `helm repo add simple-logging https://lsparey.github.io/simple-logging` → `simple-logging/simple-logging` |
+| **Docker image** | [`lsparey/simple-logging`](https://hub.docker.com/r/lsparey/simple-logging) |
+
 ## Features
 
 - **Live log streaming** — real-time log tailing from all pods across all namespaces via a gRPC-Web API
 - **Persisted log storage** — logs are written to a PersistentVolumeClaim (one file per pod) and retained for 30 days
 - **Automatic pod discovery** — new pods are detected and streamed as soon as they start
-- **Simple helm install** — deploy the full stack (backend + UI) with two `helm install` commands
-- **Very low resource requirements** — the backend requests only 100m CPU / 128Mi memory; the UI requests 50m CPU / 32Mi memory
+- **Single helm install** — deploy the full stack with one `helm install` command
+- **Very low resource requirements** — requests only 150m CPU / 160Mi memory
 
 ## Tech stack
 
@@ -28,21 +33,19 @@ Logs are served to the frontend over a gRPC-Web API (HTTP/1.1 with gRPC-Web fram
 
 ### Frontend — React
 
-The UI is a React 19 single-page application built with Vite and TypeScript, served by a minimal nginx container. It connects to the backend using `@connectrpc/connect-web` — the same protobuf-first transport used by the server — so there is no REST translation layer at all. The component library is MUI (Material UI), virtual scrolling is handled by `react-window` to keep rendering fast even with large log volumes, and global state is managed with Zustand. The built static assets are tiny, and the running container requests just 50m CPU and 32Mi memory.
+The UI is a React 19 single-page application built with Vite and TypeScript, served by nginx inside the same container as the backend. It connects to the backend using `@connectrpc/connect-web` — the same protobuf-first transport used by the server — so there is no REST translation layer at all. The component library is MUI (Material UI), virtual scrolling is handled by `react-window` to keep rendering fast even with large log volumes, and global state is managed with Zustand.
 
 ## Architecture
 
 ```
 Kubernetes Cluster
 │
-├── simple-logging (backend)
-│   ├── Streams logs from all pods via the Kubernetes API
-│   ├── Writes logs to a PVC at /logs/<namespace>/<pod>.log
-│   └── Exposes a gRPC-Web API on port 8080
-│
-└── simple-logging-ui (frontend)
-    ├── React + Vite SPA served by nginx
-    └── Connects to the backend via gRPC-Web through an Ingress
+└── simple-logging (combined pod)
+    ├── nginx — serves the React SPA on port 80
+    ├── Go backend — streams logs from all pods via the Kubernetes API
+    │   ├── Writes logs to a PVC at /logs/<namespace>/<pod>.log
+    │   └── Exposes a gRPC-Web API on port 8080
+    └── Ingress routes / → nginx (80) and /simplelog.v1. → backend (8080)
 ```
 
 ## Installation
@@ -61,28 +64,12 @@ helm repo add simple-logging https://lsparey.github.io/simple-logging
 helm repo update
 ```
 
-### 2. Install the backend
+### 2. Install
 
 ```bash
 helm install simple-logging simple-logging/simple-logging \
   --namespace simple-logging \
-  --create-namespace
-```
-
-Key values you may want to override:
-
-| Value | Default | Description |
-|---|---|---|
-| `config.retentionDays` | `30` | Days to keep log files after last write |
-| `persistence.size` | `20Gi` | PVC size for log storage |
-| `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
-| `resources.requests.memory` | `128Mi` | Memory request for the backend pod |
-
-### 3. Install the UI
-
-```bash
-helm install simple-logging-ui simple-logging/simple-logging-ui \
-  --namespace simple-logging \
+  --create-namespace \
   --set ingress.enabled=true \
   --set ingress.host=logs.example.com \
   --set ingress.className=traefik
@@ -90,24 +77,30 @@ helm install simple-logging-ui simple-logging/simple-logging-ui \
 
 Replace `logs.example.com` with your desired hostname and `traefik` with your Ingress controller class.
 
-Once both charts are running, open `http://logs.example.com` in your browser to view logs.
+Once the pod is running, open `http://logs.example.com` in your browser to view logs.
+
+### Key values
+
+| Value | Default | Description |
+|---|---|---|
+| `ingress.enabled` | `false` | Expose the UI via an Ingress |
+| `ingress.host` | `""` | Hostname for the Ingress rule |
+| `ingress.className` | `""` | Ingress controller class (e.g. `traefik`, `nginx`) |
+| `config.retentionDays` | `30` | Days to keep log files after last write |
+| `persistence.size` | `20Gi` | PVC size for log storage |
+| `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
 
 ### Full example with custom values
 
 ```bash
-# Backend — larger PVC, 60-day retention
 helm install simple-logging simple-logging/simple-logging \
   --namespace simple-logging \
   --create-namespace \
-  --set persistence.size=50Gi \
-  --set config.retentionDays=60
-
-# UI — exposed on a custom hostname via nginx ingress
-helm install simple-logging-ui simple-logging/simple-logging-ui \
-  --namespace simple-logging \
   --set ingress.enabled=true \
   --set ingress.host=logs.example.com \
-  --set ingress.className=nginx
+  --set ingress.className=nginx \
+  --set persistence.size=50Gi \
+  --set config.retentionDays=60
 ```
 
 ### Upgrading
@@ -115,14 +108,13 @@ helm install simple-logging-ui simple-logging/simple-logging-ui \
 ```bash
 helm repo update
 helm upgrade simple-logging simple-logging/simple-logging --namespace simple-logging
-helm upgrade simple-logging-ui simple-logging/simple-logging-ui --namespace simple-logging
 ```
 
 ### Uninstalling
 
 ```bash
 helm uninstall simple-logging --namespace simple-logging
-helm uninstall simple-logging-ui --namespace simple-logging
 ```
 
 > **Note:** Uninstalling does not delete the PVC. To remove persisted logs, delete the PVC manually: `kubectl delete pvc -n simple-logging -l app.kubernetes.io/instance=simple-logging`
+

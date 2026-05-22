@@ -23,10 +23,21 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
             - name: grpc-web
               containerPort: {{ .Values.config.grpcWebPort }}
               protocol: TCP
           env:
+            - name: GRPC_WEB_URL
+              {{- if .Values.grpcWebUrl }}
+              value: {{ .Values.grpcWebUrl | quote }}
+              {{- else if and .Values.ingress.enabled .Values.ingress.host }}
+              value: {{ printf "http://%s" .Values.ingress.host | quote }}
+              {{- else }}
+              value: "http://localhost:8080"
+              {{- end }}
             - name: LOGS_ROOT
               value: {{ .Values.config.logsRoot | quote }}
             - name: GRPC_WEB_PORT

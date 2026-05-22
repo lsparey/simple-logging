@@ -1,6 +1,0 @@
-apiVersion: v2
-name: simple-logging-ui
-description: React/nginx frontend for simple-logging.
-type: application
-version: 0.1.0
-appVersion: "0.1.0"
