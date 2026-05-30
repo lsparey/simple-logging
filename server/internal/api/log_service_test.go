@@ -381,3 +381,88 @@ func TestStreamLogs_MissingArgs(t *testing.T) {
 		t.Fatal("expected error for empty namespace/pod")
 	}
 }
+
+// TestGetLogs_SameTimestampPreservesOrder verifies that a burst of log lines
+// sharing an identical RFC3339 timestamp (e.g. rapid startup messages) is
+// returned in file-insertion order and not reordered.
+func TestGetLogs_SameTimestampPreservesOrder(t *testing.T) {
+	dir := t.TempDir()
+
+	const ts = "2026-05-20T10:00:00Z"
+	const n = 10
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("%s [default/pod/app] startup message %d", ts, i)
+	}
+	writeLogFile(t, dir, "default", "pod", lines)
+
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+		Namespace: "default",
+		Pod:       "pod",
+	})
+	if err != nil {
+		t.Fatalf("GetLogs: %v", err)
+	}
+
+	if len(resp.Lines) != n {
+		t.Fatalf("expected %d lines, got %d", n, len(resp.Lines))
+	}
+	for i, got := range resp.Lines {
+		if got != lines[i] {
+			t.Errorf("line[%d]: got %q, want %q", i, got, lines[i])
+		}
+	}
+}
+
+// TestStreamLogs_SameTimestampPreservesOrder verifies that a burst of new log
+// lines sharing an identical RFC3339 timestamp is streamed in file-write order.
+func TestStreamLogs_SameTimestampPreservesOrder(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "default", "pod.log")
+	writeLogFile(t, dir, "default", "pod", nil)
+
+	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newFakeStreamLogsServer(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "pod"}, stream)
+	}()
+
+	// Give the goroutine time to seek to EOF.
+	time.Sleep(50 * time.Millisecond)
+
+	const ts = "2026-05-20T10:00:00Z"
+	const n = 5
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("open for append: %v", err)
+	}
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(f, "%s [default/pod/app] startup message %d\n", ts, i)
+	}
+	f.Close()
+
+	var received []string
+	deadline := time.After(2 * time.Second)
+	for len(received) < n {
+		select {
+		case line := <-stream.sendCh:
+			received = append(received, line)
+		case <-deadline:
+			t.Fatalf("timed out waiting for streamed lines; got %d/%d: %v", len(received), n, received)
+		}
+	}
+	cancel()
+	<-errCh
+
+	for i, got := range received {
+		want := fmt.Sprintf("%s [default/pod/app] startup message %d", ts, i)
+		if got != want {
+			t.Errorf("received[%d]: got %q, want %q", i, got, want)
+		}
+	}
+}

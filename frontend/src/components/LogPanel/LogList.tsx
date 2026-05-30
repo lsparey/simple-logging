@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useLayoutEffect, useCallback, useRef, useState } from "react";
 import { List, useListRef, type RowComponentProps } from "react-window";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
@@ -6,7 +6,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import LogLine from "./LogLine.js";
 
 const ROW_HEIGHT = 22;
-const NEAR_BOTTOM_THRESHOLD = 15;
+const NEAR_TOP_THRESHOLD = 15;
+const BOTTOM_SPACER_ROWS = 2;
 
 /** Extract a short display timestamp from the first space-delimited token of a log line. */
 function parseTimestamp(line: string | undefined): string | null {
@@ -23,11 +24,14 @@ interface Props {
   autoScroll: boolean;
   liveEnabled?: boolean;
   isFetchingMore?: boolean;
-  hasMore?: boolean;
+  hasOlderLogs?: boolean;
   lineCount?: number;
+  selectionKey?: number;
+  prependKey?: number;
+  prependCount?: number;
   onScrollUp: () => void;
   onScrollBottom: () => void;
-  onNearBottom?: () => void;
+  onNearTop?: () => void;
 }
 
 export default function LogList({
@@ -36,34 +40,78 @@ export default function LogList({
   autoScroll,
   liveEnabled = false,
   isFetchingMore = false,
-  hasMore = false,
-  lineCount = 0,
+  hasOlderLogs = false,
+  selectionKey = 0,
+  prependKey = 0,
+  prependCount = 0,
   onScrollUp,
   onScrollBottom,
-  onNearBottom,
+  onNearTop,
 }: Props) {
   const listRef = useListRef(null);
+  // Ref attached to the last rendered row, used to scroll it into view.
+  const lastRowRef = useRef<HTMLDivElement | null>(null);
+  // Ref on the outer Box so we can adjust scrollTop after prepending lines.
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Tracks the currently visible row range for the scroll indicator.
   const [scrollInfo, setScrollInfo] = useState<{ ts: string | null; start: number; stop: number }>(
     { ts: null, start: 0, stop: 0 },
   );
 
+  // On initial selection load (selectionKey changes), scroll to the bottom
+  // once the first batch of lines arrives. While settling, suppress the
+  // near-top trigger so we don't immediately fire loadOlder.
+  const needsInitialScrollRef = useRef(false);
+  const settlingRef = useRef(false);
+  useEffect(() => {
+    needsInitialScrollRef.current = true;
+    settlingRef.current = true;
+  }, [selectionKey]);
+
+  // Called by the List's onResize once react-window has a real measured height.
+  // That's the earliest point scrollToRow works correctly — same API the live
+  // mode uses successfully.
+  const handleResize = useCallback(() => {
+    if (!needsInitialScrollRef.current || lines.length === 0 || liveEnabled) return;
+    needsInitialScrollRef.current = false;
+    try {
+      listRef.current?.scrollToRow({ index: lines.length - 1 + BOTTOM_SPACER_ROWS, align: "end" });
+    } catch {
+      // ignore RangeError during rapid re-renders
+    }
+    setTimeout(() => { settlingRef.current = false; }, 150);
+  }, [lines.length, liveEnabled, listRef]);
+
+  // Live mode: auto-scroll to bottom when new lines arrive.
   useEffect(() => {
     if (liveEnabled && autoScroll && lines.length > 0) {
       try {
-        listRef.current?.scrollToRow({ index: lines.length - 1, align: "end" });
+        listRef.current?.scrollToRow({ index: lines.length - 1 + BOTTOM_SPACER_ROWS, align: "end" });
       } catch {
         // ignore RangeError during rapid re-renders
       }
     }
   }, [liveEnabled, lines.length, autoScroll, listRef]);
 
+  // After prepending N lines to the top, adjust the scroll offset so the
+  // previously-visible rows remain in view (no visual jump). prependKey
+  // always increments so this fires even when two fetches return equal counts.
+  useLayoutEffect(() => {
+    if (prependCount > 0) {
+      const el = containerRef.current?.querySelector<HTMLElement>('[style*="overflow"]');
+      if (el) el.scrollTop += prependCount * ROW_HEIGHT;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prependKey]);
+
   const RowComponent = useCallback(
     ({ index, style }: RowComponentProps) => (
-      <div style={style}>
-        <LogLine line={lines[index]} darkMode={darkMode} />
-      </div>
+      index < lines.length
+        ? <div style={style} ref={index === lines.length - 1 ? lastRowRef : undefined}>
+            <LogLine line={lines[index]} darkMode={darkMode} />
+          </div>
+        : <div style={style} />
     ),
     [lines, darkMode],
   );
@@ -74,11 +122,12 @@ export default function LogList({
       else onScrollUp();
 
       if (
-        onNearBottom &&
+        onNearTop &&
+        !settlingRef.current &&
         lines.length > 0 &&
-        visibleRows.stopIndex >= lines.length - NEAR_BOTTOM_THRESHOLD
+        visibleRows.startIndex <= NEAR_TOP_THRESHOLD
       ) {
-        onNearBottom();
+        onNearTop();
       }
 
       // Update scroll indicator (setScrollInfo is a stable useState setter — no dep needed).
@@ -90,7 +139,7 @@ export default function LogList({
     },
     // Use the full `lines` array (not just lines.length) so the latest entries are
     // captured for timestamp parsing, while keeping the same recreation frequency.
-    [lines, onScrollUp, onScrollBottom, onNearBottom],
+    [lines, onScrollUp, onScrollBottom, onNearTop],
   );
 
   const pageNum = Math.floor(scrollInfo.start / 200) + 1;
@@ -123,14 +172,13 @@ export default function LogList({
 
   const leftChipLabel = isFetchingMore ? (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-      <Box component="span">{lineCount} line{lineCount !== 1 ? 's' : ''}</Box>
       <CircularProgress size={10} sx={{ color: 'inherit' }} />
-      <Box component="span">Loading more…</Box>
+      <Box component="span">Loading older…</Box>
     </Box>
-  ) : `${lineCount} line${lineCount !== 1 ? 's' : ''}  ·  ${hasMore ? '↓ Scroll for more' : 'End of log'}`;
+  ) : hasOlderLogs ? '↑ Scroll for older' : null;
 
   return (
-    <Box sx={{ flex: 1, overflow: "hidden", fontFamily: "monospace", height: "100%", bgcolor: "background.default", position: "relative" }}>
+    <Box ref={containerRef} sx={{ flex: 1, overflow: "hidden", fontFamily: "monospace", height: "100%", bgcolor: "background.default", position: "relative" }}>
       {lines.length === 0 ? (
         <Box
           sx={{
@@ -148,11 +196,12 @@ export default function LogList({
         <>
           <List
             listRef={listRef}
-            rowCount={lines.length}
+            rowCount={lines.length + BOTTOM_SPACER_ROWS}
             rowHeight={ROW_HEIGHT}
             rowComponent={RowComponent}
             rowProps={{}}
             onRowsRendered={handleRowsRendered}
+            onResize={handleResize}
             style={{ height: "100%" }}
           />
           <Chip
@@ -174,7 +223,7 @@ export default function LogList({
           />
 
           {/* Left status chip */}
-          {!liveEnabled && (
+          {!liveEnabled && leftChipLabel !== null && (
             <Chip
               size="small"
               label={leftChipLabel}

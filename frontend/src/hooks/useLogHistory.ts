@@ -25,10 +25,11 @@ export function useLogHistory(
         endTime: BigInt(filters.endTime),
         pageSize: 200,
         pageToken: filters.pageToken,
+        loadLastPage: true,
       });
       setLines(resp.lines);
       // prev token = the token we used to arrive at this page
-      setPaginationTokens(filters.pageToken, resp.nextPageToken);
+      setPaginationTokens(resp.prevPageToken, resp.nextPageToken);
       setMode('history');
     } catch {
       setMode('history');

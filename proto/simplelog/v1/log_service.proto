@@ -81,6 +81,11 @@ message GetLogsRequest {
   // Leave empty to start from the beginning (or the earliest line matching
   // the time filter).
   string page_token = 6;
+
+  // load_last_page, when true, returns the last page of logs (most recent
+  // lines) regardless of page_token. Use prev_page_token from the response
+  // to page backwards through older logs.
+  bool load_last_page = 7;
 }
 
 message GetLogsResponse {
@@ -89,6 +94,10 @@ message GetLogsResponse {
   // next_page_token is the cursor to pass in the next request.
   // An empty value means this is the last page.
   string next_page_token = 2;
+
+  // prev_page_token is the cursor to pass to load the page of older logs
+  // that precedes this one. Empty when already at the beginning.
+  string prev_page_token = 3;
 }
 
 // ── StreamLogs ────────────────────────────────────────────────────────────────
@@ -137,6 +146,11 @@ message GetDeploymentLogsRequest {
   // page_token is an opaque cursor returned by a previous GetDeploymentLogs call.
   // Leave empty to start from the beginning.
   string page_token = 6;
+
+  // load_last_page, when true, returns the last page of logs (most recent
+  // lines) regardless of page_token. Use prev_page_token from the response
+  // to page backwards through older logs.
+  bool load_last_page = 7;
 }
 
 message GetDeploymentLogsResponse {
@@ -145,6 +159,10 @@ message GetDeploymentLogsResponse {
   // next_page_token is the cursor to pass in the next request.
   // An empty value means this is the last page.
   string next_page_token = 2;
+
+  // prev_page_token is the cursor to pass to load the page of older logs
+  // that precedes this one. Empty when already at the beginning.
+  string prev_page_token = 3;
 }
 
 // ── StreamDeploymentLogs ──────────────────────────────────────────────────────

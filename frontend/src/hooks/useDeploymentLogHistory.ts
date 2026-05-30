@@ -25,9 +25,10 @@ export function useDeploymentLogHistory(
         endTime: BigInt(filters.endTime),
         pageSize: 200,
         pageToken: filters.pageToken,
+        loadLastPage: true,
       });
       setLines(resp.lines);
-      setPaginationTokens(filters.pageToken, resp.nextPageToken);
+      setPaginationTokens(resp.prevPageToken, resp.nextPageToken);
       setMode('history');
     } catch {
       setMode('history');

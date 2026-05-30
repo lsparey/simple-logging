@@ -16,8 +16,9 @@ export default function LogPanel() {
     selectedNamespace: namespace,
     selectedPod: pod,
     selectedDeployment: deployment,
+    selectionKey,
     mode,
-    nextPageToken,
+    prevPageToken,
     startTime,
     endTime,
     darkMode,
@@ -26,6 +27,11 @@ export default function LogPanel() {
 
   const [liveEnabled, setLiveEnabled] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  // prependKey increments with every loadOlder call; prependCount carries the
+  // number of lines added so LogList can adjust scrollTop even when two
+  // consecutive fetches return the same count.
+  const [prependKey, setPrependKey] = useState(0);
+  const [prependCount, setPrependCount] = useState(0);
 
   // Always start from the beginning for the initial/filter-driven load.
   const filters = { startTime, endTime, pageToken: '' };
@@ -55,14 +61,12 @@ export default function LogPanel() {
     if (on) setAutoScroll(true);
   }, []);
 
-  // Loads the next page and appends it to the existing lines.
-  // Reads nextPageToken / isFetchingMore from store at call-time so this callback
-  // stays stable (only recreates when the selected resource changes), preventing
-  // react-window's onRowsRendered effect from firing on every store update and
-  // triggering duplicate fetches.
-  const loadMore = useCallback(async () => {
+  // Loads the previous (older) page and prepends it to the existing lines.
+  // Reads prevPageToken / isFetchingMore from store at call-time so this
+  // callback stays stable, preventing spurious re-triggers.
+  const loadOlder = useCallback(async () => {
     const {
-      nextPageToken: token,
+      prevPageToken: token,
       isFetchingMore: fetching,
       startTime: st,
       endTime: et,
@@ -81,8 +85,10 @@ export default function LogPanel() {
           pageSize: 200,
           pageToken: token,
         });
-        useLogStore.getState().appendLines(resp.lines);
-        useLogStore.getState().setNextPageToken(resp.nextPageToken);
+        setPrependKey((k) => k + 1);
+        setPrependCount(resp.lines.length);
+        useLogStore.getState().prependLines(resp.lines);
+        useLogStore.getState().setPaginationTokens(resp.prevPageToken, useLogStore.getState().nextPageToken);
       } else if (pod) {
         const resp = await logClient.getLogs({
           namespace,
@@ -92,11 +98,13 @@ export default function LogPanel() {
           pageSize: 200,
           pageToken: token,
         });
-        useLogStore.getState().appendLines(resp.lines);
-        useLogStore.getState().setNextPageToken(resp.nextPageToken);
+        setPrependKey((k) => k + 1);
+        setPrependCount(resp.lines.length);
+        useLogStore.getState().prependLines(resp.lines);
+        useLogStore.getState().setPaginationTokens(resp.prevPageToken, useLogStore.getState().nextPageToken);
       }
     } catch {
-      // ignore fetch errors for load-more
+      // ignore fetch errors for load-older
     } finally {
       useLogStore.getState().setIsFetchingMore(false);
     }
@@ -144,11 +152,14 @@ export default function LogPanel() {
           autoScroll={autoScroll}
           liveEnabled={liveEnabled}
           isFetchingMore={isFetchingMore}
-          hasMore={!!nextPageToken}
+          hasOlderLogs={!!prevPageToken}
           lineCount={filteredLines.length}
+          selectionKey={selectionKey}
+          prependKey={prependKey}
+          prependCount={prependCount}
           onScrollUp={handleScrollUp}
           onScrollBottom={handleScrollBottom}
-          onNearBottom={!liveEnabled ? loadMore : undefined}
+          onNearTop={!liveEnabled ? loadOlder : undefined}
         />
       )}
     </Box>

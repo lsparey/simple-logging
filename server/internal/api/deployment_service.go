@@ -186,14 +186,22 @@ func inferDeploymentName(podName string) string {
 // merge-sorting across multiple pod log files.
 type logEntry struct {
 	ts   time.Time
+	idx  int // global insertion order, used as a tiebreaker for equal timestamps
 	line string
 }
 
-// logEntryHeap is a min-heap of logEntry, ordered by timestamp.
+// logEntryHeap is a min-heap of logEntry, ordered by timestamp with insertion
+// order as a tiebreaker so that lines sharing an identical timestamp are always
+// returned in the order they were read from their log files.
 type logEntryHeap []logEntry
 
-func (h logEntryHeap) Len() int            { return len(h) }
-func (h logEntryHeap) Less(i, j int) bool  { return h[i].ts.Before(h[j].ts) }
+func (h logEntryHeap) Len() int           { return len(h) }
+func (h logEntryHeap) Less(i, j int) bool {
+	if h[i].ts.Equal(h[j].ts) {
+		return h[i].idx < h[j].idx
+	}
+	return h[i].ts.Before(h[j].ts)
+}
 func (h logEntryHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
 func (h *logEntryHeap) Push(x interface{}) { *h = append(*h, x.(logEntry)) }
 func (h *logEntryHeap) Pop() interface{} {
@@ -202,6 +210,44 @@ func (h *logEntryHeap) Pop() interface{} {
 	x := old[n-1]
 	*h = old[:n-1]
 	return x
+}
+
+// encodeForwardNanosToken encodes a "lines after this timestamp" cursor.
+func encodeForwardNanosToken(nanos int64) string {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(nanos))
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// encodeBackwardNanosToken encodes a "lines before this timestamp" cursor.
+func encodeBackwardNanosToken(nanos int64) string {
+	b := make([]byte, 9)
+	b[0] = 0x01
+	binary.BigEndian.PutUint64(b[1:], uint64(nanos))
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+type nanosToken struct {
+	nanos    int64
+	backward bool // true = "before", false = "after"
+}
+
+func decodeNanosToken(token string) (nanosToken, error) {
+	b, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return nanosToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+	}
+	switch len(b) {
+	case 8:
+		return nanosToken{nanos: int64(binary.BigEndian.Uint64(b)), backward: false}, nil
+	case 9:
+		if b[0] != 0x01 {
+			return nanosToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+		}
+		return nanosToken{nanos: int64(binary.BigEndian.Uint64(b[1:])), backward: true}, nil
+	default:
+		return nanosToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+	}
 }
 
 // GetDeploymentLogs returns a paginated, time-sorted page of log lines from
@@ -219,15 +265,23 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 		pageSize = maxPageSize
 	}
 
-	// Decode the cursor: 8-byte big-endian Unix nanoseconds of the last seen line.
+	// Decode the cursor: forward (8-byte nanos) or backward (9-byte with 0x01 flag).
 	var afterNanos int64
+	var beforeNanos int64
 	if req.PageToken != "" {
-		b, err := base64.StdEncoding.DecodeString(req.PageToken)
-		if err != nil || len(b) != 8 {
-			return nil, status.Error(codes.InvalidArgument, "invalid page_token")
+		tok, err := decodeNanosToken(req.PageToken)
+		if err != nil {
+			return nil, err
 		}
-		afterNanos = int64(binary.BigEndian.Uint64(b))
+		if tok.backward {
+			beforeNanos = tok.nanos
+		} else {
+			afterNanos = tok.nanos
+		}
 	}
+
+	// reversed = we want the most recent N lines (last page or backward cursor).
+	reversed := req.LoadLastPage || beforeNanos > 0
 
 	pods, err := s.deploymentPodsForNamespace(req.Namespace, req.Deployment)
 	if err != nil {
@@ -245,10 +299,12 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 		endTime = time.Unix(req.EndTime, 0)
 	}
 	afterTime := time.Unix(0, afterNanos)
+	beforeTime := time.Unix(0, beforeNanos)
 
-	// Read all matching lines from every pod log file.
+	// Read all matching lines from every pod log file into the heap.
 	h := &logEntryHeap{}
 	heap.Init(h)
+	var insertIdx int
 
 	for _, pod := range pods {
 		logPath := filepath.Join(s.logsRoot, req.Namespace, pod+".log")
@@ -271,31 +327,74 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 			if !endTime.IsZero() && ts.After(endTime) {
 				continue
 			}
-			// Pagination: skip lines at or before the cursor timestamp.
+			// Forward cursor: skip lines at or before afterTime.
 			if afterNanos > 0 && !ts.After(afterTime) {
 				continue
 			}
-			heap.Push(h, logEntry{ts: ts, line: line})
+			// Backward cursor: skip lines at or after beforeTime.
+			if beforeNanos > 0 && !ts.Before(beforeTime) {
+				continue
+			}
+			heap.Push(h, logEntry{ts: ts, idx: insertIdx, line: line})
+			insertIdx++
 		}
 		f.Close()
 	}
 
-	// Pull up to pageSize lines from the heap (already sorted by time).
-	lines := make([]string, 0, pageSize)
-	var lastNanos int64
-	for h.Len() > 0 && len(lines) < pageSize {
-		e := heap.Pop(h).(logEntry)
-		lines = append(lines, e.line)
-		lastNanos = e.ts.UnixNano()
+	// Drain the heap into a sorted slice.
+	allSorted := make([]logEntry, 0, h.Len())
+	for h.Len() > 0 {
+		allSorted = append(allSorted, heap.Pop(h).(logEntry))
 	}
+	// allSorted is ascending by timestamp.
 
-	resp := &pb.GetDeploymentLogsResponse{Lines: lines}
+	resp := &pb.GetDeploymentLogsResponse{}
 
-	// Only return a next-page token when there are still lines remaining.
-	if h.Len() > 0 && lastNanos > 0 {
-		tokenBytes := make([]byte, 8)
-		binary.BigEndian.PutUint64(tokenBytes, uint64(lastNanos))
-		resp.NextPageToken = base64.StdEncoding.EncodeToString(tokenBytes)
+	if reversed {
+		// Take the last pageSize lines (most recent).
+		start := len(allSorted) - pageSize
+		if start < 0 {
+			start = 0
+		}
+		page := allSorted[start:]
+		lines := make([]string, len(page))
+		for i, e := range page {
+			lines[i] = e.line
+		}
+		resp.Lines = lines
+
+		// prev_page_token: if there are lines before this page, encode a "before
+		// first line of this page" backward cursor.
+		if start > 0 && len(page) > 0 {
+			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
+		}
+		// next_page_token: for a backward cursor, provide a forward cursor so
+		// the caller can navigate back toward newer logs.
+		if beforeNanos > 0 && len(page) > 0 {
+			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
+		}
+		// For load_last_page there is no next page (we are already at the end).
+	} else {
+		// Take the first pageSize lines.
+		end := pageSize
+		if end > len(allSorted) {
+			end = len(allSorted)
+		}
+		page := allSorted[:end]
+		lines := make([]string, len(page))
+		for i, e := range page {
+			lines[i] = e.line
+		}
+		resp.Lines = lines
+
+		// next_page_token: there are more lines after this page.
+		if len(allSorted) > pageSize && len(page) > 0 {
+			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
+		}
+		// prev_page_token: only meaningful when we started mid-stream (afterNanos > 0).
+		if afterNanos > 0 && len(page) > 0 {
+			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
+		}
 	}
 
 	return resp, nil

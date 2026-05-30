@@ -265,7 +265,11 @@ type GetLogsRequest struct {
 	// page_token is an opaque cursor returned by a previous GetLogs call.
 	// Leave empty to start from the beginning (or the earliest line matching
 	// the time filter).
-	PageToken     string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// load_last_page, when true, returns the last page of logs (most recent
+	// lines) regardless of page_token. Use prev_page_token from the response
+	// to page backwards through older logs.
+	LoadLastPage  bool `protobuf:"varint,7,opt,name=load_last_page,json=loadLastPage,proto3" json:"load_last_page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -342,12 +346,22 @@ func (x *GetLogsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *GetLogsRequest) GetLoadLastPage() bool {
+	if x != nil {
+		return x.LoadLastPage
+	}
+	return false
+}
+
 type GetLogsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Lines []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
 	// next_page_token is the cursor to pass in the next request.
 	// An empty value means this is the last page.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// prev_page_token is the cursor to pass to load the page of older logs
+	// that precedes this one. Empty when already at the beginning.
+	PrevPageToken string `protobuf:"bytes,3,opt,name=prev_page_token,json=prevPageToken,proto3" json:"prev_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -392,6 +406,13 @@ func (x *GetLogsResponse) GetLines() []string {
 func (x *GetLogsResponse) GetNextPageToken() string {
 	if x != nil {
 		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *GetLogsResponse) GetPrevPageToken() string {
+	if x != nil {
+		return x.PrevPageToken
 	}
 	return ""
 }
@@ -654,7 +675,11 @@ type GetDeploymentLogsRequest struct {
 	PageSize int32 `protobuf:"varint,5,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// page_token is an opaque cursor returned by a previous GetDeploymentLogs call.
 	// Leave empty to start from the beginning.
-	PageToken     string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageToken string `protobuf:"bytes,6,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// load_last_page, when true, returns the last page of logs (most recent
+	// lines) regardless of page_token. Use prev_page_token from the response
+	// to page backwards through older logs.
+	LoadLastPage  bool `protobuf:"varint,7,opt,name=load_last_page,json=loadLastPage,proto3" json:"load_last_page,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -731,12 +756,22 @@ func (x *GetDeploymentLogsRequest) GetPageToken() string {
 	return ""
 }
 
+func (x *GetDeploymentLogsRequest) GetLoadLastPage() bool {
+	if x != nil {
+		return x.LoadLastPage
+	}
+	return false
+}
+
 type GetDeploymentLogsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Lines []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
 	// next_page_token is the cursor to pass in the next request.
 	// An empty value means this is the last page.
 	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	// prev_page_token is the cursor to pass to load the page of older logs
+	// that precedes this one. Empty when already at the beginning.
+	PrevPageToken string `protobuf:"bytes,3,opt,name=prev_page_token,json=prevPageToken,proto3" json:"prev_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -781,6 +816,13 @@ func (x *GetDeploymentLogsResponse) GetLines() []string {
 func (x *GetDeploymentLogsResponse) GetNextPageToken() string {
 	if x != nil {
 		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *GetDeploymentLogsResponse) GetPrevPageToken() string {
+	if x != nil {
+		return x.PrevPageToken
 	}
 	return ""
 }
@@ -898,7 +940,7 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06active\x18\x03 \x01(\bR\x06active\"=\n" +
 	"\x10ListPodsResponse\x12)\n" +
-	"\x04pods\x18\x01 \x03(\v2\x15.simplelog.v1.PodInfoR\x04pods\"\xb6\x01\n" +
+	"\x04pods\x18\x01 \x03(\v2\x15.simplelog.v1.PodInfoR\x04pods\"\xdc\x01\n" +
 	"\x0eGetLogsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03pod\x18\x02 \x01(\tR\x03pod\x12\x1d\n" +
@@ -907,10 +949,12 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\bend_time\x18\x04 \x01(\x03R\aendTime\x12\x1b\n" +
 	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"O\n" +
+	"page_token\x18\x06 \x01(\tR\tpageToken\x12$\n" +
+	"\x0eload_last_page\x18\a \x01(\bR\floadLastPage\"w\n" +
 	"\x0fGetLogsResponse\x12\x14\n" +
 	"\x05lines\x18\x01 \x03(\tR\x05lines\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"C\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12&\n" +
+	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken\"C\n" +
 	"\x11StreamLogsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03pod\x18\x02 \x01(\tR\x03pod\"(\n" +
@@ -923,7 +967,7 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06active\x18\x03 \x01(\bR\x06active\"Y\n" +
 	"\x17ListDeploymentsResponse\x12>\n" +
-	"\vdeployments\x18\x01 \x03(\v2\x1c.simplelog.v1.DeploymentInfoR\vdeployments\"\xce\x01\n" +
+	"\vdeployments\x18\x01 \x03(\v2\x1c.simplelog.v1.DeploymentInfoR\vdeployments\"\xf4\x01\n" +
 	"\x18GetDeploymentLogsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1e\n" +
 	"\n" +
@@ -934,10 +978,12 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\bend_time\x18\x04 \x01(\x03R\aendTime\x12\x1b\n" +
 	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"Y\n" +
+	"page_token\x18\x06 \x01(\tR\tpageToken\x12$\n" +
+	"\x0eload_last_page\x18\a \x01(\bR\floadLastPage\"\x81\x01\n" +
 	"\x19GetDeploymentLogsResponse\x12\x14\n" +
 	"\x05lines\x18\x01 \x03(\tR\x05lines\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"[\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12&\n" +
+	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken\"[\n" +
 	"\x1bStreamDeploymentLogsRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1e\n" +
 	"\n" +

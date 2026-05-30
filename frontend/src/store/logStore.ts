@@ -23,6 +23,7 @@ interface LogStore {
   // Log lines
   lines: string[];
   appendLines: (lines: string[]) => void;
+  prependLines: (lines: string[]) => void;
   setLines: (lines: string[]) => void;
   clearLines: () => void;
 
@@ -91,6 +92,8 @@ export const useLogStore = create<LogStore>((set) => ({
   lines: [],
   appendLines: (newLines) =>
     set((s) => ({ lines: [...s.lines, ...newLines] })),
+  prependLines: (newLines) =>
+    set((s) => ({ lines: [...newLines, ...s.lines] })),
   setLines: (lines) => set({ lines }),
   clearLines: () => set({ lines: [] }),
 

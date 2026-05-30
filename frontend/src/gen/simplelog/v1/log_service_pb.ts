@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file simplelog/v1/log_service.proto.
  */
 export const file_simplelog_v1_log_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch5zaW1wbGVsb2cvdjEvbG9nX3NlcnZpY2UucHJvdG8SDHNpbXBsZWxvZy52MSIXChVMaXN0TmFtZXNwYWNlc1JlcXVlc3QiLAoWTGlzdE5hbWVzcGFjZXNSZXNwb25zZRISCgpuYW1lc3BhY2VzGAEgAygJIiQKD0xpc3RQb2RzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkiOgoHUG9kSW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgiNwoQTGlzdFBvZHNSZXNwb25zZRIjCgRwb2RzGAEgAygLMhUuc2ltcGxlbG9nLnYxLlBvZEluZm8ifQoOR2V0TG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCRISCgpzdGFydF90aW1lGAMgASgDEhAKCGVuZF90aW1lGAQgASgDEhEKCXBhZ2Vfc2l6ZRgFIAEoBRISCgpwYWdlX3Rva2VuGAYgASgJIjkKD0dldExvZ3NSZXNwb25zZRINCgVsaW5lcxgBIAMoCRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiMwoRU3RyZWFtTG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCSIiChJTdHJlYW1Mb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCSIrChZMaXN0RGVwbG95bWVudHNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCSJBCg5EZXBsb3ltZW50SW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgiTAoXTGlzdERlcGxveW1lbnRzUmVzcG9uc2USMQoLZGVwbG95bWVudHMYASADKAsyHC5zaW1wbGVsb2cudjEuRGVwbG95bWVudEluZm8ijgEKGEdldERlcGxveW1lbnRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEgoKZGVwbG95bWVudBgCIAEoCRISCgpzdGFydF90aW1lGAMgASgDEhAKCGVuZF90aW1lGAQgASgDEhEKCXBhZ2Vfc2l6ZRgFIAEoBRISCgpwYWdlX3Rva2VuGAYgASgJIkMKGUdldERlcGxveW1lbnRMb2dzUmVzcG9uc2USDQoFbGluZXMYASADKAkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIkQKG1N0cmVhbURlcGxveW1lbnRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEgoKZGVwbG95bWVudBgCIAEoCSIsChxTdHJlYW1EZXBsb3ltZW50TG9nc1Jlc3BvbnNlEgwKBGxpbmUYASABKAkyhgUKCkxvZ1NlcnZpY2USWwoOTGlzdE5hbWVzcGFjZXMSIy5zaW1wbGVsb2cudjEuTGlzdE5hbWVzcGFjZXNSZXF1ZXN0GiQuc2ltcGxlbG9nLnYxLkxpc3ROYW1lc3BhY2VzUmVzcG9uc2USSQoITGlzdFBvZHMSHS5zaW1wbGVsb2cudjEuTGlzdFBvZHNSZXF1ZXN0Gh4uc2ltcGxlbG9nLnYxLkxpc3RQb2RzUmVzcG9uc2USRgoHR2V0TG9ncxIcLnNpbXBsZWxvZy52MS5HZXRMb2dzUmVxdWVzdBodLnNpbXBsZWxvZy52MS5HZXRMb2dzUmVzcG9uc2USUQoKU3RyZWFtTG9ncxIfLnNpbXBsZWxvZy52MS5TdHJlYW1Mb2dzUmVxdWVzdBogLnNpbXBsZWxvZy52MS5TdHJlYW1Mb2dzUmVzcG9uc2UwARJeCg9MaXN0RGVwbG95bWVudHMSJC5zaW1wbGVsb2cudjEuTGlzdERlcGxveW1lbnRzUmVxdWVzdBolLnNpbXBsZWxvZy52MS5MaXN0RGVwbG95bWVudHNSZXNwb25zZRJkChFHZXREZXBsb3ltZW50TG9ncxImLnNpbXBsZWxvZy52MS5HZXREZXBsb3ltZW50TG9nc1JlcXVlc3QaJy5zaW1wbGVsb2cudjEuR2V0RGVwbG95bWVudExvZ3NSZXNwb25zZRJvChRTdHJlYW1EZXBsb3ltZW50TG9ncxIpLnNpbXBsZWxvZy52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1JlcXVlc3QaKi5zaW1wbGVsb2cudjEuU3RyZWFtRGVwbG95bWVudExvZ3NSZXNwb25zZTABQkBaPmdpdGh1Yi5jb20vbHNwYXJleS9zaW1wbGUtbG9nZ2luZy9nZW4vc2ltcGxlbG9nL3YxO3NpbXBsZWxvZ3YxYgZwcm90bzM");
+  fileDesc("Ch5zaW1wbGVsb2cvdjEvbG9nX3NlcnZpY2UucHJvdG8SDHNpbXBsZWxvZy52MSIXChVMaXN0TmFtZXNwYWNlc1JlcXVlc3QiLAoWTGlzdE5hbWVzcGFjZXNSZXNwb25zZRISCgpuYW1lc3BhY2VzGAEgAygJIiQKD0xpc3RQb2RzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkiOgoHUG9kSW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgiNwoQTGlzdFBvZHNSZXNwb25zZRIjCgRwb2RzGAEgAygLMhUuc2ltcGxlbG9nLnYxLlBvZEluZm8ilQEKDkdldExvZ3NSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRILCgNwb2QYAiABKAkSEgoKc3RhcnRfdGltZRgDIAEoAxIQCghlbmRfdGltZRgEIAEoAxIRCglwYWdlX3NpemUYBSABKAUSEgoKcGFnZV90b2tlbhgGIAEoCRIWCg5sb2FkX2xhc3RfcGFnZRgHIAEoCCJSCg9HZXRMb2dzUmVzcG9uc2USDQoFbGluZXMYASADKAkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3ByZXZfcGFnZV90b2tlbhgDIAEoCSIzChFTdHJlYW1Mb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSCwoDcG9kGAIgASgJIiIKElN0cmVhbUxvZ3NSZXNwb25zZRIMCgRsaW5lGAEgASgJIisKFkxpc3REZXBsb3ltZW50c1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJIkEKDkRlcGxveW1lbnRJbmZvEgwKBG5hbWUYASABKAkSEQoJbmFtZXNwYWNlGAIgASgJEg4KBmFjdGl2ZRgDIAEoCCJMChdMaXN0RGVwbG95bWVudHNSZXNwb25zZRIxCgtkZXBsb3ltZW50cxgBIAMoCzIcLnNpbXBsZWxvZy52MS5EZXBsb3ltZW50SW5mbyKmAQoYR2V0RGVwbG95bWVudExvZ3NSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRISCgpkZXBsb3ltZW50GAIgASgJEhIKCnN0YXJ0X3RpbWUYAyABKAMSEAoIZW5kX3RpbWUYBCABKAMSEQoJcGFnZV9zaXplGAUgASgFEhIKCnBhZ2VfdG9rZW4YBiABKAkSFgoObG9hZF9sYXN0X3BhZ2UYByABKAgiXAoZR2V0RGVwbG95bWVudExvZ3NSZXNwb25zZRINCgVsaW5lcxgBIAMoCRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSFwoPcHJldl9wYWdlX3Rva2VuGAMgASgJIkQKG1N0cmVhbURlcGxveW1lbnRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSEgoKZGVwbG95bWVudBgCIAEoCSIsChxTdHJlYW1EZXBsb3ltZW50TG9nc1Jlc3BvbnNlEgwKBGxpbmUYASABKAkyhgUKCkxvZ1NlcnZpY2USWwoOTGlzdE5hbWVzcGFjZXMSIy5zaW1wbGVsb2cudjEuTGlzdE5hbWVzcGFjZXNSZXF1ZXN0GiQuc2ltcGxlbG9nLnYxLkxpc3ROYW1lc3BhY2VzUmVzcG9uc2USSQoITGlzdFBvZHMSHS5zaW1wbGVsb2cudjEuTGlzdFBvZHNSZXF1ZXN0Gh4uc2ltcGxlbG9nLnYxLkxpc3RQb2RzUmVzcG9uc2USRgoHR2V0TG9ncxIcLnNpbXBsZWxvZy52MS5HZXRMb2dzUmVxdWVzdBodLnNpbXBsZWxvZy52MS5HZXRMb2dzUmVzcG9uc2USUQoKU3RyZWFtTG9ncxIfLnNpbXBsZWxvZy52MS5TdHJlYW1Mb2dzUmVxdWVzdBogLnNpbXBsZWxvZy52MS5TdHJlYW1Mb2dzUmVzcG9uc2UwARJeCg9MaXN0RGVwbG95bWVudHMSJC5zaW1wbGVsb2cudjEuTGlzdERlcGxveW1lbnRzUmVxdWVzdBolLnNpbXBsZWxvZy52MS5MaXN0RGVwbG95bWVudHNSZXNwb25zZRJkChFHZXREZXBsb3ltZW50TG9ncxImLnNpbXBsZWxvZy52MS5HZXREZXBsb3ltZW50TG9nc1JlcXVlc3QaJy5zaW1wbGVsb2cudjEuR2V0RGVwbG95bWVudExvZ3NSZXNwb25zZRJvChRTdHJlYW1EZXBsb3ltZW50TG9ncxIpLnNpbXBsZWxvZy52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1JlcXVlc3QaKi5zaW1wbGVsb2cudjEuU3RyZWFtRGVwbG95bWVudExvZ3NSZXNwb25zZTABQkBaPmdpdGh1Yi5jb20vbHNwYXJleS9zaW1wbGUtbG9nZ2luZy9nZW4vc2ltcGxlbG9nL3YxO3NpbXBsZWxvZ3YxYgZwcm90bzM");
 
 /**
  * @generated from message simplelog.v1.ListNamespacesRequest
@@ -150,6 +150,15 @@ export type GetLogsRequest = Message<"simplelog.v1.GetLogsRequest"> & {
    * @generated from field: string page_token = 6;
    */
   pageToken: string;
+
+  /**
+   * load_last_page, when true, returns the last page of logs (most recent
+   * lines) regardless of page_token. Use prev_page_token from the response
+   * to page backwards through older logs.
+   *
+   * @generated from field: bool load_last_page = 7;
+   */
+  loadLastPage: boolean;
 };
 
 /**
@@ -175,6 +184,14 @@ export type GetLogsResponse = Message<"simplelog.v1.GetLogsResponse"> & {
    * @generated from field: string next_page_token = 2;
    */
   nextPageToken: string;
+
+  /**
+   * prev_page_token is the cursor to pass to load the page of older logs
+   * that precedes this one. Empty when already at the beginning.
+   *
+   * @generated from field: string prev_page_token = 3;
+   */
+  prevPageToken: string;
 };
 
 /**
@@ -328,6 +345,15 @@ export type GetDeploymentLogsRequest = Message<"simplelog.v1.GetDeploymentLogsRe
    * @generated from field: string page_token = 6;
    */
   pageToken: string;
+
+  /**
+   * load_last_page, when true, returns the last page of logs (most recent
+   * lines) regardless of page_token. Use prev_page_token from the response
+   * to page backwards through older logs.
+   *
+   * @generated from field: bool load_last_page = 7;
+   */
+  loadLastPage: boolean;
 };
 
 /**
@@ -353,6 +379,14 @@ export type GetDeploymentLogsResponse = Message<"simplelog.v1.GetDeploymentLogsR
    * @generated from field: string next_page_token = 2;
    */
   nextPageToken: string;
+
+  /**
+   * prev_page_token is the cursor to pass to load the page of older logs
+   * that precedes this one. Empty when already at the beginning.
+   *
+   * @generated from field: string prev_page_token = 3;
+   */
+  prevPageToken: string;
 };
 
 /**

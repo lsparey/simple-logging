@@ -99,6 +99,65 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 	return &pb.ListPodsResponse{Pods: pods}, nil
 }
 
+// encodeOffsetToken encodes a byte offset as a base64 8-byte big-endian token.
+func encodeOffsetToken(offset int64) string {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(offset))
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// decodeOffsetToken decodes a base64 8-byte big-endian token back to a byte offset.
+func decodeOffsetToken(token string) (int64, error) {
+	b, err := base64.StdEncoding.DecodeString(token)
+	if err != nil || len(b) != 8 {
+		return 0, status.Error(codes.InvalidArgument, "invalid page_token")
+	}
+	return int64(binary.BigEndian.Uint64(b)), nil
+}
+
+// findPageStartBefore scans backward through f from endOffset to find the byte
+// offset where reading forward would yield exactly n lines ending at endOffset.
+// Returns 0 if there are fewer than n lines before endOffset (meaning start
+// from the beginning of the file).
+func findPageStartBefore(f *os.File, endOffset int64, n int) (int64, error) {
+	if n <= 0 || endOffset <= 0 {
+		return 0, nil
+	}
+
+	const bufSize = 32 * 1024
+	count := 0
+	pos := endOffset
+
+	// If the file ends with '\n', that is just the line terminator for the last
+	// line — skip it so we don't count an empty trailing entry.
+	var tail [1]byte
+	if _, err := f.ReadAt(tail[:], endOffset-1); err == nil && tail[0] == '\n' {
+		count = -1
+	}
+
+	for pos > 0 {
+		readStart := pos - int64(bufSize)
+		if readStart < 0 {
+			readStart = 0
+		}
+		bufLen := int(pos - readStart)
+		buf := make([]byte, bufLen)
+		if _, err := f.ReadAt(buf, readStart); err != nil {
+			return 0, status.Errorf(codes.Internal, "scan log file: %v", err)
+		}
+		for i := bufLen - 1; i >= 0; i-- {
+			if buf[i] == '\n' {
+				count++
+				if count == n {
+					return readStart + int64(i) + 1, nil
+				}
+			}
+		}
+		pos = readStart
+	}
+	return 0, nil // fewer than n lines total
+}
+
 // GetLogs returns a paginated, optionally time-filtered page of log lines for
 // a specific pod. Pagination is cursor-based: the cursor is a base64-encoded
 // 8-byte big-endian byte offset into the log file.
@@ -115,16 +174,6 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 		pageSize = maxPageSize
 	}
 
-	// Decode the byte-offset cursor from the page token.
-	var startOffset int64
-	if req.PageToken != "" {
-		b, err := base64.StdEncoding.DecodeString(req.PageToken)
-		if err != nil || len(b) != 8 {
-			return nil, status.Error(codes.InvalidArgument, "invalid page_token")
-		}
-		startOffset = int64(binary.BigEndian.Uint64(b))
-	}
-
 	logPath := filepath.Join(s.logsRoot, req.Namespace, req.Pod+".log")
 	f, err := os.Open(logPath)
 	if err != nil {
@@ -135,10 +184,29 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 	}
 	defer f.Close()
 
-	if startOffset > 0 {
-		if _, err := f.Seek(startOffset, io.SeekStart); err != nil {
-			return nil, status.Errorf(codes.Internal, "seek log file: %v", err)
+	fileSize, err := f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "stat log file: %v", err)
+	}
+
+	// Decode the byte-offset cursor from the page token, or compute the start
+	// offset for load_last_page.
+	var startOffset int64
+	switch {
+	case req.LoadLastPage:
+		startOffset, err = findPageStartBefore(f, fileSize, pageSize)
+		if err != nil {
+			return nil, err
 		}
+	case req.PageToken != "":
+		startOffset, err = decodeOffsetToken(req.PageToken)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if _, err := f.Seek(startOffset, io.SeekStart); err != nil {
+		return nil, status.Errorf(codes.Internal, "seek log file: %v", err)
 	}
 
 	// Wrap the file in a counting reader. After each ReadString call, we can
@@ -178,10 +246,17 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 	// Only set a next-page token if the page is full AND there is more data.
 	if len(lines) == pageSize {
 		if _, peekErr := br.Peek(1); peekErr == nil {
-			tokenBytes := make([]byte, 8)
-			binary.BigEndian.PutUint64(tokenBytes, uint64(lastConsumedOffset))
-			resp.NextPageToken = base64.StdEncoding.EncodeToString(tokenBytes)
+			resp.NextPageToken = encodeOffsetToken(lastConsumedOffset)
 		}
+	}
+
+	// Set a prev-page token when there are lines before the current page start.
+	if startOffset > 0 {
+		prevStart, scanErr := findPageStartBefore(f, startOffset, pageSize)
+		if scanErr != nil {
+			return nil, scanErr
+		}
+		resp.PrevPageToken = encodeOffsetToken(prevStart)
 	}
 
 	return resp, nil
