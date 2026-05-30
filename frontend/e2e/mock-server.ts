@@ -213,6 +213,12 @@ function withCors(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
+  if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
+    res.writeHead(200);
+    res.end('ok');
+    return;
+  }
+
   connectHandler(req, res);
 }
 

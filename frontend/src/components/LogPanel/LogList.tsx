@@ -53,6 +53,9 @@ export default function LogList({
   const lastRowRef = useRef<HTMLDivElement | null>(null);
   // Ref on the outer Box so we can adjust scrollTop after prepending lines.
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // Tracks the line count seen in the last handleRowsRendered call to detect
+  // filter-driven changes that shouldn't trigger loadOlder.
+  const prevLinesLengthRef = useRef(lines.length);
 
   // Keep a synchronously-updated ref to the latest lines array so that
   // RowComponent and handleRowsRendered can read current values without
@@ -73,8 +76,11 @@ export default function LogList({
   // On initial selection load (selectionKey changes), scroll to the bottom
   // once the first batch of lines arrives. While settling, suppress the
   // near-top trigger so we don't immediately fire loadOlder.
-  const needsInitialScrollRef = useRef(false);
-  const settlingRef = useRef(false);
+  // Initialized to true so that the first handleRowsRendered call (which fires
+  // at startIndex=0 before the useEffect below has a chance to run) does not
+  // prematurely trigger loadOlder.
+  const needsInitialScrollRef = useRef(true);
+  const settlingRef = useRef(true);
   useEffect(() => {
     needsInitialScrollRef.current = true;
     settlingRef.current = true;
@@ -135,6 +141,17 @@ export default function LogList({
       const currentLines = linesRef.current;
       if (visibleRows.stopIndex >= currentLines.length - 1) onScrollBottom();
       else onScrollUp();
+
+      // Detect filter-driven line count changes to suppress spurious loadOlder.
+      // When the count changes (filter applied or cleared) set settlingRef for a
+      // brief window so all subsequent handleRowsRendered calls at startIndex=0
+      // are also suppressed, not just the first one.
+      const prevLength = prevLinesLengthRef.current;
+      prevLinesLengthRef.current = currentLines.length;
+      if (prevLength !== currentLines.length) {
+        settlingRef.current = true;
+        setTimeout(() => { settlingRef.current = false; }, 150);
+      }
 
       if (
         onNearTop &&

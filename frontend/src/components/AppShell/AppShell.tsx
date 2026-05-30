@@ -29,7 +29,7 @@ export default function AppShell() {
               simple-logging
             </Typography>
           </Box>
-          <IconButton color="inherit" onClick={toggleDarkMode} size="small">
+          <IconButton aria-label="Toggle brightness" color="inherit" onClick={toggleDarkMode} size="small">
             {darkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
         </Toolbar>

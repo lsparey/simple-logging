@@ -31,7 +31,7 @@ export default defineConfig({
       command: 'npm run dev',
       url: 'http://localhost:5173',
       reuseExistingServer: !process.env.CI,
-      env: { VITE_GRPC_WEB_URL: 'http://localhost:8081' },
+      env: { ...process.env, VITE_GRPC_WEB_URL: 'http://localhost:8081' },
     },
   ],
 });
