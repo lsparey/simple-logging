@@ -29,6 +29,12 @@ type ActiveChecker interface {
 	IsActive(namespace, pod string) bool
 }
 
+// JsonLoggingChecker is satisfied by the Collector; it reports whether a pod's
+// log output has been detected as JSON-formatted.
+type JsonLoggingChecker interface {
+	IsJsonLogging(namespace, pod string) bool
+}
+
 // DeploymentMapper resolves the deployment that owns a pod and enumerates
 // deployments seen in a namespace.
 type DeploymentMapper interface {
@@ -43,12 +49,13 @@ type LogService struct {
 	pb.UnimplementedLogServiceServer
 	logsRoot    string
 	active      ActiveChecker
+	jsonLogging JsonLoggingChecker
 	deployments DeploymentMapper
 }
 
 // NewLogService creates a LogService backed by files in logsRoot.
-func NewLogService(logsRoot string, active ActiveChecker, deployments DeploymentMapper) *LogService {
-	return &LogService{logsRoot: logsRoot, active: active, deployments: deployments}
+func NewLogService(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker, deployments DeploymentMapper) *LogService {
+	return &LogService{logsRoot: logsRoot, active: active, jsonLogging: jsonLogging, deployments: deployments}
 }
 
 // ListNamespaces returns the names of all namespace subdirectories under logsRoot.
@@ -90,9 +97,10 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 		}
 		podName := strings.TrimSuffix(e.Name(), ".log")
 		pods = append(pods, &pb.PodInfo{
-			Name:      podName,
-			Namespace: req.Namespace,
-			Active:    s.active.IsActive(req.Namespace, podName),
+			Name:        podName,
+			Namespace:   req.Namespace,
+			Active:      s.active.IsActive(req.Namespace, podName),
+			JsonLogging: s.jsonLogging.IsJsonLogging(req.Namespace, podName),
 		})
 	}
 

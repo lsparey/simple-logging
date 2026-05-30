@@ -151,7 +151,9 @@ type PodInfo struct {
 	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Namespace string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// active is true when the pod is currently running and logs are being streamed.
-	Active        bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	Active bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	// json_logging is true when the pod's log output appears to use JSON formatting.
+	JsonLogging   bool `protobuf:"varint,4,opt,name=json_logging,json=jsonLogging,proto3" json:"json_logging,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -203,6 +205,13 @@ func (x *PodInfo) GetNamespace() string {
 func (x *PodInfo) GetActive() bool {
 	if x != nil {
 		return x.Active
+	}
+	return false
+}
+
+func (x *PodInfo) GetJsonLogging() bool {
+	if x != nil {
+		return x.JsonLogging
 	}
 	return false
 }
@@ -562,7 +571,9 @@ type DeploymentInfo struct {
 	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Namespace string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// active is true when at least one pod in the deployment is currently running.
-	Active        bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	Active bool `protobuf:"varint,3,opt,name=active,proto3" json:"active,omitempty"`
+	// json_logging is true when at least one pod in the deployment uses JSON log formatting.
+	JsonLogging   bool `protobuf:"varint,4,opt,name=json_logging,json=jsonLogging,proto3" json:"json_logging,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -614,6 +625,13 @@ func (x *DeploymentInfo) GetNamespace() string {
 func (x *DeploymentInfo) GetActive() bool {
 	if x != nil {
 		return x.Active
+	}
+	return false
+}
+
+func (x *DeploymentInfo) GetJsonLogging() bool {
+	if x != nil {
+		return x.JsonLogging
 	}
 	return false
 }
@@ -934,11 +952,12 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"namespaces\x18\x01 \x03(\tR\n" +
 	"namespaces\"/\n" +
 	"\x0fListPodsRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"S\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"v\n" +
 	"\aPodInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06active\x18\x03 \x01(\bR\x06active\"=\n" +
+	"\x06active\x18\x03 \x01(\bR\x06active\x12!\n" +
+	"\fjson_logging\x18\x04 \x01(\bR\vjsonLogging\"=\n" +
 	"\x10ListPodsResponse\x12)\n" +
 	"\x04pods\x18\x01 \x03(\v2\x15.simplelog.v1.PodInfoR\x04pods\"\xdc\x01\n" +
 	"\x0eGetLogsRequest\x12\x1c\n" +
@@ -961,11 +980,12 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\x12StreamLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\"6\n" +
 	"\x16ListDeploymentsRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"Z\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"}\n" +
 	"\x0eDeploymentInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x16\n" +
-	"\x06active\x18\x03 \x01(\bR\x06active\"Y\n" +
+	"\x06active\x18\x03 \x01(\bR\x06active\x12!\n" +
+	"\fjson_logging\x18\x04 \x01(\bR\vjsonLogging\"Y\n" +
 	"\x17ListDeploymentsResponse\x12>\n" +
 	"\vdeployments\x18\x01 \x03(\v2\x1c.simplelog.v1.DeploymentInfoR\vdeployments\"\xf4\x01\n" +
 	"\x18GetDeploymentLogsRequest\x12\x1c\n" +

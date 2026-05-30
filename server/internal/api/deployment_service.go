@@ -117,6 +117,7 @@ func (s *LogService) ListDeployments(_ context.Context, req *pb.ListDeploymentsR
 
 	// Collect deployment names by inspecting each pod log file.
 	deploymentActive := make(map[string]bool)
+	deploymentJson := make(map[string]bool)
 	for _, e := range entries {
 		if e.IsDir() || filepath.Ext(e.Name()) != ".log" {
 			continue
@@ -140,6 +141,12 @@ func (s *LogService) ListDeployments(_ context.Context, req *pb.ListDeploymentsR
 		} else {
 			deploymentActive[depName] = active
 		}
+
+		if s.jsonLogging.IsJsonLogging(req.Namespace, podName) {
+			deploymentJson[depName] = true
+		} else if _, exists := deploymentJson[depName]; !exists {
+			deploymentJson[depName] = false
+		}
 	}
 
 	// Also include deployments tracked by the collector but not yet flushed to disk.
@@ -152,9 +159,10 @@ func (s *LogService) ListDeployments(_ context.Context, req *pb.ListDeploymentsR
 	deployments := make([]*pb.DeploymentInfo, 0, len(deploymentActive))
 	for name, active := range deploymentActive {
 		deployments = append(deployments, &pb.DeploymentInfo{
-			Name:      name,
-			Namespace: req.Namespace,
-			Active:    active,
+			Name:        name,
+			Namespace:   req.Namespace,
+			Active:      active,
+			JsonLogging: deploymentJson[name],
 		})
 	}
 	sort.Slice(deployments, func(i, j int) bool {

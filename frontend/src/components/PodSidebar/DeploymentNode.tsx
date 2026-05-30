@@ -20,7 +20,7 @@ export default function DeploymentNode({ deployment }: Props) {
       <ListItemButton
         dense
         selected={selected}
-        onClick={() => setSelectedDeployment(deployment.namespace, deployment.name)}
+        onClick={() => setSelectedDeployment(deployment.namespace, deployment.name, deployment.jsonLogging)}
       >
         <Box
           component="span"

@@ -18,7 +18,7 @@ export default function PodNode({ pod }: Props) {
       <ListItemButton
         dense
         selected={selected}
-        onClick={() => setSelectedPod(pod.namespace, pod.name)}
+        onClick={() => setSelectedPod(pod.namespace, pod.name, pod.jsonLogging)}
       >
         <Box
           component="span"

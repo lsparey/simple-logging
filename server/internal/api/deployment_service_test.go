@@ -28,7 +28,7 @@ func TestGetDeploymentLogs_SameTimestampPreservesOrder(t *testing.T) {
 	}
 	writeLogFile(t, dir, "default", pod, lines)
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
 		Namespace:  "default",
 		Deployment: deployment,
@@ -72,7 +72,7 @@ func TestGetDeploymentLogs_SameTimestampAcrossPodsPreservesOrder(t *testing.T) {
 	writeLogFile(t, dir, "default", podA, linesA)
 	writeLogFile(t, dir, "default", podB, linesB)
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
 		Namespace:  "default",
 		Deployment: deployment,

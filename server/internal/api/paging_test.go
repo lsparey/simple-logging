@@ -76,7 +76,7 @@ func TestGetLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	dir := t.TempDir()
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace:    "default",
 		Pod:          pod,
@@ -118,7 +118,7 @@ func TestGetLogs_3Day_ForwardPaginationCoversAllLines(t *testing.T) {
 	fixture := generate3DayLogLines(pod)
 	writeLogFile(t, dir, "default", pod, fixture)
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 
 	var all []string
 	var nextToken string
@@ -171,7 +171,7 @@ func TestGetLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T) {
 	fixture := generate3DayLogLines(pod)
 	writeLogFile(t, dir, "default", pod, fixture)
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 
 	// Load the most recent page.
 	initial, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
@@ -242,7 +242,7 @@ func TestGetLogs_3Day_FirstForwardPageHasNoPrevToken(t *testing.T) {
 	dir := t.TempDir()
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace: "default",
 		Pod:       pod,
@@ -278,7 +278,7 @@ func TestGetLogs_3Day_BurstLinesIncludedOnCorrectPage(t *testing.T) {
 	dir := t.TempDir()
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 
 	// Collect all lines via forward pagination.
 	var all []string
@@ -343,7 +343,7 @@ func TestGetDeploymentLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	dir := t.TempDir()
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
 		Deployment:   deployment,
@@ -391,7 +391,7 @@ func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T
 	dir := t.TempDir()
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 
 	initial, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
@@ -464,7 +464,7 @@ func TestGetDeploymentLogs_3Day_MultiPod_LoadLastPageShowsMostRecent(t *testing.
 	writeLogFile(t, dir, "default", podA, generate3DayLogLines(podA))
 	writeLogFile(t, dir, "default", podB, generate3DayLogLines(podB))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
 		Deployment:   deployment,
@@ -505,7 +505,7 @@ func TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *
 	writeLogFile(t, dir, "default", podA, generate3DayLogLines(podA))
 	writeLogFile(t, dir, "default", podB, generate3DayLogLines(podB))
 
-	svc := NewLogService(dir, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 
 	initial, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",

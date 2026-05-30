@@ -56,6 +56,8 @@ message PodInfo {
   string namespace = 2;
   // active is true when the pod is currently running and logs are being streamed.
   bool active = 3;
+  // json_logging is true when the pod's log output appears to use JSON formatting.
+  bool json_logging = 4;
 }
 
 message ListPodsResponse {
@@ -122,6 +124,8 @@ message DeploymentInfo {
   string namespace = 2;
   // active is true when at least one pod in the deployment is currently running.
   bool active = 3;
+  // json_logging is true when at least one pod in the deployment uses JSON log formatting.
+  bool json_logging = 4;
 }
 
 message ListDeploymentsResponse {

@@ -3,6 +3,7 @@ package collector
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -14,6 +15,10 @@ import (
 
 	"github.com/lsparey/simple-logging/internal/storage"
 )
+
+// jsonProbeLines is the number of non-empty log lines to sample before
+// deciding whether a pod's output is JSON-formatted.
+const jsonProbeLines = 5
 
 type podKey struct {
 	namespace string
@@ -38,6 +43,9 @@ type Collector struct {
 	deploymentPods map[string]map[string]struct{}
 	// podDeployment maps "namespace/pod" -> deployment name.
 	podDeployment map[string]string
+
+	// jsonLogging tracks which pods have been determined to use JSON log formatting.
+	jsonLogging map[podKey]bool
 }
 
 // New creates a Collector that streams pod logs to files under logsRoot.
@@ -49,6 +57,7 @@ func New(cs kubernetes.Interface, logsRoot string, log *zap.Logger) *Collector {
 		streams:        make(map[podKey]*activeStream),
 		deploymentPods: make(map[string]map[string]struct{}),
 		podDeployment:  make(map[string]string),
+		jsonLogging:    make(map[podKey]bool),
 	}
 }
 
@@ -99,6 +108,22 @@ func (c *Collector) IsActive(namespace, pod string) bool {
 	defer c.mu.Unlock()
 	_, ok := c.streams[podKey{namespace: namespace, name: pod}]
 	return ok
+}
+
+// IsJsonLogging reports whether the given pod's log output has been detected
+// as JSON-formatted.
+func (c *Collector) IsJsonLogging(namespace, pod string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.jsonLogging[podKey{namespace: namespace, name: pod}]
+}
+
+// setJsonLogging records the JSON-logging status for a pod. It is called from
+// the streaming goroutine once enough sample lines have been observed.
+func (c *Collector) setJsonLogging(namespace, pod string, isJson bool) {
+	c.mu.Lock()
+	c.jsonLogging[podKey{namespace: namespace, name: pod}] = isJson
+	c.mu.Unlock()
 }
 
 // GetDeploymentName returns the deployment name for a pod if it is known.
@@ -206,11 +231,29 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 	log.Info("log stream started")
 
 	scanner := bufio.NewScanner(stream)
+	jsonSamples := 0
+	jsonMatches := 0
+	jsonDecided := false
+
 	for scanner.Scan() {
+		rawLine := scanner.Text()
+
+		// Probe the first jsonProbeLines non-empty lines to detect JSON logging.
+		if !jsonDecided && strings.TrimSpace(rawLine) != "" {
+			jsonSamples++
+			if isJSONLine(rawLine) {
+				jsonMatches++
+			}
+			if jsonSamples >= jsonProbeLines {
+				jsonDecided = true
+				c.setJsonLogging(pod.Namespace, pod.Name, jsonMatches == jsonSamples)
+			}
+		}
+
 		line := fmt.Sprintf("%s [%s/%s/%s] %s",
 			time.Now().UTC().Format(time.RFC3339),
 			pod.Namespace, pod.Name, containerName,
-			scanner.Text(),
+			rawLine,
 		)
 		if werr := writer.Write(line); werr != nil {
 			log.Error("failed to write log line", zap.Error(werr))
@@ -231,4 +274,13 @@ func defaultContainer(pod *corev1.Pod) string {
 		return pod.Spec.Containers[0].Name
 	}
 	return ""
+}
+
+// isJSONLine returns true when line is a valid JSON object (starts with '{').
+func isJSONLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return false
+	}
+	return json.Valid([]byte(trimmed))
 }

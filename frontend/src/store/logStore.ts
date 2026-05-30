@@ -7,11 +7,14 @@ interface LogStore {
   // Pod selection
   selectedNamespace: string | null;
   selectedPod: string | null;
-  setSelectedPod: (namespace: string, pod: string) => void;
+  setSelectedPod: (namespace: string, pod: string, jsonLogging?: boolean) => void;
 
   // Deployment selection (mutually exclusive with pod selection)
   selectedDeployment: string | null;
-  setSelectedDeployment: (namespace: string, deployment: string) => void;
+  setSelectedDeployment: (namespace: string, deployment: string, jsonLogging?: boolean) => void;
+
+  // Whether the currently selected pod/deployment uses JSON log formatting
+  jsonLogging: boolean;
 
   // Increments on every selection (even re-selecting the same resource)
   selectionKey: number;
@@ -55,11 +58,14 @@ export const useLogStore = create<LogStore>((set) => ({
   selectedNamespace: null,
   selectedPod: null,
   selectionKey: 0,
-  setSelectedPod: (namespace, pod) =>
+  jsonLogging: false,
+
+  setSelectedPod: (namespace, pod, jsonLogging = false) =>
     set((s) => ({
       selectedNamespace: namespace,
       selectedPod: pod,
       selectedDeployment: null,
+      jsonLogging,
       mode: 'loading',
       lines: [],
       prevPageToken: '',
@@ -71,11 +77,12 @@ export const useLogStore = create<LogStore>((set) => ({
     })),
 
   selectedDeployment: null,
-  setSelectedDeployment: (namespace, deployment) =>
+  setSelectedDeployment: (namespace, deployment, jsonLogging = false) =>
     set((s) => ({
       selectedNamespace: namespace,
       selectedPod: null,
       selectedDeployment: deployment,
+      jsonLogging,
       mode: 'loading',
       lines: [],
       prevPageToken: '',

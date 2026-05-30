@@ -18,12 +18,10 @@ interface Props {
   onLiveToggle: (on: boolean) => void;
 }
 
-export default function LogToolbar({ namespace, pod, deployment, liveEnabled, onLiveToggle }: Props) {
-  const { searchText, setSearchText, startTime, endTime, setTimeRange } = useLogStore();
+export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle }: Props) {
+  const { searchText, setSearchText, startTime, endTime, setTimeRange, jsonLogging } = useLogStore();
 
-  const label = deployment
-    ? `${namespace} / ${deployment} (deployment)`
-    : `${namespace} / ${pod}`;
+  const label = deployment ? deployment : pod;
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -45,6 +43,21 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
           variant="outlined"
           sx={{ fontFamily: 'monospace' }}
         />
+        {jsonLogging && (
+          <Chip
+            label="{..}"
+            size="small"
+            variant="outlined"
+            sx={{
+              height: 20,
+              fontSize: '0.7rem',
+              fontFamily: 'monospace',
+              color: 'warning.main',
+              borderColor: 'warning.main',
+              '& .MuiChip-label': { px: 0.75 },
+            }}
+          />
+        )}
 
         <FormControlLabel
           control={

@@ -73,7 +73,7 @@ func main() {
 	go retention.Run(ctx)
 
 	// ── Phase 8/9: gRPC Service & gRPC-Web Server ───────────────────
-	svc := api.NewLogService(cfg.LogsRoot, coll, coll)
+	svc := api.NewLogService(cfg.LogsRoot, coll, coll, coll)
 	srv := api.NewServer(cfg.GRPCWebPort, svc, cfg.RESTDebugEnabled, log)
 
 	serverErr := make(chan error, 1)
