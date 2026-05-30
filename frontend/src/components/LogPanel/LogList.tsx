@@ -54,6 +54,17 @@ export default function LogList({
   // Ref on the outer Box so we can adjust scrollTop after prepending lines.
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  // Keep a synchronously-updated ref to the latest lines array so that
+  // RowComponent and handleRowsRendered can read current values without
+  // including `lines` in their useCallback deps.  Including `lines` in those
+  // deps causes both callbacks to be recreated on every append, which triggers
+  // react-window's internal onRowsRendered useEffect (it has the callback as a
+  // dep) — ultimately causing "Maximum update depth exceeded" during rapid live
+  // streaming.
+  const linesRef = useRef(lines);
+  // eslint-disable-next-line react-hooks/refs
+  linesRef.current = lines; // intentionally written during render so RowComponent and handleRowsRendered always see the latest array
+
   // Tracks the currently visible row range for the scroll indicator.
   const [scrollInfo, setScrollInfo] = useState<{ ts: string | null; start: number; stop: number }>(
     { ts: null, start: 0, stop: 0 },
@@ -71,17 +82,19 @@ export default function LogList({
 
   // Called by the List's onResize once react-window has a real measured height.
   // That's the earliest point scrollToRow works correctly — same API the live
-  // mode uses successfully.
+  // mode uses successfully.  Uses linesRef.current so this callback stays
+  // stable across line appends and doesn't trigger react-window's onResize
+  // layout effect on every update.
   const handleResize = useCallback(() => {
-    if (!needsInitialScrollRef.current || lines.length === 0 || liveEnabled) return;
+    if (!needsInitialScrollRef.current || linesRef.current.length === 0 || liveEnabled) return;
     needsInitialScrollRef.current = false;
     try {
-      listRef.current?.scrollToRow({ index: lines.length - 1 + BOTTOM_SPACER_ROWS, align: "end" });
+      listRef.current?.scrollToRow({ index: linesRef.current.length - 1 + BOTTOM_SPACER_ROWS, align: "end" });
     } catch {
       // ignore RangeError during rapid re-renders
     }
     setTimeout(() => { settlingRef.current = false; }, 150);
-  }, [lines.length, liveEnabled, listRef]);
+  }, [liveEnabled, listRef]);
 
   // Live mode: auto-scroll to bottom when new lines arrive.
   useEffect(() => {
@@ -106,25 +119,27 @@ export default function LogList({
   }, [prependKey]);
 
   const RowComponent = useCallback(
-    ({ index, style }: RowComponentProps) => (
-      index < lines.length
-        ? <div style={style} ref={index === lines.length - 1 ? lastRowRef : undefined}>
-            <LogLine line={lines[index]} darkMode={darkMode} />
+    ({ index, style }: RowComponentProps) => {
+      const currentLines = linesRef.current;
+      return index < currentLines.length
+        ? <div style={style} ref={index === currentLines.length - 1 ? lastRowRef : undefined}>
+            <LogLine line={currentLines[index]} darkMode={darkMode} />
           </div>
-        : <div style={style} />
-    ),
-    [lines, darkMode],
+        : <div style={style} />;
+    },
+    [darkMode],
   );
 
   const handleRowsRendered = useCallback(
     (visibleRows: { startIndex: number; stopIndex: number }) => {
-      if (visibleRows.stopIndex >= lines.length - 1) onScrollBottom();
+      const currentLines = linesRef.current;
+      if (visibleRows.stopIndex >= currentLines.length - 1) onScrollBottom();
       else onScrollUp();
 
       if (
         onNearTop &&
         !settlingRef.current &&
-        lines.length > 0 &&
+        currentLines.length > 0 &&
         visibleRows.startIndex <= NEAR_TOP_THRESHOLD
       ) {
         onNearTop();
@@ -132,14 +147,15 @@ export default function LogList({
 
       // Update scroll indicator (setScrollInfo is a stable useState setter — no dep needed).
       setScrollInfo({
-        ts: parseTimestamp(lines[visibleRows.startIndex]),
+        ts: parseTimestamp(currentLines[visibleRows.startIndex]),
         start: visibleRows.startIndex,
         stop: visibleRows.stopIndex,
       });
     },
-    // Use the full `lines` array (not just lines.length) so the latest entries are
-    // captured for timestamp parsing, while keeping the same recreation frequency.
-    [lines, onScrollUp, onScrollBottom, onNearTop],
+    // linesRef.current gives access to the latest lines without making this
+    // callback unstable — it's updated synchronously during every render so
+    // reads here always see the current array.
+    [onScrollUp, onScrollBottom, onNearTop],
   );
 
   const pageNum = Math.floor(scrollInfo.start / 200) + 1;

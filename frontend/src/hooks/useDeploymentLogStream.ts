@@ -22,6 +22,13 @@ export function useDeploymentLogStream(
     abortRef.current = controller;
     setMode('live');
 
+    // Buffer incoming lines and flush once per animation frame so that a burst
+    // of many log messages from the server results in a single React render
+    // instead of one render per message (which would exceed React's nested
+    // update limit with large bursts).
+    let buffer: string[] = [];
+    let rafId: number | null = null;
+
     (async () => {
       try {
         const stream = logClient.streamDeploymentLogs(
@@ -29,16 +36,32 @@ export function useDeploymentLogStream(
           { signal: controller.signal },
         );
         for await (const msg of stream) {
-          appendLines([msg.line]);
+          buffer.push(msg.line);
+          if (rafId === null) {
+            rafId = requestAnimationFrame(() => {
+              appendLines(buffer.splice(0));
+              rafId = null;
+            });
+          }
         }
       } catch {
         // AbortError is expected on cleanup; ignore silently.
       }
+      // Flush any lines buffered when the stream ends cleanly.
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      if (buffer.length > 0) appendLines(buffer.splice(0));
     })();
 
     return () => {
       controller.abort();
       abortRef.current = null;
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     };
   }, [enabled, namespace, deployment, appendLines, setMode]);
 }
