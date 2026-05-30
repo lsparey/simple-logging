@@ -23,6 +23,7 @@ export default function LogPanel() {
     endTime,
     darkMode,
     isFetchingMore,
+    jsonFormat,
   } = useLogStore();
 
   const [liveEnabled, setLiveEnabled] = useState(false);
@@ -149,6 +150,7 @@ export default function LogPanel() {
         <LogList
           lines={filteredLines}
           darkMode={darkMode}
+          jsonFormat={jsonFormat}
           autoScroll={autoScroll}
           liveEnabled={liveEnabled}
           isFetchingMore={isFetchingMore}

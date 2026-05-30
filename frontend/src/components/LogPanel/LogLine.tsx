@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import Box from '@mui/material/Box';
+import type { JsonFormat } from '../../store/logStore.js';
 
 // Matches: "TIMESTAMP [namespace/pod/container] message"
 const PREFIX_RE = /^(\S+) \[([^/\]]+)\/([^/\]]+)\/[^\]]+\] ([\s\S]*)/;
@@ -137,27 +138,49 @@ const LIGHT_COLOURS: Record<string, string> = {
   CRITICAL: '#cf222e',
 };
 
+const JSON_MESSAGE_DARK = '#4dd0e1';
+const JSON_MESSAGE_LIGHT = '#00695c';
+const JSON_DIM_DARK = '#484f58';
+const JSON_DIM_LIGHT = '#8c959f';
+
 interface Props {
   line: string;
   darkMode: boolean;
+  jsonFormat?: JsonFormat | null;
 }
 
-export default function LogLine({ line, darkMode }: Props) {
-  const { colour, prefix, message, segments } = useMemo(() => {
+export default function LogLine({ line, darkMode, jsonFormat }: Props) {
+  const { colour, prefix, message, segments, jsonParsed } = useMemo(() => {
     const parsed = parsePrefix(line);
     const displayMessage = parsed ? parsed.message : line;
     const stripped = displayMessage.replace(ANSI_ESCAPE_RE, '');
-    const match = LEVEL_RE.exec(stripped);
     const palette = darkMode ? DARK_COLOURS : LIGHT_COLOURS;
+
+    // Try JSON parsing when a format is configured
+    let jsonParsed: { level: string; levelColour: string; msg: string; raw: string } | null = null;
+    if (jsonFormat) {
+      try {
+        const obj = JSON.parse(stripped) as Record<string, unknown>;
+        if (obj !== null && typeof obj === 'object') {
+          const level = String(obj[jsonFormat.levelKey] ?? '').toUpperCase();
+          const msg = String(obj[jsonFormat.messageKey] ?? '');
+          const levelColour = palette[level] ?? (darkMode ? DARK_COLOURS.INFO : LIGHT_COLOURS.INFO);
+          jsonParsed = { level, levelColour, msg, raw: stripped };
+        }
+      } catch { /* not JSON */ }
+    }
+
+    const match = jsonParsed ? null : LEVEL_RE.exec(stripped);
     const colour = match ? (palette[match[0].toUpperCase()] ?? 'inherit') : 'inherit';
-    const segments = HAS_ANSI_RE.test(displayMessage) ? parseAnsi(displayMessage) : null;
+    const segments = !jsonParsed && HAS_ANSI_RE.test(displayMessage) ? parseAnsi(displayMessage) : null;
     return {
       colour,
       prefix: parsed ? { podName: parsed.podName } : null,
       message: displayMessage,
       segments,
+      jsonParsed,
     };
-  }, [line, darkMode]);
+  }, [line, darkMode, jsonFormat]);
 
   return (
     <Box
@@ -196,7 +219,21 @@ export default function LogLine({ line, darkMode }: Props) {
           {prefix.podName}
         </Box>
       )}
-      {segments
+      {jsonParsed ? (
+        <>
+          <span style={{ color: jsonParsed.levelColour, fontWeight: 600 }}>
+            {jsonParsed.level || '?'}
+          </span>
+          {' '}
+          <span style={{ color: darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT }}>
+            {jsonParsed.msg}
+          </span>
+          {' '}
+          <span style={{ color: darkMode ? JSON_DIM_DARK : JSON_DIM_LIGHT }}>
+            {jsonParsed.raw}
+          </span>
+        </>
+      ) : segments
         ? segments.map((seg, i) => (
             <span
               key={i}

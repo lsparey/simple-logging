@@ -1,3 +1,4 @@
+import { useState, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -8,6 +9,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useLogStore } from '../../store/logStore.js';
+import JsonFormatModal from './JsonFormatModal.js';
 
 interface Props {
   namespace: string;
@@ -19,9 +21,46 @@ interface Props {
 }
 
 export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle }: Props) {
-  const { searchText, setSearchText, startTime, endTime, setTimeRange, jsonLogging } = useLogStore();
+  const { searchText, setSearchText, startTime, endTime, setTimeRange, jsonLogging, jsonFormat, setJsonFormat, lines } = useLogStore();
+  const [modalOpen, setModalOpen] = useState(false);
 
   const label = deployment ? deployment : pod;
+
+  // Extract JSON property keys that appear in every sampled JSON log line.
+  // Sampling up to 100 lines keeps this cheap even for large buffers.
+  const candidateKeys = useMemo(() => {
+    const SAMPLE = 100;
+    const PREFIX_JSON_RE = /^(\S+) \[\S+\] ([\s\S]*)$/;
+    const keyCounts = new Map<string, number>();
+    let jsonLineCount = 0;
+
+    const sample = lines.length > SAMPLE
+      ? lines.slice(0, Math.ceil(SAMPLE / 2)).concat(lines.slice(-Math.floor(SAMPLE / 2)))
+      : lines;
+
+    for (const line of sample) {
+      const m = PREFIX_JSON_RE.exec(line);
+      const payload = m ? m[2] : line;
+      const trimmed = payload.trimStart();
+      if (trimmed[0] !== '{') continue;
+      try {
+        const obj = JSON.parse(trimmed) as Record<string, unknown>;
+        if (obj === null || typeof obj !== 'object') continue;
+        jsonLineCount++;
+        for (const key of Object.keys(obj)) {
+          keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
+        }
+      } catch { /* not json */ }
+    }
+
+    if (jsonLineCount === 0) return [];
+
+    // Keep keys that appear in every parsed JSON line, sorted alphabetically.
+    return [...keyCounts.entries()]
+      .filter(([, count]) => count === jsonLineCount)
+      .map(([key]) => key)
+      .sort();
+  }, [lines]);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -47,13 +86,16 @@ export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle 
           <Chip
             label="{..}"
             size="small"
-            variant="outlined"
+            variant={jsonFormat ? 'filled' : 'outlined'}
+            onClick={() => setModalOpen(true)}
             sx={{
               height: 20,
               fontSize: '0.7rem',
               fontFamily: 'monospace',
-              color: 'warning.main',
-              borderColor: 'warning.main',
+              cursor: 'pointer',
+              ...(jsonFormat
+                ? { bgcolor: 'warning.main', color: 'warning.contrastText' }
+                : { color: 'warning.main', borderColor: 'warning.main' }),
               '& .MuiChip-label': { px: 0.75 },
             }}
           />
@@ -100,6 +142,15 @@ export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle 
           sx={{ flex: 1, minWidth: 160 }}
         />
       </Box>
+
+      <JsonFormatModal
+        open={modalOpen}
+        current={jsonFormat}
+        candidateKeys={candidateKeys}
+        onSave={(fmt) => { setJsonFormat(fmt); setModalOpen(false); }}
+        onClear={() => { setJsonFormat(null); setModalOpen(false); }}
+        onClose={() => setModalOpen(false)}
+      />
     </LocalizationProvider>
   );
 }

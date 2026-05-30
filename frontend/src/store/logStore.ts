@@ -3,6 +3,11 @@ import { create } from 'zustand';
 
 export type DisplayMode = 'idle' | 'loading' | 'history' | 'live';
 
+export interface JsonFormat {
+  levelKey: string;
+  messageKey: string;
+}
+
 interface LogStore {
   // Pod selection
   selectedNamespace: string | null;
@@ -50,9 +55,18 @@ interface LogStore {
   // Dark mode
   darkMode: boolean;
   toggleDarkMode: () => void;
+
+  // JSON log format configuration
+  jsonFormat: JsonFormat | null;
+  setJsonFormat: (format: JsonFormat | null) => void;
 }
 
 const stored = localStorage.getItem('simple-logging.theme');
+const storedJsonFormat = localStorage.getItem('simple-logging.jsonFormat');
+let initialJsonFormat: JsonFormat | null = null;
+try {
+  if (storedJsonFormat) initialJsonFormat = JSON.parse(storedJsonFormat) as JsonFormat;
+} catch { /* ignore */ }
 
 export const useLogStore = create<LogStore>((set) => ({
   selectedNamespace: null,
@@ -128,6 +142,16 @@ export const useLogStore = create<LogStore>((set) => ({
       localStorage.setItem('simple-logging.theme', next ? 'dark' : 'light');
       return { darkMode: next };
     }),
+
+  jsonFormat: initialJsonFormat,
+  setJsonFormat: (format) => {
+    if (format) {
+      localStorage.setItem('simple-logging.jsonFormat', JSON.stringify(format));
+    } else {
+      localStorage.removeItem('simple-logging.jsonFormat');
+    }
+    set({ jsonFormat: format });
+  },
 }));
 
 /** Derived: lines filtered by current searchText */

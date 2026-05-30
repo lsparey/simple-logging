@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import LogLine from "./LogLine.js";
+import type { JsonFormat } from "../../store/logStore.js";
 
 const ROW_HEIGHT = 22;
 const NEAR_TOP_THRESHOLD = 15;
@@ -21,6 +22,7 @@ function parseTimestamp(line: string | undefined): string | null {
 interface Props {
   lines: string[];
   darkMode: boolean;
+  jsonFormat?: JsonFormat | null;
   autoScroll: boolean;
   liveEnabled?: boolean;
   isFetchingMore?: boolean;
@@ -37,6 +39,7 @@ interface Props {
 export default function LogList({
   lines,
   darkMode,
+  jsonFormat,
   autoScroll,
   liveEnabled = false,
   isFetchingMore = false,
@@ -129,11 +132,11 @@ export default function LogList({
       const currentLines = linesRef.current;
       return index < currentLines.length
         ? <div style={style} ref={index === currentLines.length - 1 ? lastRowRef : undefined}>
-            <LogLine line={currentLines[index]} darkMode={darkMode} />
+            <LogLine line={currentLines[index]} darkMode={darkMode} jsonFormat={jsonFormat} />
           </div>
         : <div style={style} />;
     },
-    [darkMode],
+    [darkMode, jsonFormat],
   );
 
   const handleRowsRendered = useCallback(
