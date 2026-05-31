@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# pre-commit hook: run all tests before allowing a commit.
+# Install with: make install-hooks
+
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+echo "==> Running Go tests..."
+(cd "$ROOT/server" && go test ./... -timeout 120s)
+
+echo "==> Running frontend unit tests..."
+(cd "$ROOT/frontend" && npm run test:run)
+
+echo "==> Running Playwright E2E tests..."
+(cd "$ROOT/frontend" && npm run test:e2e)
+
+echo "All tests passed."

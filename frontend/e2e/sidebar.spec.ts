@@ -38,8 +38,8 @@ test.describe('PodSidebar', () => {
     await page.getByText('default').click();
     await page.getByText('web-app').first().click();
 
-    // LogToolbar renders a chip: "<namespace> / <deployment> (deployment)"
-    await expect(page.getByText('default / web-app (deployment)')).toBeVisible();
+    // LogToolbar renders the deployment name in a chip (sidebar uses ListItemText, not a chip)
+    await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app' })).toBeVisible();
   });
 
   test('selecting a pod shows the log panel toolbar header', async ({ page }) => {
@@ -49,6 +49,6 @@ test.describe('PodSidebar', () => {
     await page.getByText('default').click();
     await page.getByText('web-app-6d8c7f').click();
 
-    await expect(page.getByText('default / web-app-6d8c7f')).toBeVisible();
+    await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app-6d8c7f' })).toBeVisible();
   });
 });
