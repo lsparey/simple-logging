@@ -87,7 +87,7 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
         />
         {jsonLogging && (
           <Chip
-            label="{..}"
+            label="{JSON}"
             size="small"
             variant="outlined"
             onClick={() => setModalOpen(true)}
@@ -97,8 +97,8 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
               fontFamily: 'monospace',
               cursor: 'pointer',
               color: 'warning.main',
-              borderColor: jsonFormat ? 'warning.main' : 'warning.main',
-              borderStyle: jsonFormat ? 'solid' : 'dashed',
+              borderColor: 'warning.main',
+              borderStyle: 'solid',
               '& .MuiChip-label': { px: 0.75 },
             }}
           />
