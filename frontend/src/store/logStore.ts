@@ -4,8 +4,9 @@ import { create } from 'zustand';
 export type DisplayMode = 'idle' | 'loading' | 'history' | 'live';
 
 export interface JsonFormat {
-  levelKey: string;
-  messageKey: string;
+  timestampKey?: string;
+  levelKey?: string;
+  messageKey?: string;
 }
 
 interface LogStore {
@@ -20,6 +21,8 @@ interface LogStore {
 
   // Whether the currently selected pod/deployment uses JSON log formatting
   jsonLogging: boolean;
+  // Update jsonLogging without changing the current selection (used by live polling)
+  setJsonLogging: (v: boolean) => void;
 
   // Increments on every selection (even re-selecting the same resource)
   selectionKey: number;
@@ -56,16 +59,16 @@ interface LogStore {
   darkMode: boolean;
   toggleDarkMode: () => void;
 
-  // JSON log format configuration
-  jsonFormat: JsonFormat | null;
-  setJsonFormat: (format: JsonFormat | null) => void;
+  // JSON log format configuration (per pod/deployment, keyed by makeFormatKey())
+  jsonFormats: Record<string, JsonFormat>;
+  setJsonFormat: (key: string, format: JsonFormat | null) => void;
 }
 
 const stored = localStorage.getItem('simple-logging.theme');
-const storedJsonFormat = localStorage.getItem('simple-logging.jsonFormat');
-let initialJsonFormat: JsonFormat | null = null;
+const storedJsonFormats = localStorage.getItem('simple-logging.jsonFormats');
+let initialJsonFormats: Record<string, JsonFormat> = {};
 try {
-  if (storedJsonFormat) initialJsonFormat = JSON.parse(storedJsonFormat) as JsonFormat;
+  if (storedJsonFormats) initialJsonFormats = JSON.parse(storedJsonFormats) as Record<string, JsonFormat>;
 } catch { /* ignore */ }
 
 export const useLogStore = create<LogStore>((set) => ({
@@ -143,16 +146,32 @@ export const useLogStore = create<LogStore>((set) => ({
       return { darkMode: next };
     }),
 
-  jsonFormat: initialJsonFormat,
-  setJsonFormat: (format) => {
-    if (format) {
-      localStorage.setItem('simple-logging.jsonFormat', JSON.stringify(format));
-    } else {
-      localStorage.removeItem('simple-logging.jsonFormat');
-    }
-    set({ jsonFormat: format });
-  },
+  jsonFormats: initialJsonFormats,
+  setJsonFormat: (key, format) =>
+    set((s) => {
+      const next = { ...s.jsonFormats };
+      if (format) {
+        next[key] = format;
+      } else {
+        delete next[key];
+      }
+      localStorage.setItem('simple-logging.jsonFormats', JSON.stringify(next));
+      return { jsonFormats: next };
+    }),
+
+  setJsonLogging: (v) => set({ jsonLogging: v }),
 }));
+
+/** Build the per-resource key used to store jsonFormats entries. */
+export function makeFormatKey(
+  namespace: string,
+  pod?: string | null,
+  deployment?: string | null,
+): string {
+  if (pod) return `pod:${namespace}/${pod}`;
+  if (deployment) return `deployment:${namespace}/${deployment}`;
+  return '';
+}
 
 /** Derived: lines filtered by current searchText */
 export function useFilteredLines(): string[] {

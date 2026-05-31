@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -78,7 +80,47 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 	c.trackDeployment(pod)
 	c.mu.Unlock()
 
+	// Immediately probe the stored log file so the JSON-logging flag is available
+	// before the live stream delivers its first batch of lines.
+	c.detectJsonFromFile(pod.Namespace, pod.Name)
+
 	go c.runStream(ctx, pod, isRestart)
+}
+
+// detectJsonFromFile scans the first jsonProbeLines non-empty lines of the pod's
+// stored log file and immediately marks the pod as JSON-logging if they are all
+// valid JSON objects. This provides an instant result on server restarts before
+// the live stream has had a chance to deliver enough lines.
+func (c *Collector) detectJsonFromFile(namespace, podName string) {
+	path := filepath.Join(c.logsRoot, namespace, podName+".log")
+	f, err := os.Open(path)
+	if err != nil {
+		return // file doesn't exist yet — nothing to do
+	}
+	defer f.Close()
+
+	// Lines in the file have the prefix: "TIMESTAMP [ns/pod/container] <rawLog>"
+	// Strip up to and including the first "] " to recover the original log line.
+	samples, matches := 0, 0
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() && samples < jsonProbeLines {
+		line := scanner.Text()
+		idx := strings.Index(line, "] ")
+		if idx < 0 {
+			continue
+		}
+		payload := line[idx+2:]
+		if strings.TrimSpace(payload) == "" {
+			continue
+		}
+		samples++
+		if isJSONLine(payload) {
+			matches++
+		}
+	}
+	if samples >= jsonProbeLines && matches == samples {
+		c.setJsonLogging(namespace, podName, true)
+	}
 }
 
 // OnDelete is called by the PodWatcher when a pod is deleted.

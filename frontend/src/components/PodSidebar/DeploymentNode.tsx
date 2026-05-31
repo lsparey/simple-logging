@@ -2,6 +2,7 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
+import { useEffect } from 'react';
 import type { DeploymentInfo } from '../../gen/simplelog/v1/log_service_pb.js';
 import { useLogStore } from '../../store/logStore.js';
 
@@ -10,10 +11,15 @@ interface Props {
 }
 
 export default function DeploymentNode({ deployment }: Props) {
-  const { selectedNamespace, selectedDeployment, setSelectedDeployment } = useLogStore();
+  const { selectedNamespace, selectedDeployment, setSelectedDeployment, setJsonLogging } = useLogStore();
   const selected =
     selectedNamespace === deployment.namespace &&
     selectedDeployment === deployment.name;
+
+  // Keep the toolbar in sync when polling updates this deployment's jsonLogging flag.
+  useEffect(() => {
+    if (selected) setJsonLogging(deployment.jsonLogging);
+  }, [selected, deployment.jsonLogging, setJsonLogging]);
 
   return (
     <ListItem disablePadding sx={{ pl: 3 }}>

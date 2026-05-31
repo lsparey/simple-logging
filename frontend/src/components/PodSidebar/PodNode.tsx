@@ -2,6 +2,7 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
+import { useEffect } from 'react';
 import type { PodInfo } from '../../gen/simplelog/v1/log_service_pb.js';
 import { useLogStore } from '../../store/logStore.js';
 
@@ -10,8 +11,13 @@ interface Props {
 }
 
 export default function PodNode({ pod }: Props) {
-  const { selectedNamespace, selectedPod, setSelectedPod } = useLogStore();
+  const { selectedNamespace, selectedPod, setSelectedPod, setJsonLogging } = useLogStore();
   const selected = selectedNamespace === pod.namespace && selectedPod === pod.name;
+
+  // Keep the toolbar in sync when polling updates this pod's jsonLogging flag.
+  useEffect(() => {
+    if (selected) setJsonLogging(pod.jsonLogging);
+  }, [selected, pod.jsonLogging, setJsonLogging]);
 
   return (
     <ListItem disablePadding sx={{ pl: 3 }}>

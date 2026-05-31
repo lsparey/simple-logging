@@ -143,6 +143,27 @@ const JSON_MESSAGE_LIGHT = '#00695c';
 const JSON_DIM_DARK = '#484f58';
 const JSON_DIM_LIGHT = '#8c959f';
 
+/** Format an ISO string or Unix timestamp (seconds or ms) to a short local datetime. */
+function formatJsonTimestamp(value: unknown): string {
+  if (value === undefined || value === null || value === '') return '';
+  let d: Date | null = null;
+  if (typeof value === 'number') {
+    // Heuristic: Unix seconds < 1e10, millis >= 1e10
+    d = new Date(value < 1e10 ? value * 1000 : value);
+  } else if (typeof value === 'string') {
+    d = new Date(value);
+  }
+  if (!d || isNaN(d.getTime())) return String(value);
+  return d.toLocaleString(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
 interface Props {
   line: string;
   darkMode: boolean;
@@ -157,15 +178,16 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
     const palette = darkMode ? DARK_COLOURS : LIGHT_COLOURS;
 
     // Try JSON parsing when a format is configured
-    let jsonParsed: { level: string; levelColour: string; msg: string; raw: string } | null = null;
+    let jsonParsed: { ts: string; level: string; levelColour: string; msg: string; raw: string } | null = null;
     if (jsonFormat) {
       try {
         const obj = JSON.parse(stripped) as Record<string, unknown>;
         if (obj !== null && typeof obj === 'object') {
-          const level = String(obj[jsonFormat.levelKey] ?? '').toUpperCase();
-          const msg = String(obj[jsonFormat.messageKey] ?? '');
-          const levelColour = palette[level] ?? (darkMode ? DARK_COLOURS.INFO : LIGHT_COLOURS.INFO);
-          jsonParsed = { level, levelColour, msg, raw: stripped };
+          const level = jsonFormat.levelKey ? String(obj[jsonFormat.levelKey] ?? '').toUpperCase() : '';
+          const msg = jsonFormat.messageKey ? String(obj[jsonFormat.messageKey] ?? '') : '';
+          const levelColour = level ? (palette[level] ?? 'inherit') : 'inherit';
+          const ts = jsonFormat.timestampKey ? formatJsonTimestamp(obj[jsonFormat.timestampKey]) : '';
+          jsonParsed = { ts, level, levelColour, msg, raw: stripped };
         }
       } catch { /* not JSON */ }
     }
@@ -221,15 +243,22 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
       )}
       {jsonParsed ? (
         <>
-          <span style={{ color: jsonParsed.levelColour, fontWeight: 600 }}>
-            {jsonParsed.level || '?'}
-          </span>
-          {' '}
-          <span style={{ color: darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT }}>
-            {jsonParsed.msg}
-          </span>
-          {' '}
-          <span style={{ color: darkMode ? JSON_DIM_DARK : JSON_DIM_LIGHT }}>
+          {jsonParsed.ts && (
+            <span>
+              {jsonParsed.ts}{' '}
+            </span>
+          )}
+          {jsonParsed.level && (
+            <span style={{ color: jsonParsed.levelColour, fontWeight: 600 }}>
+              {jsonParsed.level}{' '}
+            </span>
+          )}
+          {jsonParsed.msg && (
+            <span style={{ color: darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT }}>
+              {jsonParsed.msg}{' '}
+            </span>
+          )}
+          <span style={jsonParsed.ts || jsonParsed.level || jsonParsed.msg ? { color: darkMode ? JSON_DIM_DARK : JSON_DIM_LIGHT } : undefined}>
             {jsonParsed.raw}
           </span>
         </>

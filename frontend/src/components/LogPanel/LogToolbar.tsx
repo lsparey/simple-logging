@@ -8,7 +8,7 @@ import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useLogStore } from '../../store/logStore.js';
+import { useLogStore, makeFormatKey } from '../../store/logStore.js';
 import JsonFormatModal from './JsonFormatModal.js';
 
 interface Props {
@@ -20,9 +20,12 @@ interface Props {
   onLiveToggle: (on: boolean) => void;
 }
 
-export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle }: Props) {
-  const { searchText, setSearchText, startTime, endTime, setTimeRange, jsonLogging, jsonFormat, setJsonFormat, lines } = useLogStore();
+export default function LogToolbar({ namespace, pod, deployment, liveEnabled, onLiveToggle }: Props) {
+  const { searchText, setSearchText, startTime, endTime, setTimeRange, jsonLogging, jsonFormats, setJsonFormat, lines } = useLogStore();
   const [modalOpen, setModalOpen] = useState(false);
+
+  const formatKey = makeFormatKey(namespace, pod, deployment);
+  const jsonFormat = jsonFormats[formatKey] ?? null;
 
   const label = deployment ? deployment : pod;
 
@@ -86,16 +89,16 @@ export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle 
           <Chip
             label="{..}"
             size="small"
-            variant={jsonFormat ? 'filled' : 'outlined'}
+            variant="outlined"
             onClick={() => setModalOpen(true)}
             sx={{
               height: 20,
               fontSize: '0.7rem',
               fontFamily: 'monospace',
               cursor: 'pointer',
-              ...(jsonFormat
-                ? { bgcolor: 'warning.main', color: 'warning.contrastText' }
-                : { color: 'warning.main', borderColor: 'warning.main' }),
+              color: 'warning.main',
+              borderColor: jsonFormat ? 'warning.main' : 'warning.main',
+              borderStyle: jsonFormat ? 'solid' : 'dashed',
               '& .MuiChip-label': { px: 0.75 },
             }}
           />
@@ -147,8 +150,8 @@ export default function LogToolbar({ pod, deployment, liveEnabled, onLiveToggle 
         open={modalOpen}
         current={jsonFormat}
         candidateKeys={candidateKeys}
-        onSave={(fmt) => { setJsonFormat(fmt); setModalOpen(false); }}
-        onClear={() => { setJsonFormat(null); setModalOpen(false); }}
+        onSave={(fmt) => { setJsonFormat(formatKey, fmt); setModalOpen(false); }}
+        onClear={() => { setJsonFormat(formatKey, null); setModalOpen(false); }}
         onClose={() => setModalOpen(false)}
       />
     </LocalizationProvider>

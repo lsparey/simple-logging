@@ -8,7 +8,7 @@ import { useLogHistory } from '../../hooks/useLogHistory.js';
 import { useLogStream } from '../../hooks/useLogStream.js';
 import { useDeploymentLogHistory } from '../../hooks/useDeploymentLogHistory.js';
 import { useDeploymentLogStream } from '../../hooks/useDeploymentLogStream.js';
-import { useLogStore, useFilteredLines } from '../../store/logStore.js';
+import { useLogStore, useFilteredLines, makeFormatKey } from '../../store/logStore.js';
 import { logClient } from '../../grpc/client.js';
 
 export default function LogPanel() {
@@ -23,7 +23,7 @@ export default function LogPanel() {
     endTime,
     darkMode,
     isFetchingMore,
-    jsonFormat,
+    jsonFormats,
   } = useLogStore();
 
   const [liveEnabled, setLiveEnabled] = useState(false);
@@ -54,6 +54,7 @@ export default function LogPanel() {
   useDeploymentLogStream(namespace, deployment && liveEnabled ? deployment : null, liveEnabled);
 
   const filteredLines = useFilteredLines();
+  const jsonFormat = namespace ? (jsonFormats[makeFormatKey(namespace, pod, deployment)] ?? null) : null;
 
   const handleLiveToggle = useCallback((on: boolean) => {
     setLiveEnabled(on);
