@@ -1,17 +1,53 @@
-name: Release Helm Charts
+name: Release
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'deploy/helm/**'
-      - '.github/workflows/helm-release.yml'
+    tags:
+      - 'v*.*.*'
 
 jobs:
-  release:
-    name: Package and publish charts
+  docker:
+    name: Build and push versioned image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: lsparey/simple-logging
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  helm-release:
+    name: Package and publish chart
+    runs-on: ubuntu-latest
+    needs: docker
     permissions:
       contents: write  # create GitHub releases and push to gh-pages
 
@@ -32,7 +68,7 @@ jobs:
             git switch --orphan gh-pages
             git commit --allow-empty -m "Initialize gh-pages branch"
             git push origin gh-pages
-            git switch main
+            git checkout ${{ github.sha }}
           fi
 
       - name: Install Helm
