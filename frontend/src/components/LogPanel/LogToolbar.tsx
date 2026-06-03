@@ -4,12 +4,9 @@ import TextField from '@mui/material/TextField';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Chip from '@mui/material/Chip';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import dayjs, { type Dayjs } from 'dayjs';
 import { useLogStore, makeFormatKey } from '../../store/logStore.js';
 import JsonFormatModal from './JsonFormatModal.js';
+import LogHistogram from './LogHistogram.js';
 
 interface Props {
   namespace: string;
@@ -21,7 +18,7 @@ interface Props {
 }
 
 export default function LogToolbar({ namespace, pod, deployment, liveEnabled, onLiveToggle }: Props) {
-  const { searchText, setSearchText, startTime, endTime, setTimeRange, jsonLogging, jsonFormats, setJsonFormat, lines } = useLogStore();
+  const { searchText, setSearchText, jsonLogging, jsonFormats, setJsonFormat, lines } = useLogStore();
   const [modalOpen, setModalOpen] = useState(false);
 
   const formatKey = makeFormatKey(namespace, pod, deployment);
@@ -66,7 +63,7 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
   }, [lines]);
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
+    <>
       <Box
         sx={{
           display: 'flex',
@@ -117,25 +114,7 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
           sx={{ ml: 0.5 }}
         />
 
-        <DateTimePicker
-          label="Start"
-          value={startTime ? dayjs.unix(startTime) : null}
-          onChange={(v: Dayjs | null) =>
-            setTimeRange(v ? v.unix() : 0, endTime)
-          }
-          disabled={liveEnabled}
-          slotProps={{ textField: { size: 'small', sx: { width: 200 } } }}
-        />
-
-        <DateTimePicker
-          label="End"
-          value={endTime ? dayjs.unix(endTime) : null}
-          onChange={(v: Dayjs | null) =>
-            setTimeRange(startTime, v ? v.unix() : 0)
-          }
-          disabled={liveEnabled}
-          slotProps={{ textField: { size: 'small', sx: { width: 200 } } }}
-        />
+        <LogHistogram />
 
         <TextField
           size="small"
@@ -154,6 +133,6 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
         onClear={() => { setJsonFormat(formatKey, null); setModalOpen(false); }}
         onClose={() => setModalOpen(false)}
       />
-    </LocalizationProvider>
+    </>
   );
 }
