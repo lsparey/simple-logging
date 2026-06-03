@@ -27,6 +27,15 @@ type Config struct {
 	// RESTDebugEnabled enables plain JSON REST endpoints at /debug/* for
 	// testing purposes. Defaults to true; set REST_DEBUG=false to disable.
 	RESTDebugEnabled bool
+
+	// PPROFPort is the port for the Go pprof HTTP server (localhost only).
+	// 0 means disabled (the default). Set PPROF_PORT to enable.
+	PPROFPort int
+
+	// NodeLogsRoot is the host path where the CRI writes pod log files,
+	// typically /var/log/pods when mounted as a hostPath volume.
+	// When set, the collector tails files directly (no Kubernetes log API).
+	NodeLogsRoot string
 }
 
 // Load reads configuration from environment variables, applying defaults where
@@ -67,6 +76,18 @@ func Load() (*Config, error) {
 
 	if raw := os.Getenv("REST_DEBUG"); raw == "false" || raw == "0" {
 		cfg.RESTDebugEnabled = false
+	}
+
+	if raw := os.Getenv("PPROF_PORT"); raw != "" {
+		port, err := strconv.Atoi(raw)
+		if err != nil || port < 1 || port > 65535 {
+			return nil, fmt.Errorf("invalid PPROF_PORT %q: must be an integer between 1 and 65535", raw)
+		}
+		cfg.PPROFPort = port
+	}
+
+	if raw := os.Getenv("NODE_LOGS_ROOT"); raw != "" {
+		cfg.NodeLogsRoot = raw
 	}
 
 	if err := cfg.validate(); err != nil {

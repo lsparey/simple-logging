@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof" // registers /debug/pprof handlers on http.DefaultServeMux
 	"os"
 	"os/signal"
 	"syscall"
@@ -39,6 +41,16 @@ func main() {
 		zap.Duration("retention_check_interval", cfg.RetentionCheckInterval),
 	)
 
+	if cfg.PPROFPort > 0 {
+		pprofAddr := fmt.Sprintf("localhost:%d", cfg.PPROFPort)
+		log.Info("pprof server enabled", zap.String("addr", pprofAddr))
+		go func() {
+			if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+				log.Error("pprof server exited", zap.Error(err))
+			}
+		}()
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -49,7 +61,7 @@ func main() {
 	}
 
 	// ── Phase 5/6: Log Collector & FileWriter ────────────────────────────────
-	coll := collector.New(cs, cfg.LogsRoot, log)
+	coll := collector.New(cs, cfg.LogsRoot, cfg.NodeLogsRoot, log)
 
 	watcher, err := k8s.NewPodWatcher(cs, k8s.PodEventHandler{
 		OnAdd:    coll.OnAdd,

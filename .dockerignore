@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Frontend build artifacts and dev dependencies
+frontend/node_modules
+frontend/dist
+frontend/coverage
+frontend/test-results
+frontend/playwright-report
+
+# Backend build artifacts
+server/bin
+server/out
+
+# Deploy/infra files (not needed in image)
+deploy/
+
+# Scripts not needed at runtime
+scripts/
+
+# Proto source files (generated code already in server/gen and frontend/src/gen)
+proto/
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose*.yml

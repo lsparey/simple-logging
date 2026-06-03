@@ -40,8 +40,9 @@ func (w *FileWriter) Write(line string) error {
 	return err
 }
 
-// HasContent reports whether the log file already contains data.
-// Used to decide whether to write a restart separator.
+// HasContent reports whether the log file already contains data on disk.
+// Used to decide whether to write a restart separator and whether to skip
+// replaying historical logs from the Kubernetes API.
 func (w *FileWriter) HasContent() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()

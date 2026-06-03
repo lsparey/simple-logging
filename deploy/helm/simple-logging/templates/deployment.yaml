@@ -48,12 +48,26 @@ spec:
               value: {{ .Values.config.retentionCheckInterval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            {{- if eq .Values.config.logCollectionMode "fileTail" }}
+            - name: NODE_LOGS_ROOT
+              value: {{ .Values.config.nodeLogsRoot | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
           volumeMounts:
             - name: logs
               mountPath: {{ .Values.config.logsRoot }}
+            {{- if eq .Values.config.logCollectionMode "fileTail" }}
+            - name: node-logs
+              mountPath: {{ .Values.config.nodeLogsRoot }}
+              readOnly: true
+            {{- if .Values.config.dockerLogsRoot }}
+            - name: docker-logs
+              mountPath: {{ .Values.config.dockerLogsRoot }}
+              readOnly: true
+            {{- end }}
+            {{- end }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           livenessProbe:
@@ -68,3 +82,15 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- if eq .Values.config.logCollectionMode "fileTail" }}
+        - name: node-logs
+          hostPath:
+            path: {{ .Values.config.nodeLogsRoot }}
+            type: DirectoryOrCreate
+        {{- if .Values.config.dockerLogsRoot }}
+        - name: docker-logs
+          hostPath:
+            path: {{ .Values.config.dockerLogsRoot }}
+            type: DirectoryOrCreate
+        {{- end }}
+        {{- end }}

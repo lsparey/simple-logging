@@ -25,7 +25,8 @@ func makePod(namespace, name string) *corev1.Pod {
 
 func TestCollector_OnAdd_IsActive(t *testing.T) {
 	dir := t.TempDir()
-	coll := New(fake.NewSimpleClientset(), dir, zap.NewNop())
+	coll := New(fake.NewSimpleClientset(), dir, "", zap.NewNop())
+	t.Cleanup(coll.Close)
 
 	pod := makePod("default", "my-pod")
 	coll.OnAdd(pod)
@@ -37,7 +38,8 @@ func TestCollector_OnAdd_IsActive(t *testing.T) {
 
 func TestCollector_OnDelete_NotActive(t *testing.T) {
 	dir := t.TempDir()
-	coll := New(fake.NewSimpleClientset(), dir, zap.NewNop())
+	coll := New(fake.NewSimpleClientset(), dir, "", zap.NewNop())
+	t.Cleanup(coll.Close)
 
 	pod := makePod("default", "my-pod")
 	coll.OnAdd(pod)
@@ -50,7 +52,8 @@ func TestCollector_OnDelete_NotActive(t *testing.T) {
 
 func TestCollector_OnDelete_Unknown_NoOp(t *testing.T) {
 	dir := t.TempDir()
-	coll := New(fake.NewSimpleClientset(), dir, zap.NewNop())
+	coll := New(fake.NewSimpleClientset(), dir, "", zap.NewNop())
+	t.Cleanup(coll.Close)
 
 	// OnDelete for a pod never added should not panic.
 	pod := makePod("default", "ghost-pod")
@@ -63,7 +66,8 @@ func TestCollector_OnDelete_Unknown_NoOp(t *testing.T) {
 
 func TestCollector_OnAdd_Restart_RemainsActive(t *testing.T) {
 	dir := t.TempDir()
-	coll := New(fake.NewSimpleClientset(), dir, zap.NewNop())
+	coll := New(fake.NewSimpleClientset(), dir, "", zap.NewNop())
+	t.Cleanup(coll.Close)
 
 	pod := makePod("default", "my-pod")
 	coll.OnAdd(pod) // first start
@@ -80,7 +84,8 @@ func TestCollector_OnAdd_Restart_RemainsActive(t *testing.T) {
 
 func TestCollector_MultiplePods_Independent(t *testing.T) {
 	dir := t.TempDir()
-	coll := New(fake.NewSimpleClientset(), dir, zap.NewNop())
+	coll := New(fake.NewSimpleClientset(), dir, "", zap.NewNop())
+	t.Cleanup(coll.Close)
 
 	podA := makePod("default", "pod-a")
 	podB := makePod("default", "pod-b")
