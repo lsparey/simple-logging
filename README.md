@@ -6,11 +6,6 @@
 
 Simple, lightweight log aggregation for Kubernetes. simple-logging automatically collects logs from every pod across all namespaces, persists them to disk, and surfaces them in a clean web UI — no external dependencies, no complex configuration.
 
-| | |
-|---|---|
-| **Helm chart** | `helm repo add simple-logging https://lsparey.github.io/simple-logging` → `simple-logging/simple-logging` |
-| **Docker image** | [`lsparey/simple-logging`](https://hub.docker.com/r/lsparey/simple-logging) |
-
 ## Features
 
 - **Live log streaming** — real-time log tailing from all pods across all namespaces via a gRPC-Web API
@@ -18,35 +13,6 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 - **Automatic pod discovery** — new pods are detected and streamed as soon as they start
 - **Single helm install** — deploy the full stack with one `helm install` command
 - **Very low resource requirements** — requests only 150m CPU / 160Mi memory
-
-## Tech stack
-
-### Backend — Go
-
-The log collection service is written in Go and runs as a single pod inside your cluster. It uses the official `client-go` library to connect to the Kubernetes API in-cluster and opens a streaming log connection (`follow=true`) for every running pod across all namespaces. A shared Kubernetes Informer watches for pod add/delete events, so new pods are picked up automatically without any polling. Each pod's log stream is handled by a dedicated goroutine, and lines are written directly to disk on the PVC in the format:
-
-```
-2026-05-20T14:32:01Z [default/my-api-pod/my-api] INFO server started on :8080
-```
-
-Logs are served to the frontend over a gRPC-Web API (HTTP/1.1 with gRPC-Web framing), which means the browser can connect directly without a separate REST gateway. A background retention process runs daily and removes log files that have not been written to in the last 30 days.
-
-### Frontend — React
-
-The UI is a React 19 single-page application built with Vite and TypeScript, served by nginx inside the same container as the backend. It connects to the backend using `@connectrpc/connect-web` — the same protobuf-first transport used by the server — so there is no REST translation layer at all. The component library is MUI (Material UI), virtual scrolling is handled by `react-window` to keep rendering fast even with large log volumes, and global state is managed with Zustand.
-
-## Architecture
-
-```
-Kubernetes Cluster
-│
-└── simple-logging (combined pod)
-    ├── nginx — serves the React SPA on port 80
-    ├── Go backend — streams logs from all pods via the Kubernetes API
-    │   ├── Writes logs to a PVC at /logs/<namespace>/<pod>.log
-    │   └── Exposes a gRPC-Web API on port 8080
-    └── Ingress routes / → nginx (80) and /simplelog.v1. → backend (8080)
-```
 
 ## Installation
 
@@ -86,6 +52,9 @@ Once the pod is running, open `http://logs.example.com` in your browser to view 
 | `ingress.enabled` | `false` | Expose the UI via an Ingress |
 | `ingress.host` | `""` | Hostname for the Ingress rule |
 | `ingress.className` | `""` | Ingress controller class (e.g. `traefik`, `nginx`) |
+| `config.logCollectionMode` | `fileTail` | Log collection mode: `fileTail` or `api` (see above) |
+| `config.nodeLogsRoot` | `/var/log/pods` | Host path for CRI pod logs (fileTail mode only) |
+| `config.dockerLogsRoot` | `/var/lib/docker/containers` | Host path for Docker log content (fileTail + Docker only) |
 | `config.retentionDays` | `30` | Days to keep log files after last write |
 | `persistence.size` | `20Gi` | PVC size for log storage |
 | `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
@@ -103,14 +72,48 @@ helm install simple-logging simple-logging/simple-logging \
   --set config.retentionDays=60
 ```
 
-### Upgrading
+## Log collection modes
+
+simple-logging supports two ways to collect pod logs, controlled by `config.logCollectionMode` in the Helm values.
+
+### `fileTail` (default)
+
+The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and tails log files directly on the node filesystem using filesystem events (`inotify`). No persistent HTTP connections are opened to kube-apiserver, kubelet, or containerd.
+
+**Recommended for:** single-node clusters, k3s, Docker Desktop, or any setup where the simple-logging pod always runs on the same node as the pods it monitors.
+
+**Not suitable for:** multi-node clusters — simple-logging is a single Deployment replica and cannot see the log files of pods scheduled on other nodes.
+
+To use this mode you must also set:
+
+| Value | Default | Description |
+|---|---|---|
+| `config.nodeLogsRoot` | `/var/log/pods` | Host path where the runtime writes pod log symlinks |
+| `config.dockerLogsRoot` | `/var/lib/docker/containers` | Only needed when the runtime is Docker; leave empty for containerd |
+
+### `api`
+
+The collector opens one persistent HTTP streaming connection per pod via the Kubernetes log API (`client-go` `GetLogs` with `follow=true`). A shared Informer watches for pod add/delete events so new pods are picked up automatically.
+
+**Recommended for:** multi-node clusters where simple-logging cannot access host filesystems of other nodes.
+
+**Trade-off:** on busy clusters with many pods this can cause elevated CPU usage in kubelet and containerd due to the number of open log-streaming connections.
+
+```bash
+helm install simple-logging simple-logging/simple-logging \
+  --namespace simple-logging \
+  --create-namespace \
+  --set config.logCollectionMode=api
+```
+
+## Upgrading
 
 ```bash
 helm repo update
 helm upgrade simple-logging simple-logging/simple-logging --namespace simple-logging
 ```
 
-### Uninstalling
+## Uninstalling
 
 ```bash
 helm uninstall simple-logging --namespace simple-logging
