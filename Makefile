@@ -15,8 +15,8 @@ test-unit:
 test-e2e:
 	cd frontend && npm run test:e2e
 
-## install-hooks: install the pre-commit git hook
+## install-hooks: install the pre-push git hook
 install-hooks:
-	cp scripts/pre-commit .git/hooks/pre-commit
-	chmod +x .git/hooks/pre-commit
-	@echo "pre-commit hook installed"
+	cp scripts/pre-push .git/hooks/pre-push
+	chmod +x .git/hooks/pre-push
+	@echo "pre-push hook installed"

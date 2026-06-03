@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pre-commit hook: run all tests before allowing a commit.
+# pre-push hook: run all tests before allowing a push.
 # Install with: make install-hooks
 
 set -euo pipefail
