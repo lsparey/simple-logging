@@ -20,8 +20,8 @@
  *
  * Page chip (bottom-right of log list):
  *   Initial load: "… · Page 1 / 1"  (200 lines → 1 page)
- *   After one load-older: "… · Page 2 / 2"  (400 lines → 2 pages; scroll
- *     position kept, so visible start ≈ index 200 → pageNum = 2)
+ *   After one load-older: "… · Page 1 / 2"  (400 lines → 2 pages; scroll
+ *     position kept, so visible start ≈ index 200 → reversedPageNum = 1)
  */
 import { test, expect } from '@playwright/test';
 import { selectDeployment, selectPod, scrollLogListToTop } from './helpers.js';
@@ -71,8 +71,8 @@ test.describe('Paging — deployment view', () => {
 
     // After prepending 200 more lines (400 total → 2 pages), the scroll
     // position is adjusted to keep previously visible rows in view, placing
-    // the viewport at approximately index 200 → Page 2 / 2.
-    await expect(page.getByText(/Page 2 \/ 2/)).toBeVisible({ timeout: 5000 });
+    // the viewport at approximately index 200 → Page 1 / 2 (reversed).
+    await expect(page.getByText(/Page 1 \/ 2/)).toBeVisible({ timeout: 5000 });
 
     // The most-recent lines should still be reachable (still in the store).
     await expect(page.getByText(/burst 1 from web-app/).first()).toBeVisible({
@@ -85,7 +85,7 @@ test.describe('Paging — deployment view', () => {
     await expect(page.getByText('↑ Scroll for older')).toBeVisible();
     await page.waitForTimeout(300);
     await scrollLogListToTop(page);
-    await expect(page.getByText(/Page 2 \/ 2/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Page 1 \/ 2/)).toBeVisible({ timeout: 5000 });
 
     // 1760 lines are still older than what we've loaded → chip still visible.
     await expect(page.getByText('↑ Scroll for older')).toBeVisible({ timeout: 5000 });
@@ -121,6 +121,6 @@ test.describe('Paging — pod view', () => {
 
     await scrollLogListToTop(page);
 
-    await expect(page.getByText(/Page 2 \/ 2/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(/Page 1 \/ 2/)).toBeVisible({ timeout: 5000 });
   });
 });

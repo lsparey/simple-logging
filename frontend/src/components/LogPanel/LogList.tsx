@@ -180,9 +180,10 @@ export default function LogList({
 
   const pageNum = Math.floor(scrollInfo.start / 200) + 1;
   const totalPages = Math.max(1, Math.ceil(lines.length / 200));
+  const reversedPageNum = totalPages - pageNum + 1;
   const chipLabel = [
     scrollInfo.ts,
-    `Page ${pageNum} / ${totalPages}`,
+    `Page ${reversedPageNum} / ${totalPages}`,
   ].filter(Boolean).join('  ·  ');
 
   const liveChipLabel = (
