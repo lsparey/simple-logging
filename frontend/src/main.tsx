@@ -10,17 +10,23 @@ import { useLogStore } from './store/logStore.js';
 (function initStoreFromUrl() {
   const pathname = window.location.pathname;
   const deploymentMatch = pathname.match(/^\/deployment\/([^/]+)\/([^/]+)\/?$/);
+  const deploymentNsOnlyMatch = pathname.match(/^\/deployment\/([^/]+)\/?$/);
   const podMatch = pathname.match(/^\/pod\/([^/]+)\/([^/]+)\/?$/);
+  const podNsOnlyMatch = pathname.match(/^\/pod\/([^/]+)\/?$/);
   if (deploymentMatch) {
     useLogStore.getState().setSelectedDeployment(
       decodeURIComponent(deploymentMatch[1]),
       decodeURIComponent(deploymentMatch[2]),
     );
+  } else if (deploymentNsOnlyMatch) {
+    useLogStore.setState({ selectedNamespace: decodeURIComponent(deploymentNsOnlyMatch[1]) });
   } else if (podMatch) {
     useLogStore.getState().setSelectedPod(
       decodeURIComponent(podMatch[1]),
       decodeURIComponent(podMatch[2]),
     );
+  } else if (podNsOnlyMatch) {
+    useLogStore.setState({ selectedNamespace: decodeURIComponent(podNsOnlyMatch[1]) });
   }
 })();
 
