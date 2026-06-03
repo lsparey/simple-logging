@@ -3,6 +3,7 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { DeploymentInfo } from '../../gen/simplelog/v1/log_service_pb.js';
 import { useLogStore } from '../../store/logStore.js';
 
@@ -12,6 +13,7 @@ interface Props {
 
 export default function DeploymentNode({ deployment }: Props) {
   const { selectedNamespace, selectedDeployment, setSelectedDeployment, setJsonLogging } = useLogStore();
+  const navigate = useNavigate();
   const selected =
     selectedNamespace === deployment.namespace &&
     selectedDeployment === deployment.name;
@@ -26,7 +28,10 @@ export default function DeploymentNode({ deployment }: Props) {
       <ListItemButton
         dense
         selected={selected}
-        onClick={() => setSelectedDeployment(deployment.namespace, deployment.name, deployment.jsonLogging)}
+        onClick={() => {
+          setSelectedDeployment(deployment.namespace, deployment.name, deployment.jsonLogging);
+          navigate(`/deployment/${encodeURIComponent(deployment.namespace)}/${encodeURIComponent(deployment.name)}`);
+        }}
       >
         <Box
           component="span"

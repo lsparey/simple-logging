@@ -1,7 +1,28 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import App from './App.js';
 import ErrorBoundary from './components/ErrorBoundary.js';
+import { useLogStore } from './store/logStore.js';
+
+// Initialise selection from the URL before first render so that the sidebar can
+// auto-expand the right namespace on load.
+(function initStoreFromUrl() {
+  const pathname = window.location.pathname;
+  const deploymentMatch = pathname.match(/^\/deployment\/([^/]+)\/([^/]+)\/?$/);
+  const podMatch = pathname.match(/^\/pod\/([^/]+)\/([^/]+)\/?$/);
+  if (deploymentMatch) {
+    useLogStore.getState().setSelectedDeployment(
+      decodeURIComponent(deploymentMatch[1]),
+      decodeURIComponent(deploymentMatch[2]),
+    );
+  } else if (podMatch) {
+    useLogStore.getState().setSelectedPod(
+      decodeURIComponent(podMatch[1]),
+      decodeURIComponent(podMatch[2]),
+    );
+  }
+})();
 
 // Global handler for uncaught errors and unhandled promise rejections.
 // Covers async errors that React's error boundary cannot catch (event handlers,
@@ -43,7 +64,9 @@ window.addEventListener('unhandledrejection', (event) => {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
     </ErrorBoundary>
   </StrictMode>,
 );

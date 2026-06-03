@@ -7,6 +7,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
 import { styled } from '@mui/material/styles';
+import { useLocation } from 'react-router-dom';
 import { useNamespaces } from '../../hooks/useNamespaces.js';
 import NamespaceNode from './NamespaceNode.js';
 
@@ -16,7 +17,10 @@ type ViewMode = 'pods' | 'deployments';
 
 export default function PodSidebar() {
   const { namespaces, loading, error } = useNamespaces();
-  const [viewMode, setViewMode] = useState<ViewMode>('deployments');
+  const location = useLocation();
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    location.pathname.startsWith('/pod/') ? 'pods' : 'deployments',
+  );
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

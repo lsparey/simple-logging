@@ -3,6 +3,7 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { PodInfo } from '../../gen/simplelog/v1/log_service_pb.js';
 import { useLogStore } from '../../store/logStore.js';
 
@@ -12,6 +13,7 @@ interface Props {
 
 export default function PodNode({ pod }: Props) {
   const { selectedNamespace, selectedPod, setSelectedPod, setJsonLogging } = useLogStore();
+  const navigate = useNavigate();
   const selected = selectedNamespace === pod.namespace && selectedPod === pod.name;
 
   // Keep the toolbar in sync when polling updates this pod's jsonLogging flag.
@@ -24,7 +26,10 @@ export default function PodNode({ pod }: Props) {
       <ListItemButton
         dense
         selected={selected}
-        onClick={() => setSelectedPod(pod.namespace, pod.name, pod.jsonLogging)}
+        onClick={() => {
+          setSelectedPod(pod.namespace, pod.name, pod.jsonLogging);
+          navigate(`/pod/${encodeURIComponent(pod.namespace)}/${encodeURIComponent(pod.name)}`);
+        }}
       >
         <Box
           component="span"

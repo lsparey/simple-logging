@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { act } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { MemoryRouter } from 'react-router-dom';
 import NamespaceNode from './NamespaceNode.js';
 import PodSidebar from './PodSidebar.js';
 import { useLogStore } from '../../store/logStore.js';
@@ -31,7 +32,11 @@ const mockUseDeploymentList = vi.mocked(useDeploymentList);
 // Minimal MUI theme wrapper so MUI components render without warnings
 const theme = createTheme();
 function Wrapper({ children }: { children: React.ReactNode }) {
-  return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
+  return (
+    <MemoryRouter>
+      <ThemeProvider theme={theme}>{children}</ThemeProvider>
+    </MemoryRouter>
+  );
 }
 
 // ---------------------------------------------------------------------------

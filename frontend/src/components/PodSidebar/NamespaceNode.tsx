@@ -10,6 +10,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import List from '@mui/material/List';
 import { usePodList } from '../../hooks/usePodList.js';
 import { useDeploymentList } from '../../hooks/useDeploymentList.js';
+import { useLogStore } from '../../store/logStore.js';
 import PodNode from './PodNode.js';
 import DeploymentNode from './DeploymentNode.js';
 
@@ -19,7 +20,8 @@ interface Props {
 }
 
 export default function NamespaceNode({ namespace, viewMode }: Props) {
-  const [open, setOpen] = useState(false);
+  const selectedNamespace = useLogStore((s) => s.selectedNamespace);
+  const [open, setOpen] = useState(() => selectedNamespace === namespace);
   const { pods } = usePodList(open && viewMode === 'pods' ? namespace : null);
   const { deployments } = useDeploymentList(open && viewMode === 'deployments' ? namespace : null);
 
