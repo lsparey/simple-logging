@@ -3,4 +3,4 @@ name: simple-logging
 description: Combined image — collects Kubernetes pod logs, stores them on a PVC, exposes a gRPC-Web API on port 8080, and serves the React frontend via nginx on port 80.
 type: application
 version: 0.2.0
-appVersion: "0.3.0"
+appVersion: "0.5.0"
