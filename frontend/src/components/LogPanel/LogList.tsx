@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import LogLine from "./LogLine.js";
-import type { JsonFormat } from "../../store/logStore.js";
+import { useLogStore, type JsonFormat } from "../../store/logStore.js";
 
 const ROW_HEIGHT = 22;
 const NEAR_TOP_THRESHOLD = 15;
@@ -171,6 +171,13 @@ export default function LogList({
         start: visibleRows.startIndex,
         stop: visibleRows.stopIndex,
       });
+
+      // Update histogram marker with the ms timestamp of the first visible line.
+      const firstLine = currentLines[visibleRows.startIndex];
+      if (firstLine) {
+        const t = Date.parse(firstLine.split(' ')[0]);
+        if (!isNaN(t)) useLogStore.getState().setVisibleTimestamp(t);
+      }
     },
     // linesRef.current gives access to the latest lines without making this
     // callback unstable — it's updated synchronously during every render so

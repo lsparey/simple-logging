@@ -55,6 +55,10 @@ interface LogStore {
   endTime: number;
   setTimeRange: (start: number, end: number) => void;
 
+  // Timestamp (ms) of the first visible log line in the current scroll view; 0 = unknown
+  visibleTimestamp: number;
+  setVisibleTimestamp: (t: number) => void;
+
   // Dark mode
   darkMode: boolean;
   toggleDarkMode: () => void;
@@ -90,6 +94,7 @@ export const useLogStore = create<LogStore>((set) => ({
       searchText: '',
       startTime: 0,
       endTime: 0,
+      visibleTimestamp: 0,
       selectionKey: s.selectionKey + 1,
     })),
 
@@ -107,6 +112,7 @@ export const useLogStore = create<LogStore>((set) => ({
       searchText: '',
       startTime: 0,
       endTime: 0,
+      visibleTimestamp: 0,
       selectionKey: s.selectionKey + 1,
     })),
 
@@ -137,6 +143,9 @@ export const useLogStore = create<LogStore>((set) => ({
   endTime: 0,
   setTimeRange: (startTime, endTime) =>
     set({ startTime, endTime, lines: [], prevPageToken: '', nextPageToken: '' }),
+
+  visibleTimestamp: 0,
+  setVisibleTimestamp: (visibleTimestamp) => set({ visibleTimestamp }),
 
   darkMode: stored === 'dark',
   toggleDarkMode: () =>

@@ -18,6 +18,7 @@ export default function LogHistogram() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const lines = useLogStore((s) => s.lines);
+  const visibleTimestamp = useLogStore((s) => s.visibleTimestamp);
   const theme = useTheme();
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -46,7 +47,7 @@ export default function LogHistogram() {
     return result;
   }, [lines]);
 
-  // Re-draw whenever data, size, or theme changes.
+  // Re-draw whenever data, size, theme, or visible position changes.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -114,7 +115,14 @@ export default function LogHistogram() {
       const y = height - PADDING - barH;
       ctx.fillRect(x, y, barW, barH);
     }
-  }, [timestamps, dimensions, theme]);
+
+    // Draw a vertical marker for the current scroll position.
+    if (visibleTimestamp > 0 && visibleTimestamp >= minT && visibleTimestamp <= effectiveMax) {
+      const markerX = Math.round(PADDING + ((visibleTimestamp - minT) / range) * drawWidth);
+      ctx.fillStyle = theme.palette.warning.main;
+      ctx.fillRect(markerX - 1, PADDING, 2, drawHeight);
+    }
+  }, [timestamps, visibleTimestamp, dimensions, theme]);
 
   return (
     <Box
