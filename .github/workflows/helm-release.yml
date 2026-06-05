@@ -80,4 +80,4 @@ jobs:
         with:
           charts_dir: deploy/helm
         env:
-          CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CR_TOKEN: ${{ secrets.SIMPLE_LOGGING_ADMIN_BYPASS_TOKEN }}
