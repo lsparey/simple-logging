@@ -116,14 +116,6 @@ export default function IndexPanel() {
           borderColor: 'divider',
         }}
       >
-        {selectedIndexKey && (
-          <Chip
-            label={selectedIndexKey}
-            size="small"
-            variant="outlined"
-            sx={{ fontFamily: 'monospace' }}
-          />
-        )}
         <Button
           size="small"
           startIcon={<AddIcon />}
@@ -132,6 +124,14 @@ export default function IndexPanel() {
         >
           Create Index
         </Button>
+        {selectedIndexKey && (
+          <Chip
+            label={selectedIndexKey}
+            size="small"
+            variant="outlined"
+            sx={{ fontFamily: 'monospace' }}
+          />
+        )}
         {selectedIndexKey && !selectedIndexValue && (
           <Box component="form" onSubmit={handleValueSubmit} sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
             <Autocomplete
