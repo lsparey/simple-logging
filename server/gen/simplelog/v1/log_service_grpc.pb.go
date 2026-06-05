@@ -28,6 +28,7 @@ const (
 	LogService_StreamDeploymentLogs_FullMethodName = "/simplelog.v1.LogService/StreamDeploymentLogs"
 	LogService_ListIndexes_FullMethodName          = "/simplelog.v1.LogService/ListIndexes"
 	LogService_CreateIndex_FullMethodName          = "/simplelog.v1.LogService/CreateIndex"
+	LogService_ListIndexValues_FullMethodName      = "/simplelog.v1.LogService/ListIndexValues"
 	LogService_GetIndexLogs_FullMethodName         = "/simplelog.v1.LogService/GetIndexLogs"
 )
 
@@ -63,6 +64,8 @@ type LogServiceClient interface {
 	ListIndexes(ctx context.Context, in *ListIndexesRequest, opts ...grpc.CallOption) (*ListIndexesResponse, error)
 	// CreateIndex creates a JSON key index and backfills it from existing pod logs.
 	CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error)
+	// ListIndexValues returns observed values for an index ordered by match count.
+	ListIndexValues(ctx context.Context, in *ListIndexValuesRequest, opts ...grpc.CallOption) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
 	GetIndexLogs(ctx context.Context, in *GetIndexLogsRequest, opts ...grpc.CallOption) (*GetIndexLogsResponse, error)
 }
@@ -183,6 +186,16 @@ func (c *logServiceClient) CreateIndex(ctx context.Context, in *CreateIndexReque
 	return out, nil
 }
 
+func (c *logServiceClient) ListIndexValues(ctx context.Context, in *ListIndexValuesRequest, opts ...grpc.CallOption) (*ListIndexValuesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListIndexValuesResponse)
+	err := c.cc.Invoke(ctx, LogService_ListIndexValues_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *logServiceClient) GetIndexLogs(ctx context.Context, in *GetIndexLogsRequest, opts ...grpc.CallOption) (*GetIndexLogsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetIndexLogsResponse)
@@ -225,6 +238,8 @@ type LogServiceServer interface {
 	ListIndexes(context.Context, *ListIndexesRequest) (*ListIndexesResponse, error)
 	// CreateIndex creates a JSON key index and backfills it from existing pod logs.
 	CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error)
+	// ListIndexValues returns observed values for an index ordered by match count.
+	ListIndexValues(context.Context, *ListIndexValuesRequest) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
 	GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error)
 }
@@ -262,6 +277,9 @@ func (UnimplementedLogServiceServer) ListIndexes(context.Context, *ListIndexesRe
 }
 func (UnimplementedLogServiceServer) CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateIndex not implemented")
+}
+func (UnimplementedLogServiceServer) ListIndexValues(context.Context, *ListIndexValuesRequest) (*ListIndexValuesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListIndexValues not implemented")
 }
 func (UnimplementedLogServiceServer) GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIndexLogs not implemented")
@@ -434,6 +452,24 @@ func _LogService_CreateIndex_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LogService_ListIndexValues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIndexValuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).ListIndexValues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_ListIndexValues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).ListIndexValues(ctx, req.(*ListIndexValuesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LogService_GetIndexLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetIndexLogsRequest)
 	if err := dec(in); err != nil {
@@ -486,6 +522,10 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateIndex",
 			Handler:    _LogService_CreateIndex_Handler,
+		},
+		{
+			MethodName: "ListIndexValues",
+			Handler:    _LogService_ListIndexValues_Handler,
 		},
 		{
 			MethodName: "GetIndexLogs",

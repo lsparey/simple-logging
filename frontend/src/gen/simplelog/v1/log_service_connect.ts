@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateIndexRequest, CreateIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
+import { CreateIndexRequest, CreateIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -119,6 +119,17 @@ export const LogService = {
       name: "CreateIndex",
       I: CreateIndexRequest,
       O: CreateIndexResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ListIndexValues returns observed values for an index ordered by match count.
+     *
+     * @generated from rpc simplelog.v1.LogService.ListIndexValues
+     */
+    listIndexValues: {
+      name: "ListIndexValues",
+      I: ListIndexValuesRequest,
+      O: ListIndexValuesResponse,
       kind: MethodKind.Unary,
     },
     /**

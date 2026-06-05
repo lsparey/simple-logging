@@ -30,6 +30,27 @@ func (s *LogService) CreateIndex(_ context.Context, req *pb.CreateIndexRequest) 
 	return &pb.CreateIndexResponse{Index: &pb.LogIndexInfo{Key: req.Key}}, nil
 }
 
+func (s *LogService) ListIndexValues(_ context.Context, req *pb.ListIndexValuesRequest) (*pb.ListIndexValuesResponse, error) {
+	if req.Key == "" {
+		return nil, status.Error(codes.InvalidArgument, "key is required")
+	}
+	values, err := s.indexes.ListValues(req.Key)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "index %q not found", req.Key)
+		}
+		return nil, status.Errorf(codes.Internal, "list index values: %v", err)
+	}
+	resp := &pb.ListIndexValuesResponse{Values: make([]*pb.LogIndexValueInfo, 0, len(values))}
+	for _, value := range values {
+		resp.Values = append(resp.Values, &pb.LogIndexValueInfo{
+			Value: value.Value,
+			Count: value.Count,
+		})
+	}
+	return resp, nil
+}
+
 func (s *LogService) GetIndexLogs(_ context.Context, req *pb.GetIndexLogsRequest) (*pb.GetIndexLogsResponse, error) {
 	if req.Key == "" || req.Value == "" {
 		return nil, status.Error(codes.InvalidArgument, "key and value are required")

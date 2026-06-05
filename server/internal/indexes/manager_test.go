@@ -99,6 +99,41 @@ func TestGetLogsPaginates(t *testing.T) {
 	}
 }
 
+func TestListValuesReturnsCountsDescending(t *testing.T) {
+	root := t.TempDir()
+	writePodLog(t, root, "default", "api", []string{
+		`2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1","msg":"one"}`,
+		`2026-06-05T08:00:01Z [default/api/app] {"companyUuid":"co-2","msg":"two"}`,
+		`2026-06-05T08:00:02Z [default/api/app] {"companyUuid":"co-1","msg":"three"}`,
+		`2026-06-05T08:00:03Z [default/api/app] {"companyUuid":"co-3","msg":"four"}`,
+		`2026-06-05T08:00:04Z [default/api/app] {"companyUuid":"co-2","msg":"five"}`,
+		`2026-06-05T08:00:05Z [default/api/app] {"companyUuid":"co-2","msg":"six"}`,
+	})
+
+	m := NewManager(root)
+	if err := m.Create("companyUuid"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	values, err := m.ListValues("companyUuid")
+	if err != nil {
+		t.Fatalf("ListValues: %v", err)
+	}
+	if len(values) != 3 {
+		t.Fatalf("expected 3 values, got %d: %#v", len(values), values)
+	}
+	want := []ValueInfo{
+		{Value: "co-2", Count: 3},
+		{Value: "co-1", Count: 2},
+		{Value: "co-3", Count: 1},
+	}
+	for i := range want {
+		if values[i] != want[i] {
+			t.Fatalf("value %d got %#v want %#v", i, values[i], want[i])
+		}
+	}
+}
+
 func TestCreateBackfillsLongJSONLines(t *testing.T) {
 	root := t.TempDir()
 	longMessage := strings.Repeat("x", 128*1024)
@@ -122,5 +157,13 @@ func TestCreateBackfillsLongJSONLines(t *testing.T) {
 	}
 	if lines[0] != line {
 		t.Fatalf("long line changed during indexing")
+	}
+
+	values, err := m.ListValues("message")
+	if err != nil {
+		t.Fatalf("ListValues: %v", err)
+	}
+	if len(values) != 1 || values[0].Value != longMessage || values[0].Count != 1 {
+		t.Fatalf("unexpected long values: %#v", values)
 	}
 }

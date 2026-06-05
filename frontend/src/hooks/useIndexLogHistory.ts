@@ -6,10 +6,18 @@ export function useIndexLogHistory(
   key: string | null,
   value: string | null,
 ) {
-  const { setLines, setPaginationTokens, setMode } = useLogStore.getState();
+  const setLines = useLogStore((s) => s.setLines);
+  const setPaginationTokens = useLogStore((s) => s.setPaginationTokens);
+  const setMode = useLogStore((s) => s.setMode);
 
   const load = useCallback(async () => {
-    if (!key || !value) return;
+    if (!key || !value) {
+      setLines([]);
+      setPaginationTokens('', '');
+      setMode('idle');
+      return;
+    }
+    setMode('loading');
     try {
       const resp = await logClient.getIndexLogs({
         key,

@@ -37,6 +37,11 @@ type Entry struct {
 	Line      string `json:"line"`
 }
 
+type ValueInfo struct {
+	Value string
+	Count int64
+}
+
 type Manager struct {
 	mu       sync.Mutex
 	logsRoot string
@@ -182,6 +187,55 @@ func (m *Manager) GetLogs(key, value string, pageSize int, pageToken string, loa
 	return lines, next, prev, nil
 }
 
+func (m *Manager) ListValues(key string) ([]ValueInfo, error) {
+	if err := ValidateKey(key); err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.keys[key]; !exists {
+		return nil, os.ErrNotExist
+	}
+
+	counts := make(map[string]int64)
+	valuesRoot := filepath.Join(m.keyRoot(key), "values")
+	if err := filepath.WalkDir(valuesRoot, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || filepath.Ext(path) != ".jsonl" {
+			return nil
+		}
+		entries, err := readEntriesFile(path)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			counts[entry.Value]++
+		}
+		return nil
+	}); err != nil {
+		if os.IsNotExist(err) {
+			return []ValueInfo{}, nil
+		}
+		return nil, err
+	}
+
+	values := make([]ValueInfo, 0, len(counts))
+	for value, count := range counts {
+		values = append(values, ValueInfo{Value: value, Count: count})
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].Count == values[j].Count {
+			return values[i].Value < values[j].Value
+		}
+		return values[i].Count > values[j].Count
+	})
+	return values, nil
+}
+
 func (m *Manager) load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -307,6 +361,10 @@ func (m *Manager) appendLocked(key string, entry Entry) error {
 
 func (m *Manager) readValueEntriesLocked(key, value string) ([]Entry, error) {
 	path := m.valuePath(key, value)
+	return readEntriesFile(path)
+}
+
+func readEntriesFile(path string) ([]Entry, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
