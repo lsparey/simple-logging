@@ -41,6 +41,9 @@ service LogService {
   // CreateIndex creates a JSON key index and backfills it from existing pod logs.
   rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse);
 
+  // DeleteIndex removes a JSON key index and its persisted value files.
+  rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse);
+
   // ListIndexValues returns observed values for an index ordered by match count.
   rpc ListIndexValues(ListIndexValuesRequest) returns (ListIndexValuesResponse);
 
@@ -211,6 +214,12 @@ message CreateIndexRequest {
 message CreateIndexResponse {
   LogIndexInfo index = 1;
 }
+
+message DeleteIndexRequest {
+  string key = 1;
+}
+
+message DeleteIndexResponse {}
 
 message ListIndexValuesRequest {
   string key = 1;

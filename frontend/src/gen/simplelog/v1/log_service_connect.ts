@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateIndexRequest, CreateIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
+import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -119,6 +119,17 @@ export const LogService = {
       name: "CreateIndex",
       I: CreateIndexRequest,
       O: CreateIndexResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * DeleteIndex removes a JSON key index and its persisted value files.
+     *
+     * @generated from rpc simplelog.v1.LogService.DeleteIndex
+     */
+    deleteIndex: {
+      name: "DeleteIndex",
+      I: DeleteIndexRequest,
+      O: DeleteIndexResponse,
       kind: MethodKind.Unary,
     },
     /**

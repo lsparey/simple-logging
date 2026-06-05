@@ -10,6 +10,7 @@ test.describe('Indexes', () => {
   test('lists values by count and drills into matching log messages', async ({ page }) => {
     await page.getByText('companyUuid').click();
 
+    await expect(page.getByRole('button', { name: 'Index Actions' })).toBeVisible();
     const company1 = page.getByRole('button', { name: /company-1/ });
     const company2 = page.getByRole('button', { name: /company-2/ });
     await expect(company1).toBeVisible();
@@ -41,5 +42,23 @@ test.describe('Indexes', () => {
     await expect(page.getByRole('button', { name: 'Go' })).not.toBeVisible();
     await expect(page.getByPlaceholder('Filter results...')).toBeVisible();
     expect(pageErrors).toEqual([]);
+  });
+
+  test('selected index menu can create another index and delete it', async ({ page }) => {
+    const key = `tempDelete${Date.now()}`;
+
+    await page.getByText('companyUuid').click();
+    await page.getByRole('button', { name: 'Index Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Create another index' }).click();
+    await page.getByLabel('JSON key').fill(key);
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    await expect(page.locator('.MuiChip-root').filter({ hasText: key })).toBeVisible();
+    await page.getByRole('button', { name: 'Index Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Delete index' }).click();
+
+    await expect(page.getByText('Create or select an index to query JSON logs.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create Index' })).toBeVisible();
+    await expect(page.getByText(key)).not.toBeVisible();
   });
 });

@@ -30,6 +30,19 @@ func (s *LogService) CreateIndex(_ context.Context, req *pb.CreateIndexRequest) 
 	return &pb.CreateIndexResponse{Index: &pb.LogIndexInfo{Key: req.Key}}, nil
 }
 
+func (s *LogService) DeleteIndex(_ context.Context, req *pb.DeleteIndexRequest) (*pb.DeleteIndexResponse, error) {
+	if req.Key == "" {
+		return nil, status.Error(codes.InvalidArgument, "key is required")
+	}
+	if err := s.indexes.Delete(req.Key); err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "index %q not found", req.Key)
+		}
+		return nil, status.Errorf(codes.Internal, "delete index: %v", err)
+	}
+	return &pb.DeleteIndexResponse{}, nil
+}
+
 func (s *LogService) ListIndexValues(_ context.Context, req *pb.ListIndexValuesRequest) (*pb.ListIndexValuesResponse, error) {
 	if req.Key == "" {
 		return nil, status.Error(codes.InvalidArgument, "key is required")

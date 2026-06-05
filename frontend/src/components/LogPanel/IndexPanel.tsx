@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -9,6 +10,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +34,7 @@ export default function IndexPanel() {
   const {
     selectedIndexKey,
     selectedIndexValue,
+    enterIndexMode,
     setSelectedIndex,
     setSelectedIndexValue,
     refreshIndexList,
@@ -44,6 +48,7 @@ export default function IndexPanel() {
   } = useLogStore();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
   const [valueDraft, setValueDraft] = useState({ key: selectedIndexKey ?? '', value: selectedIndexValue });
   const [autoScroll, setAutoScroll] = useState(true);
   const [prependKey, setPrependKey] = useState(0);
@@ -102,6 +107,24 @@ export default function IndexPanel() {
   const handleScrollUp = useCallback(() => setAutoScroll(false), []);
   const handleScrollBottom = useCallback(() => setAutoScroll(true), []);
 
+  const openCreateDialog = useCallback(() => {
+    setActionsAnchor(null);
+    setDialogOpen(true);
+  }, []);
+
+  const deleteSelectedIndex = useCallback(async () => {
+    if (!selectedIndexKey) return;
+    setActionsAnchor(null);
+    try {
+      await logClient.deleteIndex({ key: selectedIndexKey });
+      refreshIndexList();
+      enterIndexMode();
+      navigate('/indexes');
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to delete index');
+    }
+  }, [enterIndexMode, navigate, refreshIndexList, selectedIndexKey]);
+
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Box
@@ -116,14 +139,35 @@ export default function IndexPanel() {
           borderColor: 'divider',
         }}
       >
-        <Button
-          size="small"
-          startIcon={<AddIcon />}
-          variant={selectedIndexKey ? 'outlined' : 'contained'}
-          onClick={() => setDialogOpen(true)}
-        >
-          Create Index
-        </Button>
+        {selectedIndexKey ? (
+          <>
+            <Button
+              size="small"
+              variant="outlined"
+              endIcon={<ArrowDropDownIcon />}
+              onClick={(e) => setActionsAnchor(e.currentTarget)}
+            >
+              Index Actions
+            </Button>
+            <Menu
+              anchorEl={actionsAnchor}
+              open={Boolean(actionsAnchor)}
+              onClose={() => setActionsAnchor(null)}
+            >
+              <MenuItem onClick={openCreateDialog}>Create another index</MenuItem>
+              <MenuItem onClick={deleteSelectedIndex}>Delete index</MenuItem>
+            </Menu>
+          </>
+        ) : (
+          <Button
+            size="small"
+            startIcon={<AddIcon />}
+            variant="contained"
+            onClick={openCreateDialog}
+          >
+            Create Index
+          </Button>
+        )}
         {selectedIndexKey && (
           <Chip
             label={selectedIndexKey}

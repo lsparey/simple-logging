@@ -105,6 +105,25 @@ func (m *Manager) Create(key string) error {
 	return nil
 }
 
+func (m *Manager) Delete(key string) error {
+	if err := ValidateKey(key); err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.keys[key]; !exists {
+		return os.ErrNotExist
+	}
+	delete(m.keys, key)
+	if err := m.saveLocked(); err != nil {
+		m.keys[key] = struct{}{}
+		return err
+	}
+	return os.RemoveAll(m.keyRoot(key))
+}
+
 func (m *Manager) ObserveLine(namespace, pod, line string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

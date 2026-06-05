@@ -134,6 +134,36 @@ func TestListValuesReturnsCountsDescending(t *testing.T) {
 	}
 }
 
+func TestDeleteRemovesManifestKeyAndIndexFiles(t *testing.T) {
+	root := t.TempDir()
+	writePodLog(t, root, "default", "api", []string{
+		`2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1","msg":"one"}`,
+	})
+
+	m := NewManager(root)
+	if err := m.Create("companyUuid"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if values, err := m.ListValues("companyUuid"); err != nil || len(values) != 1 {
+		t.Fatalf("ListValues before delete got values=%#v err=%v", values, err)
+	}
+
+	if err := m.Delete("companyUuid"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if keys := m.List(); len(keys) != 0 {
+		t.Fatalf("expected no keys after delete, got %#v", keys)
+	}
+	if _, err := os.Stat(m.keyRoot("companyUuid")); !os.IsNotExist(err) {
+		t.Fatalf("expected index dir removed, stat err=%v", err)
+	}
+
+	reloaded := NewManager(root)
+	if keys := reloaded.List(); len(keys) != 0 {
+		t.Fatalf("expected manifest without deleted key, got %#v", keys)
+	}
+}
+
 func TestCreateBackfillsLongJSONLines(t *testing.T) {
 	root := t.TempDir()
 	longMessage := strings.Repeat("x", 128*1024)

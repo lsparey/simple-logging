@@ -218,6 +218,14 @@ function routes(router: ConnectRouter) {
       return { index: { key: req.key } };
     },
 
+    deleteIndex(req) {
+      const idx = INDEXES.findIndex((index) => index.key === req.key);
+      if (idx >= 0) {
+        INDEXES.splice(idx, 1);
+      }
+      return {};
+    },
+
     listIndexValues(req) {
       return { values: indexValues(req.key) };
     },

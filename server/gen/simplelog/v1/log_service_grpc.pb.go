@@ -28,6 +28,7 @@ const (
 	LogService_StreamDeploymentLogs_FullMethodName = "/simplelog.v1.LogService/StreamDeploymentLogs"
 	LogService_ListIndexes_FullMethodName          = "/simplelog.v1.LogService/ListIndexes"
 	LogService_CreateIndex_FullMethodName          = "/simplelog.v1.LogService/CreateIndex"
+	LogService_DeleteIndex_FullMethodName          = "/simplelog.v1.LogService/DeleteIndex"
 	LogService_ListIndexValues_FullMethodName      = "/simplelog.v1.LogService/ListIndexValues"
 	LogService_GetIndexLogs_FullMethodName         = "/simplelog.v1.LogService/GetIndexLogs"
 )
@@ -64,6 +65,8 @@ type LogServiceClient interface {
 	ListIndexes(ctx context.Context, in *ListIndexesRequest, opts ...grpc.CallOption) (*ListIndexesResponse, error)
 	// CreateIndex creates a JSON key index and backfills it from existing pod logs.
 	CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error)
+	// DeleteIndex removes a JSON key index and its persisted value files.
+	DeleteIndex(ctx context.Context, in *DeleteIndexRequest, opts ...grpc.CallOption) (*DeleteIndexResponse, error)
 	// ListIndexValues returns observed values for an index ordered by match count.
 	ListIndexValues(ctx context.Context, in *ListIndexValuesRequest, opts ...grpc.CallOption) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
@@ -186,6 +189,16 @@ func (c *logServiceClient) CreateIndex(ctx context.Context, in *CreateIndexReque
 	return out, nil
 }
 
+func (c *logServiceClient) DeleteIndex(ctx context.Context, in *DeleteIndexRequest, opts ...grpc.CallOption) (*DeleteIndexResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteIndexResponse)
+	err := c.cc.Invoke(ctx, LogService_DeleteIndex_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *logServiceClient) ListIndexValues(ctx context.Context, in *ListIndexValuesRequest, opts ...grpc.CallOption) (*ListIndexValuesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListIndexValuesResponse)
@@ -238,6 +251,8 @@ type LogServiceServer interface {
 	ListIndexes(context.Context, *ListIndexesRequest) (*ListIndexesResponse, error)
 	// CreateIndex creates a JSON key index and backfills it from existing pod logs.
 	CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error)
+	// DeleteIndex removes a JSON key index and its persisted value files.
+	DeleteIndex(context.Context, *DeleteIndexRequest) (*DeleteIndexResponse, error)
 	// ListIndexValues returns observed values for an index ordered by match count.
 	ListIndexValues(context.Context, *ListIndexValuesRequest) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
@@ -277,6 +292,9 @@ func (UnimplementedLogServiceServer) ListIndexes(context.Context, *ListIndexesRe
 }
 func (UnimplementedLogServiceServer) CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateIndex not implemented")
+}
+func (UnimplementedLogServiceServer) DeleteIndex(context.Context, *DeleteIndexRequest) (*DeleteIndexResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteIndex not implemented")
 }
 func (UnimplementedLogServiceServer) ListIndexValues(context.Context, *ListIndexValuesRequest) (*ListIndexValuesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListIndexValues not implemented")
@@ -452,6 +470,24 @@ func _LogService_CreateIndex_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LogService_DeleteIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteIndexRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).DeleteIndex(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_DeleteIndex_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).DeleteIndex(ctx, req.(*DeleteIndexRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _LogService_ListIndexValues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListIndexValuesRequest)
 	if err := dec(in); err != nil {
@@ -522,6 +558,10 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateIndex",
 			Handler:    _LogService_CreateIndex_Handler,
+		},
+		{
+			MethodName: "DeleteIndex",
+			Handler:    _LogService_DeleteIndex_Handler,
 		},
 		{
 			MethodName: "ListIndexValues",
