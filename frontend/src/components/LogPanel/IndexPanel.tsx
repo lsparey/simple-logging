@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import MenuIcon from '@mui/icons-material/Menu';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -152,7 +152,7 @@ export default function IndexPanel() {
                 color="primary"
                 onClick={(e) => setActionsAnchor(e.currentTarget)}
               >
-                <MoreVertIcon fontSize="small" />
+                <MenuIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <Menu
