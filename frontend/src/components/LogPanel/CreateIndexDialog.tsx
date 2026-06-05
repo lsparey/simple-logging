@@ -43,7 +43,7 @@ export default function CreateIndexDialog({ open, onClose, onCreated }: Props) {
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Create Index</DialogTitle>
-      <DialogContent sx={{ pt: 1 }}>
+      <DialogContent sx={{ pt: '16px !important' }}>
         <Autocomplete
           freeSolo
           options={suggestions}

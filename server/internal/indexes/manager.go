@@ -2,10 +2,13 @@ package indexes
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -263,9 +266,15 @@ func (m *Manager) backfillFileLocked(key, namespace, pod, path string) error {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
+	reader := bufio.NewReader(f)
+	for {
+		line, err := readLine(reader)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
 		value, ok := indexedValue(line, key)
 		if !ok {
 			continue
@@ -280,7 +289,7 @@ func (m *Manager) backfillFileLocked(key, namespace, pod, path string) error {
 			return err
 		}
 	}
-	return scanner.Err()
+	return nil
 }
 
 func (m *Manager) appendLocked(key string, entry Entry) error {
@@ -308,15 +317,30 @@ func (m *Manager) readValueEntriesLocked(key, value string) ([]Entry, error) {
 	defer f.Close()
 
 	var entries []Entry
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
+	reader := bufio.NewReader(f)
+	for {
+		line, err := readLine(reader)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, err
+		}
 		var entry Entry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
 		entries = append(entries, entry)
 	}
-	return entries, scanner.Err()
+	return entries, nil
+}
+
+func readLine(r *bufio.Reader) (string, error) {
+	line, err := r.ReadString('\n')
+	if len(line) > 0 {
+		return strings.TrimRight(line, "\r\n"), nil
+	}
+	return "", err
 }
 
 func (m *Manager) keyRoot(key string) string {
@@ -324,16 +348,17 @@ func (m *Manager) keyRoot(key string) string {
 }
 
 func (m *Manager) valuePath(key, value string) string {
-	encoded := encodePathPart(value)
-	prefix := "empty"
-	if len(encoded) >= 2 {
-		prefix = encoded[:2]
-	}
-	return filepath.Join(m.keyRoot(key), "values", prefix, encoded+".jsonl")
+	digest := valueDigest(value)
+	return filepath.Join(m.keyRoot(key), "values", digest[:2], digest+".jsonl")
 }
 
 func encodePathPart(s string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
+}
+
+func valueDigest(value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }
 
 func indexedValue(line, key string) (string, bool) {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -95,5 +96,31 @@ func TestGetLogsPaginates(t *testing.T) {
 	}
 	if len(page2) != 2 || next2 == "" || prev2 == "" {
 		t.Fatalf("unexpected page2 len=%d next=%q prev=%q", len(page2), next2, prev2)
+	}
+}
+
+func TestCreateBackfillsLongJSONLines(t *testing.T) {
+	root := t.TempDir()
+	longMessage := strings.Repeat("x", 128*1024)
+	line := fmt.Sprintf(
+		`2026-06-05T08:00:00Z [default/api/app] {"message":"%s","companyUuid":"co-1"}`,
+		longMessage,
+	)
+	writePodLog(t, root, "default", "api", []string{line})
+
+	m := NewManager(root)
+	if err := m.Create("message"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	lines, _, _, err := m.GetLogs("message", longMessage, 200, "", false)
+	if err != nil {
+		t.Fatalf("GetLogs: %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 long line, got %d", len(lines))
+	}
+	if lines[0] != line {
+		t.Fatalf("long line changed during indexing")
 	}
 }
