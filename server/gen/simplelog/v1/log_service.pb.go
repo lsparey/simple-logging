@@ -941,6 +941,358 @@ func (x *StreamDeploymentLogsResponse) GetLine() string {
 	return ""
 }
 
+type ListIndexesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIndexesRequest) Reset() {
+	*x = ListIndexesRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIndexesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIndexesRequest) ProtoMessage() {}
+
+func (x *ListIndexesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIndexesRequest.ProtoReflect.Descriptor instead.
+func (*ListIndexesRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{16}
+}
+
+type LogIndexInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LogIndexInfo) Reset() {
+	*x = LogIndexInfo{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LogIndexInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LogIndexInfo) ProtoMessage() {}
+
+func (x *LogIndexInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LogIndexInfo.ProtoReflect.Descriptor instead.
+func (*LogIndexInfo) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *LogIndexInfo) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+type ListIndexesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Indexes       []*LogIndexInfo        `protobuf:"bytes,1,rep,name=indexes,proto3" json:"indexes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIndexesResponse) Reset() {
+	*x = ListIndexesResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIndexesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIndexesResponse) ProtoMessage() {}
+
+func (x *ListIndexesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIndexesResponse.ProtoReflect.Descriptor instead.
+func (*ListIndexesResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListIndexesResponse) GetIndexes() []*LogIndexInfo {
+	if x != nil {
+		return x.Indexes
+	}
+	return nil
+}
+
+type CreateIndexRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateIndexRequest) Reset() {
+	*x = CreateIndexRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateIndexRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateIndexRequest) ProtoMessage() {}
+
+func (x *CreateIndexRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateIndexRequest.ProtoReflect.Descriptor instead.
+func (*CreateIndexRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *CreateIndexRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+type CreateIndexResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Index         *LogIndexInfo          `protobuf:"bytes,1,opt,name=index,proto3" json:"index,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateIndexResponse) Reset() {
+	*x = CreateIndexResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateIndexResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateIndexResponse) ProtoMessage() {}
+
+func (x *CreateIndexResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateIndexResponse.ProtoReflect.Descriptor instead.
+func (*CreateIndexResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CreateIndexResponse) GetIndex() *LogIndexInfo {
+	if x != nil {
+		return x.Index
+	}
+	return nil
+}
+
+type GetIndexLogsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// page_size is the maximum number of log lines to return.
+	// Defaults to 200 if unset or 0; capped at a server-defined maximum.
+	PageSize int32 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token is an opaque cursor returned by a previous GetIndexLogs call.
+	PageToken string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// load_last_page, when true, returns the last page of matching logs.
+	LoadLastPage  bool `protobuf:"varint,5,opt,name=load_last_page,json=loadLastPage,proto3" json:"load_last_page,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIndexLogsRequest) Reset() {
+	*x = GetIndexLogsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIndexLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIndexLogsRequest) ProtoMessage() {}
+
+func (x *GetIndexLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIndexLogsRequest.ProtoReflect.Descriptor instead.
+func (*GetIndexLogsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetIndexLogsRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *GetIndexLogsRequest) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *GetIndexLogsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *GetIndexLogsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+func (x *GetIndexLogsRequest) GetLoadLastPage() bool {
+	if x != nil {
+		return x.LoadLastPage
+	}
+	return false
+}
+
+type GetIndexLogsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lines         []string               `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	PrevPageToken string                 `protobuf:"bytes,3,opt,name=prev_page_token,json=prevPageToken,proto3" json:"prev_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIndexLogsResponse) Reset() {
+	*x = GetIndexLogsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIndexLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIndexLogsResponse) ProtoMessage() {}
+
+func (x *GetIndexLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIndexLogsResponse.ProtoReflect.Descriptor instead.
+func (*GetIndexLogsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetIndexLogsResponse) GetLines() []string {
+	if x != nil {
+		return x.Lines
+	}
+	return nil
+}
+
+func (x *GetIndexLogsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *GetIndexLogsResponse) GetPrevPageToken() string {
+	if x != nil {
+		return x.PrevPageToken
+	}
+	return ""
+}
+
 var File_simplelog_v1_log_service_proto protoreflect.FileDescriptor
 
 const file_simplelog_v1_log_service_proto_rawDesc = "" +
@@ -1010,7 +1362,27 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"deployment\x18\x02 \x01(\tR\n" +
 	"deployment\"2\n" +
 	"\x1cStreamDeploymentLogsResponse\x12\x12\n" +
-	"\x04line\x18\x01 \x01(\tR\x04line2\x86\x05\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line\"\x14\n" +
+	"\x12ListIndexesRequest\" \n" +
+	"\fLogIndexInfo\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"K\n" +
+	"\x13ListIndexesResponse\x124\n" +
+	"\aindexes\x18\x01 \x03(\v2\x1a.simplelog.v1.LogIndexInfoR\aindexes\"&\n" +
+	"\x12CreateIndexRequest\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"G\n" +
+	"\x13CreateIndexResponse\x120\n" +
+	"\x05index\x18\x01 \x01(\v2\x1a.simplelog.v1.LogIndexInfoR\x05index\"\x9f\x01\n" +
+	"\x13GetIndexLogsRequest\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x12$\n" +
+	"\x0eload_last_page\x18\x05 \x01(\bR\floadLastPage\"|\n" +
+	"\x14GetIndexLogsResponse\x12\x14\n" +
+	"\x05lines\x18\x01 \x03(\tR\x05lines\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12&\n" +
+	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken2\x85\a\n" +
 	"\n" +
 	"LogService\x12[\n" +
 	"\x0eListNamespaces\x12#.simplelog.v1.ListNamespacesRequest\x1a$.simplelog.v1.ListNamespacesResponse\x12I\n" +
@@ -1020,7 +1392,10 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"StreamLogs\x12\x1f.simplelog.v1.StreamLogsRequest\x1a .simplelog.v1.StreamLogsResponse0\x01\x12^\n" +
 	"\x0fListDeployments\x12$.simplelog.v1.ListDeploymentsRequest\x1a%.simplelog.v1.ListDeploymentsResponse\x12d\n" +
 	"\x11GetDeploymentLogs\x12&.simplelog.v1.GetDeploymentLogsRequest\x1a'.simplelog.v1.GetDeploymentLogsResponse\x12o\n" +
-	"\x14StreamDeploymentLogs\x12).simplelog.v1.StreamDeploymentLogsRequest\x1a*.simplelog.v1.StreamDeploymentLogsResponse0\x01B@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
+	"\x14StreamDeploymentLogs\x12).simplelog.v1.StreamDeploymentLogsRequest\x1a*.simplelog.v1.StreamDeploymentLogsResponse0\x01\x12R\n" +
+	"\vListIndexes\x12 .simplelog.v1.ListIndexesRequest\x1a!.simplelog.v1.ListIndexesResponse\x12R\n" +
+	"\vCreateIndex\x12 .simplelog.v1.CreateIndexRequest\x1a!.simplelog.v1.CreateIndexResponse\x12U\n" +
+	"\fGetIndexLogs\x12!.simplelog.v1.GetIndexLogsRequest\x1a\".simplelog.v1.GetIndexLogsResponseB@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
 
 var (
 	file_simplelog_v1_log_service_proto_rawDescOnce sync.Once
@@ -1034,7 +1409,7 @@ func file_simplelog_v1_log_service_proto_rawDescGZIP() []byte {
 	return file_simplelog_v1_log_service_proto_rawDescData
 }
 
-var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*ListNamespacesRequest)(nil),        // 0: simplelog.v1.ListNamespacesRequest
 	(*ListNamespacesResponse)(nil),       // 1: simplelog.v1.ListNamespacesResponse
@@ -1052,29 +1427,44 @@ var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*GetDeploymentLogsResponse)(nil),    // 13: simplelog.v1.GetDeploymentLogsResponse
 	(*StreamDeploymentLogsRequest)(nil),  // 14: simplelog.v1.StreamDeploymentLogsRequest
 	(*StreamDeploymentLogsResponse)(nil), // 15: simplelog.v1.StreamDeploymentLogsResponse
+	(*ListIndexesRequest)(nil),           // 16: simplelog.v1.ListIndexesRequest
+	(*LogIndexInfo)(nil),                 // 17: simplelog.v1.LogIndexInfo
+	(*ListIndexesResponse)(nil),          // 18: simplelog.v1.ListIndexesResponse
+	(*CreateIndexRequest)(nil),           // 19: simplelog.v1.CreateIndexRequest
+	(*CreateIndexResponse)(nil),          // 20: simplelog.v1.CreateIndexResponse
+	(*GetIndexLogsRequest)(nil),          // 21: simplelog.v1.GetIndexLogsRequest
+	(*GetIndexLogsResponse)(nil),         // 22: simplelog.v1.GetIndexLogsResponse
 }
 var file_simplelog_v1_log_service_proto_depIdxs = []int32{
 	3,  // 0: simplelog.v1.ListPodsResponse.pods:type_name -> simplelog.v1.PodInfo
 	10, // 1: simplelog.v1.ListDeploymentsResponse.deployments:type_name -> simplelog.v1.DeploymentInfo
-	0,  // 2: simplelog.v1.LogService.ListNamespaces:input_type -> simplelog.v1.ListNamespacesRequest
-	2,  // 3: simplelog.v1.LogService.ListPods:input_type -> simplelog.v1.ListPodsRequest
-	5,  // 4: simplelog.v1.LogService.GetLogs:input_type -> simplelog.v1.GetLogsRequest
-	7,  // 5: simplelog.v1.LogService.StreamLogs:input_type -> simplelog.v1.StreamLogsRequest
-	9,  // 6: simplelog.v1.LogService.ListDeployments:input_type -> simplelog.v1.ListDeploymentsRequest
-	12, // 7: simplelog.v1.LogService.GetDeploymentLogs:input_type -> simplelog.v1.GetDeploymentLogsRequest
-	14, // 8: simplelog.v1.LogService.StreamDeploymentLogs:input_type -> simplelog.v1.StreamDeploymentLogsRequest
-	1,  // 9: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
-	4,  // 10: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
-	6,  // 11: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
-	8,  // 12: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
-	11, // 13: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
-	13, // 14: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
-	15, // 15: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
-	9,  // [9:16] is the sub-list for method output_type
-	2,  // [2:9] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	17, // 2: simplelog.v1.ListIndexesResponse.indexes:type_name -> simplelog.v1.LogIndexInfo
+	17, // 3: simplelog.v1.CreateIndexResponse.index:type_name -> simplelog.v1.LogIndexInfo
+	0,  // 4: simplelog.v1.LogService.ListNamespaces:input_type -> simplelog.v1.ListNamespacesRequest
+	2,  // 5: simplelog.v1.LogService.ListPods:input_type -> simplelog.v1.ListPodsRequest
+	5,  // 6: simplelog.v1.LogService.GetLogs:input_type -> simplelog.v1.GetLogsRequest
+	7,  // 7: simplelog.v1.LogService.StreamLogs:input_type -> simplelog.v1.StreamLogsRequest
+	9,  // 8: simplelog.v1.LogService.ListDeployments:input_type -> simplelog.v1.ListDeploymentsRequest
+	12, // 9: simplelog.v1.LogService.GetDeploymentLogs:input_type -> simplelog.v1.GetDeploymentLogsRequest
+	14, // 10: simplelog.v1.LogService.StreamDeploymentLogs:input_type -> simplelog.v1.StreamDeploymentLogsRequest
+	16, // 11: simplelog.v1.LogService.ListIndexes:input_type -> simplelog.v1.ListIndexesRequest
+	19, // 12: simplelog.v1.LogService.CreateIndex:input_type -> simplelog.v1.CreateIndexRequest
+	21, // 13: simplelog.v1.LogService.GetIndexLogs:input_type -> simplelog.v1.GetIndexLogsRequest
+	1,  // 14: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
+	4,  // 15: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
+	6,  // 16: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
+	8,  // 17: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
+	11, // 18: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
+	13, // 19: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
+	15, // 20: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
+	18, // 21: simplelog.v1.LogService.ListIndexes:output_type -> simplelog.v1.ListIndexesResponse
+	20, // 22: simplelog.v1.LogService.CreateIndex:output_type -> simplelog.v1.CreateIndexResponse
+	22, // 23: simplelog.v1.LogService.GetIndexLogs:output_type -> simplelog.v1.GetIndexLogsResponse
+	14, // [14:24] is the sub-list for method output_type
+	4,  // [4:14] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_simplelog_v1_log_service_proto_init() }
@@ -1088,7 +1478,7 @@ func file_simplelog_v1_log_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simplelog_v1_log_service_proto_rawDesc), len(file_simplelog_v1_log_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -34,6 +34,15 @@ service LogService {
   // merged log lines in real time. The stream stays open until the client
   // cancels it.
   rpc StreamDeploymentLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse);
+
+  // ListIndexes returns all JSON log indexes configured on disk.
+  rpc ListIndexes(ListIndexesRequest) returns (ListIndexesResponse);
+
+  // CreateIndex creates a JSON key index and backfills it from existing pod logs.
+  rpc CreateIndex(CreateIndexRequest) returns (CreateIndexResponse);
+
+  // GetIndexLogs returns log lines whose indexed JSON key matches the value.
+  rpc GetIndexLogs(GetIndexLogsRequest) returns (GetIndexLogsResponse);
 }
 
 // ── ListNamespaces ────────────────────────────────────────────────────────────
@@ -178,4 +187,45 @@ message StreamDeploymentLogsRequest {
 
 message StreamDeploymentLogsResponse {
   string line = 1;
+}
+
+// ── Indexes ──────────────────────────────────────────────────────────────────
+
+message ListIndexesRequest {}
+
+message LogIndexInfo {
+  string key = 1;
+}
+
+message ListIndexesResponse {
+  repeated LogIndexInfo indexes = 1;
+}
+
+message CreateIndexRequest {
+  string key = 1;
+}
+
+message CreateIndexResponse {
+  LogIndexInfo index = 1;
+}
+
+message GetIndexLogsRequest {
+  string key = 1;
+  string value = 2;
+
+  // page_size is the maximum number of log lines to return.
+  // Defaults to 200 if unset or 0; capped at a server-defined maximum.
+  int32 page_size = 3;
+
+  // page_token is an opaque cursor returned by a previous GetIndexLogs call.
+  string page_token = 4;
+
+  // load_last_page, when true, returns the last page of matching logs.
+  bool load_last_page = 5;
+}
+
+message GetIndexLogsResponse {
+  repeated string lines = 1;
+  string next_page_token = 2;
+  string prev_page_token = 3;
 }

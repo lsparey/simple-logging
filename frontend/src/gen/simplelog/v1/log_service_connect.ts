@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
+import { CreateIndexRequest, CreateIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -98,6 +98,39 @@ export const LogService = {
       I: StreamDeploymentLogsRequest,
       O: StreamDeploymentLogsResponse,
       kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * ListIndexes returns all JSON log indexes configured on disk.
+     *
+     * @generated from rpc simplelog.v1.LogService.ListIndexes
+     */
+    listIndexes: {
+      name: "ListIndexes",
+      I: ListIndexesRequest,
+      O: ListIndexesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * CreateIndex creates a JSON key index and backfills it from existing pod logs.
+     *
+     * @generated from rpc simplelog.v1.LogService.CreateIndex
+     */
+    createIndex: {
+      name: "CreateIndex",
+      I: CreateIndexRequest,
+      O: CreateIndexResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetIndexLogs returns log lines whose indexed JSON key matches the value.
+     *
+     * @generated from rpc simplelog.v1.LogService.GetIndexLogs
+     */
+    getIndexLogs: {
+      name: "GetIndexLogs",
+      I: GetIndexLogsRequest,
+      O: GetIndexLogsResponse,
+      kind: MethodKind.Unary,
     },
   }
 } as const;

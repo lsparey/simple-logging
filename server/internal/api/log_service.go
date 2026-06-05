@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lsparey/simple-logging/internal/indexes"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -51,11 +53,17 @@ type LogService struct {
 	active      ActiveChecker
 	jsonLogging JsonLoggingChecker
 	deployments DeploymentMapper
+	indexes     *indexes.Manager
 }
 
 // NewLogService creates a LogService backed by files in logsRoot.
 func NewLogService(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker, deployments DeploymentMapper) *LogService {
-	return &LogService{logsRoot: logsRoot, active: active, jsonLogging: jsonLogging, deployments: deployments}
+	return NewLogServiceWithIndexes(logsRoot, active, jsonLogging, deployments, indexes.NewManager(logsRoot))
+}
+
+// NewLogServiceWithIndexes creates a LogService using a shared index manager.
+func NewLogServiceWithIndexes(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker, deployments DeploymentMapper, indexManager *indexes.Manager) *LogService {
+	return &LogService{logsRoot: logsRoot, active: active, jsonLogging: jsonLogging, deployments: deployments, indexes: indexManager}
 }
 
 // ListNamespaces returns the names of all namespace subdirectories under logsRoot.
@@ -67,7 +75,7 @@ func (s *LogService) ListNamespaces(_ context.Context, _ *pb.ListNamespacesReque
 
 	var namespaces []string
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
 			namespaces = append(namespaces, e.Name())
 		}
 	}

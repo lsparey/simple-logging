@@ -38,6 +38,10 @@ const DEPLOYMENTS: Record<string, Array<{ name: string; namespace: string; activ
   ],
 };
 
+const INDEXES: Array<{ key: string }> = [
+  { key: 'companyUuid' },
+];
+
 /**
  * Generates 2160 log lines spanning 3 days (2024-01-13 to 2024-01-15).
  *
@@ -72,12 +76,12 @@ function generateLogLines(source: string): string[] {
       for (let i = 0; i < 20; i++) {
         const mm = Math.floor((i / 20) * 60).toString().padStart(2, '0');
         const ss = ((i * 3) % 60).toString().padStart(2, '0');
-        lines.push(`${day}T${hh}:${mm}:${ss}Z INFO log entry ${lines.length + 1} from ${source}`);
+        lines.push(`${day}T${hh}:${mm}:${ss}Z [default/${source}/app] {"level":"INFO","companyUuid":"company-1","userUuid":"user-${i % 3}","message":"log entry ${lines.length + 1} from ${source}"}`);
       }
 
       // 10 burst lines – all share the same timestamp (simulates concurrent writes)
       for (let b = 0; b < 10; b++) {
-        lines.push(`${day}T${hh}:00:00Z INFO burst ${b + 1} from ${source}`);
+        lines.push(`${day}T${hh}:00:00Z [default/${source}/app] {"level":"INFO","companyUuid":"company-${(b % 2) + 1}","userUuid":"user-${b % 3}","message":"burst ${b + 1} from ${source}"}`);
       }
     }
   }
@@ -179,6 +183,34 @@ function routes(router: ConnectRouter) {
         yield { line: `2024-01-15T10:00:0${i}Z INFO live deployment line ${i + 1} from ${req.deployment}` };
         await new Promise<void>((resolve) => setTimeout(resolve, 200));
       }
+    },
+
+    listIndexes() {
+      return { indexes: INDEXES };
+    },
+
+    createIndex(req) {
+      if (!INDEXES.some((idx) => idx.key === req.key)) {
+        INDEXES.push({ key: req.key });
+      }
+      return { index: { key: req.key } };
+    },
+
+    getIndexLogs(req) {
+      for (const pods of Object.values(PODS)) {
+        for (const pod of pods) logLinesFor(pod.name);
+      }
+      for (const deployments of Object.values(DEPLOYMENTS)) {
+        for (const deployment of deployments) logLinesFor(deployment.name);
+      }
+      const matches = [...LOG_LINES.values()]
+        .flat()
+        .filter((line) => line.includes(`"${req.key}":"${req.value}"`));
+      return getPage(matches, {
+        loadLastPage: req.loadLastPage,
+        pageToken: req.pageToken,
+        pageSize: req.pageSize,
+      });
     },
   });
 }

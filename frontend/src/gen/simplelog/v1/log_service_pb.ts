@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file simplelog/v1/log_service.proto.
  */
 export const file_simplelog_v1_log_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch5zaW1wbGVsb2cvdjEvbG9nX3NlcnZpY2UucHJvdG8SDHNpbXBsZWxvZy52MSIXChVMaXN0TmFtZXNwYWNlc1JlcXVlc3QiLAoWTGlzdE5hbWVzcGFjZXNSZXNwb25zZRISCgpuYW1lc3BhY2VzGAEgAygJIiQKD0xpc3RQb2RzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkiUAoHUG9kSW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgSFAoManNvbl9sb2dnaW5nGAQgASgIIjcKEExpc3RQb2RzUmVzcG9uc2USIwoEcG9kcxgBIAMoCzIVLnNpbXBsZWxvZy52MS5Qb2RJbmZvIpUBCg5HZXRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSCwoDcG9kGAIgASgJEhIKCnN0YXJ0X3RpbWUYAyABKAMSEAoIZW5kX3RpbWUYBCABKAMSEQoJcGFnZV9zaXplGAUgASgFEhIKCnBhZ2VfdG9rZW4YBiABKAkSFgoObG9hZF9sYXN0X3BhZ2UYByABKAgiUgoPR2V0TG9nc1Jlc3BvbnNlEg0KBWxpbmVzGAEgAygJEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIXCg9wcmV2X3BhZ2VfdG9rZW4YAyABKAkiMwoRU3RyZWFtTG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCSIiChJTdHJlYW1Mb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCSIrChZMaXN0RGVwbG95bWVudHNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCSJXCg5EZXBsb3ltZW50SW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgSFAoManNvbl9sb2dnaW5nGAQgASgIIkwKF0xpc3REZXBsb3ltZW50c1Jlc3BvbnNlEjEKC2RlcGxveW1lbnRzGAEgAygLMhwuc2ltcGxlbG9nLnYxLkRlcGxveW1lbnRJbmZvIqYBChhHZXREZXBsb3ltZW50TG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEhIKCmRlcGxveW1lbnQYAiABKAkSEgoKc3RhcnRfdGltZRgDIAEoAxIQCghlbmRfdGltZRgEIAEoAxIRCglwYWdlX3NpemUYBSABKAUSEgoKcGFnZV90b2tlbhgGIAEoCRIWCg5sb2FkX2xhc3RfcGFnZRgHIAEoCCJcChlHZXREZXBsb3ltZW50TG9nc1Jlc3BvbnNlEg0KBWxpbmVzGAEgAygJEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIXCg9wcmV2X3BhZ2VfdG9rZW4YAyABKAkiRAobU3RyZWFtRGVwbG95bWVudExvZ3NSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRISCgpkZXBsb3ltZW50GAIgASgJIiwKHFN0cmVhbURlcGxveW1lbnRMb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCTKGBQoKTG9nU2VydmljZRJbCg5MaXN0TmFtZXNwYWNlcxIjLnNpbXBsZWxvZy52MS5MaXN0TmFtZXNwYWNlc1JlcXVlc3QaJC5zaW1wbGVsb2cudjEuTGlzdE5hbWVzcGFjZXNSZXNwb25zZRJJCghMaXN0UG9kcxIdLnNpbXBsZWxvZy52MS5MaXN0UG9kc1JlcXVlc3QaHi5zaW1wbGVsb2cudjEuTGlzdFBvZHNSZXNwb25zZRJGCgdHZXRMb2dzEhwuc2ltcGxlbG9nLnYxLkdldExvZ3NSZXF1ZXN0Gh0uc2ltcGxlbG9nLnYxLkdldExvZ3NSZXNwb25zZRJRCgpTdHJlYW1Mb2dzEh8uc2ltcGxlbG9nLnYxLlN0cmVhbUxvZ3NSZXF1ZXN0GiAuc2ltcGxlbG9nLnYxLlN0cmVhbUxvZ3NSZXNwb25zZTABEl4KD0xpc3REZXBsb3ltZW50cxIkLnNpbXBsZWxvZy52MS5MaXN0RGVwbG95bWVudHNSZXF1ZXN0GiUuc2ltcGxlbG9nLnYxLkxpc3REZXBsb3ltZW50c1Jlc3BvbnNlEmQKEUdldERlcGxveW1lbnRMb2dzEiYuc2ltcGxlbG9nLnYxLkdldERlcGxveW1lbnRMb2dzUmVxdWVzdBonLnNpbXBsZWxvZy52MS5HZXREZXBsb3ltZW50TG9nc1Jlc3BvbnNlEm8KFFN0cmVhbURlcGxveW1lbnRMb2dzEikuc2ltcGxlbG9nLnYxLlN0cmVhbURlcGxveW1lbnRMb2dzUmVxdWVzdBoqLnNpbXBsZWxvZy52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1Jlc3BvbnNlMAFCQFo+Z2l0aHViLmNvbS9sc3BhcmV5L3NpbXBsZS1sb2dnaW5nL2dlbi9zaW1wbGVsb2cvdjE7c2ltcGxlbG9ndjFiBnByb3RvMw");
+  fileDesc("Ch5zaW1wbGVsb2cvdjEvbG9nX3NlcnZpY2UucHJvdG8SDHNpbXBsZWxvZy52MSIXChVMaXN0TmFtZXNwYWNlc1JlcXVlc3QiLAoWTGlzdE5hbWVzcGFjZXNSZXNwb25zZRISCgpuYW1lc3BhY2VzGAEgAygJIiQKD0xpc3RQb2RzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkiUAoHUG9kSW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgSFAoManNvbl9sb2dnaW5nGAQgASgIIjcKEExpc3RQb2RzUmVzcG9uc2USIwoEcG9kcxgBIAMoCzIVLnNpbXBsZWxvZy52MS5Qb2RJbmZvIpUBCg5HZXRMb2dzUmVxdWVzdBIRCgluYW1lc3BhY2UYASABKAkSCwoDcG9kGAIgASgJEhIKCnN0YXJ0X3RpbWUYAyABKAMSEAoIZW5kX3RpbWUYBCABKAMSEQoJcGFnZV9zaXplGAUgASgFEhIKCnBhZ2VfdG9rZW4YBiABKAkSFgoObG9hZF9sYXN0X3BhZ2UYByABKAgiUgoPR2V0TG9nc1Jlc3BvbnNlEg0KBWxpbmVzGAEgAygJEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIXCg9wcmV2X3BhZ2VfdG9rZW4YAyABKAkiMwoRU3RyZWFtTG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEgsKA3BvZBgCIAEoCSIiChJTdHJlYW1Mb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCSIrChZMaXN0RGVwbG95bWVudHNSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCSJXCg5EZXBsb3ltZW50SW5mbxIMCgRuYW1lGAEgASgJEhEKCW5hbWVzcGFjZRgCIAEoCRIOCgZhY3RpdmUYAyABKAgSFAoManNvbl9sb2dnaW5nGAQgASgIIkwKF0xpc3REZXBsb3ltZW50c1Jlc3BvbnNlEjEKC2RlcGxveW1lbnRzGAEgAygLMhwuc2ltcGxlbG9nLnYxLkRlcGxveW1lbnRJbmZvIqYBChhHZXREZXBsb3ltZW50TG9nc1JlcXVlc3QSEQoJbmFtZXNwYWNlGAEgASgJEhIKCmRlcGxveW1lbnQYAiABKAkSEgoKc3RhcnRfdGltZRgDIAEoAxIQCghlbmRfdGltZRgEIAEoAxIRCglwYWdlX3NpemUYBSABKAUSEgoKcGFnZV90b2tlbhgGIAEoCRIWCg5sb2FkX2xhc3RfcGFnZRgHIAEoCCJcChlHZXREZXBsb3ltZW50TG9nc1Jlc3BvbnNlEg0KBWxpbmVzGAEgAygJEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIXCg9wcmV2X3BhZ2VfdG9rZW4YAyABKAkiRAobU3RyZWFtRGVwbG95bWVudExvZ3NSZXF1ZXN0EhEKCW5hbWVzcGFjZRgBIAEoCRISCgpkZXBsb3ltZW50GAIgASgJIiwKHFN0cmVhbURlcGxveW1lbnRMb2dzUmVzcG9uc2USDAoEbGluZRgBIAEoCSIUChJMaXN0SW5kZXhlc1JlcXVlc3QiGwoMTG9nSW5kZXhJbmZvEgsKA2tleRgBIAEoCSJCChNMaXN0SW5kZXhlc1Jlc3BvbnNlEisKB2luZGV4ZXMYASADKAsyGi5zaW1wbGVsb2cudjEuTG9nSW5kZXhJbmZvIiEKEkNyZWF0ZUluZGV4UmVxdWVzdBILCgNrZXkYASABKAkiQAoTQ3JlYXRlSW5kZXhSZXNwb25zZRIpCgVpbmRleBgBIAEoCzIaLnNpbXBsZWxvZy52MS5Mb2dJbmRleEluZm8icAoTR2V0SW5kZXhMb2dzUmVxdWVzdBILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkSFgoObG9hZF9sYXN0X3BhZ2UYBSABKAgiVwoUR2V0SW5kZXhMb2dzUmVzcG9uc2USDQoFbGluZXMYASADKAkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEhcKD3ByZXZfcGFnZV90b2tlbhgDIAEoCTKFBwoKTG9nU2VydmljZRJbCg5MaXN0TmFtZXNwYWNlcxIjLnNpbXBsZWxvZy52MS5MaXN0TmFtZXNwYWNlc1JlcXVlc3QaJC5zaW1wbGVsb2cudjEuTGlzdE5hbWVzcGFjZXNSZXNwb25zZRJJCghMaXN0UG9kcxIdLnNpbXBsZWxvZy52MS5MaXN0UG9kc1JlcXVlc3QaHi5zaW1wbGVsb2cudjEuTGlzdFBvZHNSZXNwb25zZRJGCgdHZXRMb2dzEhwuc2ltcGxlbG9nLnYxLkdldExvZ3NSZXF1ZXN0Gh0uc2ltcGxlbG9nLnYxLkdldExvZ3NSZXNwb25zZRJRCgpTdHJlYW1Mb2dzEh8uc2ltcGxlbG9nLnYxLlN0cmVhbUxvZ3NSZXF1ZXN0GiAuc2ltcGxlbG9nLnYxLlN0cmVhbUxvZ3NSZXNwb25zZTABEl4KD0xpc3REZXBsb3ltZW50cxIkLnNpbXBsZWxvZy52MS5MaXN0RGVwbG95bWVudHNSZXF1ZXN0GiUuc2ltcGxlbG9nLnYxLkxpc3REZXBsb3ltZW50c1Jlc3BvbnNlEmQKEUdldERlcGxveW1lbnRMb2dzEiYuc2ltcGxlbG9nLnYxLkdldERlcGxveW1lbnRMb2dzUmVxdWVzdBonLnNpbXBsZWxvZy52MS5HZXREZXBsb3ltZW50TG9nc1Jlc3BvbnNlEm8KFFN0cmVhbURlcGxveW1lbnRMb2dzEikuc2ltcGxlbG9nLnYxLlN0cmVhbURlcGxveW1lbnRMb2dzUmVxdWVzdBoqLnNpbXBsZWxvZy52MS5TdHJlYW1EZXBsb3ltZW50TG9nc1Jlc3BvbnNlMAESUgoLTGlzdEluZGV4ZXMSIC5zaW1wbGVsb2cudjEuTGlzdEluZGV4ZXNSZXF1ZXN0GiEuc2ltcGxlbG9nLnYxLkxpc3RJbmRleGVzUmVzcG9uc2USUgoLQ3JlYXRlSW5kZXgSIC5zaW1wbGVsb2cudjEuQ3JlYXRlSW5kZXhSZXF1ZXN0GiEuc2ltcGxlbG9nLnYxLkNyZWF0ZUluZGV4UmVzcG9uc2USVQoMR2V0SW5kZXhMb2dzEiEuc2ltcGxlbG9nLnYxLkdldEluZGV4TG9nc1JlcXVlc3QaIi5zaW1wbGVsb2cudjEuR2V0SW5kZXhMb2dzUmVzcG9uc2VCQFo+Z2l0aHViLmNvbS9sc3BhcmV5L3NpbXBsZS1sb2dnaW5nL2dlbi9zaW1wbGVsb2cvdjE7c2ltcGxlbG9ndjFiBnByb3RvMw");
 
 /**
  * @generated from message simplelog.v1.ListNamespacesRequest
@@ -450,6 +450,158 @@ export const StreamDeploymentLogsResponseSchema: GenMessage<StreamDeploymentLogs
   messageDesc(file_simplelog_v1_log_service, 15);
 
 /**
+ * @generated from message simplelog.v1.ListIndexesRequest
+ */
+export type ListIndexesRequest = Message<"simplelog.v1.ListIndexesRequest"> & {
+};
+
+/**
+ * Describes the message simplelog.v1.ListIndexesRequest.
+ * Use `create(ListIndexesRequestSchema)` to create a new message.
+ */
+export const ListIndexesRequestSchema: GenMessage<ListIndexesRequest> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 16);
+
+/**
+ * @generated from message simplelog.v1.LogIndexInfo
+ */
+export type LogIndexInfo = Message<"simplelog.v1.LogIndexInfo"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+};
+
+/**
+ * Describes the message simplelog.v1.LogIndexInfo.
+ * Use `create(LogIndexInfoSchema)` to create a new message.
+ */
+export const LogIndexInfoSchema: GenMessage<LogIndexInfo> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 17);
+
+/**
+ * @generated from message simplelog.v1.ListIndexesResponse
+ */
+export type ListIndexesResponse = Message<"simplelog.v1.ListIndexesResponse"> & {
+  /**
+   * @generated from field: repeated simplelog.v1.LogIndexInfo indexes = 1;
+   */
+  indexes: LogIndexInfo[];
+};
+
+/**
+ * Describes the message simplelog.v1.ListIndexesResponse.
+ * Use `create(ListIndexesResponseSchema)` to create a new message.
+ */
+export const ListIndexesResponseSchema: GenMessage<ListIndexesResponse> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 18);
+
+/**
+ * @generated from message simplelog.v1.CreateIndexRequest
+ */
+export type CreateIndexRequest = Message<"simplelog.v1.CreateIndexRequest"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+};
+
+/**
+ * Describes the message simplelog.v1.CreateIndexRequest.
+ * Use `create(CreateIndexRequestSchema)` to create a new message.
+ */
+export const CreateIndexRequestSchema: GenMessage<CreateIndexRequest> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 19);
+
+/**
+ * @generated from message simplelog.v1.CreateIndexResponse
+ */
+export type CreateIndexResponse = Message<"simplelog.v1.CreateIndexResponse"> & {
+  /**
+   * @generated from field: simplelog.v1.LogIndexInfo index = 1;
+   */
+  index?: LogIndexInfo | undefined;
+};
+
+/**
+ * Describes the message simplelog.v1.CreateIndexResponse.
+ * Use `create(CreateIndexResponseSchema)` to create a new message.
+ */
+export const CreateIndexResponseSchema: GenMessage<CreateIndexResponse> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 20);
+
+/**
+ * @generated from message simplelog.v1.GetIndexLogsRequest
+ */
+export type GetIndexLogsRequest = Message<"simplelog.v1.GetIndexLogsRequest"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string value = 2;
+   */
+  value: string;
+
+  /**
+   * page_size is the maximum number of log lines to return.
+   * Defaults to 200 if unset or 0; capped at a server-defined maximum.
+   *
+   * @generated from field: int32 page_size = 3;
+   */
+  pageSize: number;
+
+  /**
+   * page_token is an opaque cursor returned by a previous GetIndexLogs call.
+   *
+   * @generated from field: string page_token = 4;
+   */
+  pageToken: string;
+
+  /**
+   * load_last_page, when true, returns the last page of matching logs.
+   *
+   * @generated from field: bool load_last_page = 5;
+   */
+  loadLastPage: boolean;
+};
+
+/**
+ * Describes the message simplelog.v1.GetIndexLogsRequest.
+ * Use `create(GetIndexLogsRequestSchema)` to create a new message.
+ */
+export const GetIndexLogsRequestSchema: GenMessage<GetIndexLogsRequest> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 21);
+
+/**
+ * @generated from message simplelog.v1.GetIndexLogsResponse
+ */
+export type GetIndexLogsResponse = Message<"simplelog.v1.GetIndexLogsResponse"> & {
+  /**
+   * @generated from field: repeated string lines = 1;
+   */
+  lines: string[];
+
+  /**
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
+
+  /**
+   * @generated from field: string prev_page_token = 3;
+   */
+  prevPageToken: string;
+};
+
+/**
+ * Describes the message simplelog.v1.GetIndexLogsResponse.
+ * Use `create(GetIndexLogsResponseSchema)` to create a new message.
+ */
+export const GetIndexLogsResponseSchema: GenMessage<GetIndexLogsResponse> = /*@__PURE__*/
+  messageDesc(file_simplelog_v1_log_service, 22);
+
+/**
  * LogService exposes pod log data collected by simple-logging to frontend
  * clients over gRPC-Web.
  *
@@ -532,6 +684,36 @@ export const LogService: GenService<{
     methodKind: "server_streaming";
     input: typeof StreamDeploymentLogsRequestSchema;
     output: typeof StreamDeploymentLogsResponseSchema;
+  },
+  /**
+   * ListIndexes returns all JSON log indexes configured on disk.
+   *
+   * @generated from rpc simplelog.v1.LogService.ListIndexes
+   */
+  listIndexes: {
+    methodKind: "unary";
+    input: typeof ListIndexesRequestSchema;
+    output: typeof ListIndexesResponseSchema;
+  },
+  /**
+   * CreateIndex creates a JSON key index and backfills it from existing pod logs.
+   *
+   * @generated from rpc simplelog.v1.LogService.CreateIndex
+   */
+  createIndex: {
+    methodKind: "unary";
+    input: typeof CreateIndexRequestSchema;
+    output: typeof CreateIndexResponseSchema;
+  },
+  /**
+   * GetIndexLogs returns log lines whose indexed JSON key matches the value.
+   *
+   * @generated from rpc simplelog.v1.LogService.GetIndexLogs
+   */
+  getIndexLogs: {
+    methodKind: "unary";
+    input: typeof GetIndexLogsRequestSchema;
+    output: typeof GetIndexLogsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_simplelog_v1_log_service, 0);

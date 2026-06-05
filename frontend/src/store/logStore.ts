@@ -19,6 +19,16 @@ interface LogStore {
   selectedDeployment: string | null;
   setSelectedDeployment: (namespace: string, deployment: string, jsonLogging?: boolean) => void;
 
+  // Index selection (mutually exclusive with pod/deployment selection)
+  selectedIndexKey: string | null;
+  selectedIndexValue: string;
+  enterIndexMode: () => void;
+  leaveIndexMode: () => void;
+  setSelectedIndex: (key: string) => void;
+  setSelectedIndexValue: (value: string) => void;
+  indexListVersion: number;
+  refreshIndexList: () => void;
+
   // Whether the currently selected pod/deployment uses JSON log formatting
   jsonLogging: boolean;
   // Update jsonLogging without changing the current selection (used by live polling)
@@ -86,6 +96,8 @@ export const useLogStore = create<LogStore>((set) => ({
       selectedNamespace: namespace,
       selectedPod: pod,
       selectedDeployment: null,
+      selectedIndexKey: null,
+      selectedIndexValue: '',
       jsonLogging,
       mode: 'loading',
       lines: [],
@@ -104,6 +116,8 @@ export const useLogStore = create<LogStore>((set) => ({
       selectedNamespace: namespace,
       selectedPod: null,
       selectedDeployment: deployment,
+      selectedIndexKey: null,
+      selectedIndexValue: '',
       jsonLogging,
       mode: 'loading',
       lines: [],
@@ -115,6 +129,67 @@ export const useLogStore = create<LogStore>((set) => ({
       visibleTimestamp: 0,
       selectionKey: s.selectionKey + 1,
     })),
+
+  selectedIndexKey: null,
+  selectedIndexValue: '',
+  indexListVersion: 0,
+  enterIndexMode: () =>
+    set((s) => ({
+      selectedNamespace: null,
+      selectedPod: null,
+      selectedDeployment: null,
+      selectedIndexKey: '',
+      selectedIndexValue: '',
+      jsonLogging: false,
+      mode: 'idle',
+      lines: [],
+      prevPageToken: '',
+      nextPageToken: '',
+      searchText: '',
+      startTime: 0,
+      endTime: 0,
+      visibleTimestamp: 0,
+      selectionKey: s.selectionKey + 1,
+    })),
+  leaveIndexMode: () =>
+    set({
+      selectedIndexKey: null,
+      selectedIndexValue: '',
+      lines: [],
+      prevPageToken: '',
+      nextPageToken: '',
+      searchText: '',
+      visibleTimestamp: 0,
+    }),
+  setSelectedIndex: (key) =>
+    set((s) => ({
+      selectedNamespace: null,
+      selectedPod: null,
+      selectedDeployment: null,
+      selectedIndexKey: key,
+      selectedIndexValue: '',
+      jsonLogging: false,
+      mode: 'idle',
+      lines: [],
+      prevPageToken: '',
+      nextPageToken: '',
+      searchText: '',
+      startTime: 0,
+      endTime: 0,
+      visibleTimestamp: 0,
+      selectionKey: s.selectionKey + 1,
+    })),
+  setSelectedIndexValue: (value) =>
+    set({
+      selectedIndexValue: value,
+      mode: value ? 'loading' : 'idle',
+      lines: [],
+      prevPageToken: '',
+      nextPageToken: '',
+      searchText: '',
+      visibleTimestamp: 0,
+    }),
+  refreshIndexList: () => set((s) => ({ indexListVersion: s.indexListVersion + 1 })),
 
   mode: 'idle',
   setMode: (mode) => set({ mode }),

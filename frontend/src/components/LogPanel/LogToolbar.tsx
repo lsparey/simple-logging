@@ -7,6 +7,7 @@ import Chip from '@mui/material/Chip';
 import { useLogStore, makeFormatKey } from '../../store/logStore.js';
 import JsonFormatModal from './JsonFormatModal.js';
 import LogHistogram from './LogHistogram.js';
+import { candidateJsonKeys } from '../../utils/jsonKeys.js';
 
 interface Props {
   namespace: string;
@@ -26,41 +27,7 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
 
   const label = deployment ? deployment : pod;
 
-  // Extract JSON property keys that appear in every sampled JSON log line.
-  // Sampling up to 100 lines keeps this cheap even for large buffers.
-  const candidateKeys = useMemo(() => {
-    const SAMPLE = 100;
-    const PREFIX_JSON_RE = /^(\S+) \[\S+\] ([\s\S]*)$/;
-    const keyCounts = new Map<string, number>();
-    let jsonLineCount = 0;
-
-    const sample = lines.length > SAMPLE
-      ? lines.slice(0, Math.ceil(SAMPLE / 2)).concat(lines.slice(-Math.floor(SAMPLE / 2)))
-      : lines;
-
-    for (const line of sample) {
-      const m = PREFIX_JSON_RE.exec(line);
-      const payload = m ? m[2] : line;
-      const trimmed = payload.trimStart();
-      if (trimmed[0] !== '{') continue;
-      try {
-        const obj = JSON.parse(trimmed) as Record<string, unknown>;
-        if (obj === null || typeof obj !== 'object') continue;
-        jsonLineCount++;
-        for (const key of Object.keys(obj)) {
-          keyCounts.set(key, (keyCounts.get(key) ?? 0) + 1);
-        }
-      } catch { /* not json */ }
-    }
-
-    if (jsonLineCount === 0) return [];
-
-    // Keep keys that appear in every parsed JSON line, sorted alphabetically.
-    return [...keyCounts.entries()]
-      .filter(([, count]) => count === jsonLineCount)
-      .map(([key]) => key)
-      .sort();
-  }, [lines]);
+  const candidateKeys = useMemo(() => candidateJsonKeys(lines), [lines]);
 
   return (
     <>

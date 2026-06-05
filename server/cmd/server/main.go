@@ -15,6 +15,7 @@ import (
 	"github.com/lsparey/simple-logging/internal/api"
 	"github.com/lsparey/simple-logging/internal/collector"
 	"github.com/lsparey/simple-logging/internal/config"
+	"github.com/lsparey/simple-logging/internal/indexes"
 	"github.com/lsparey/simple-logging/internal/k8s"
 	"github.com/lsparey/simple-logging/internal/storage"
 )
@@ -60,8 +61,9 @@ func main() {
 		log.Fatal("failed to create kubernetes clientset", zap.Error(err))
 	}
 
-	// ── Phase 5/6: Log Collector & FileWriter ────────────────────────────────
-	coll := collector.New(cs, cfg.LogsRoot, cfg.NodeLogsRoot, log)
+	// ── Phase 5/6: Log Collector, Indexes & FileWriter ───────────────────────
+	indexManager := indexes.NewManager(cfg.LogsRoot)
+	coll := collector.NewWithIndexes(cs, cfg.LogsRoot, cfg.NodeLogsRoot, log, indexManager)
 
 	watcher, err := k8s.NewPodWatcher(cs, k8s.PodEventHandler{
 		OnAdd:    coll.OnAdd,
@@ -85,7 +87,7 @@ func main() {
 	go retention.Run(ctx)
 
 	// ── Phase 8/9: gRPC Service & gRPC-Web Server ───────────────────
-	svc := api.NewLogService(cfg.LogsRoot, coll, coll, coll)
+	svc := api.NewLogServiceWithIndexes(cfg.LogsRoot, coll, coll, coll, indexManager)
 	srv := api.NewServer(cfg.GRPCWebPort, svc, cfg.RESTDebugEnabled, log)
 
 	serverErr := make(chan error, 1)

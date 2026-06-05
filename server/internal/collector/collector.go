@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/lsparey/simple-logging/internal/indexes"
 	"github.com/lsparey/simple-logging/internal/storage"
 )
 
@@ -56,6 +57,8 @@ type Collector struct {
 
 	// jsonLogging tracks which pods have been determined to use JSON log formatting.
 	jsonLogging map[podKey]bool
+
+	indexes *indexes.Manager
 }
 
 // New creates a Collector that writes pod logs to files under logsRoot.
@@ -63,6 +66,11 @@ type Collector struct {
 // the collector tails log files directly from the node filesystem instead of
 // using the Kubernetes log-streaming API.
 func New(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger) *Collector {
+	return NewWithIndexes(cs, logsRoot, nodeLogsRoot, log, indexes.NewManager(logsRoot))
+}
+
+// NewWithIndexes creates a Collector with a shared index manager.
+func NewWithIndexes(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger, indexManager *indexes.Manager) *Collector {
 	return &Collector{
 		cs:             cs,
 		logsRoot:       logsRoot,
@@ -72,6 +80,7 @@ func New(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger
 		deploymentPods: make(map[string]map[string]struct{}),
 		podDeployment:  make(map[string]string),
 		jsonLogging:    make(map[podKey]bool),
+		indexes:        indexManager,
 	}
 }
 
@@ -469,7 +478,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 				pod.Namespace, pod.Name, containerName,
 				logContent,
 			)
-			if werr := writer.Write(line); werr != nil {
+			if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, line); werr != nil {
 				log.Error("failed to write log line", zap.Error(werr))
 				_ = f.Close()
 				return
@@ -629,7 +638,7 @@ func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, container
 			pod.Namespace, pod.Name, containerName,
 			rawLine,
 		)
-		if werr := writer.Write(line); werr != nil {
+		if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, line); werr != nil {
 			log.Error("failed to write log line", zap.Error(werr))
 			return
 		}
@@ -657,4 +666,14 @@ func isJSONLine(line string) bool {
 		return false
 	}
 	return json.Valid([]byte(trimmed))
+}
+
+func (c *Collector) writeLogLine(writer *storage.FileWriter, namespace, pod, line string) error {
+	if err := writer.Write(line); err != nil {
+		return err
+	}
+	if c.indexes != nil {
+		c.indexes.ObserveLine(namespace, pod, line)
+	}
+	return nil
 }

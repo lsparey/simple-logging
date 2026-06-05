@@ -26,6 +26,9 @@ const (
 	LogService_ListDeployments_FullMethodName      = "/simplelog.v1.LogService/ListDeployments"
 	LogService_GetDeploymentLogs_FullMethodName    = "/simplelog.v1.LogService/GetDeploymentLogs"
 	LogService_StreamDeploymentLogs_FullMethodName = "/simplelog.v1.LogService/StreamDeploymentLogs"
+	LogService_ListIndexes_FullMethodName          = "/simplelog.v1.LogService/ListIndexes"
+	LogService_CreateIndex_FullMethodName          = "/simplelog.v1.LogService/CreateIndex"
+	LogService_GetIndexLogs_FullMethodName         = "/simplelog.v1.LogService/GetIndexLogs"
 )
 
 // LogServiceClient is the client API for LogService service.
@@ -56,6 +59,12 @@ type LogServiceClient interface {
 	// merged log lines in real time. The stream stays open until the client
 	// cancels it.
 	StreamDeploymentLogs(ctx context.Context, in *StreamDeploymentLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDeploymentLogsResponse], error)
+	// ListIndexes returns all JSON log indexes configured on disk.
+	ListIndexes(ctx context.Context, in *ListIndexesRequest, opts ...grpc.CallOption) (*ListIndexesResponse, error)
+	// CreateIndex creates a JSON key index and backfills it from existing pod logs.
+	CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error)
+	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
+	GetIndexLogs(ctx context.Context, in *GetIndexLogsRequest, opts ...grpc.CallOption) (*GetIndexLogsResponse, error)
 }
 
 type logServiceClient struct {
@@ -154,6 +163,36 @@ func (c *logServiceClient) StreamDeploymentLogs(ctx context.Context, in *StreamD
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LogService_StreamDeploymentLogsClient = grpc.ServerStreamingClient[StreamDeploymentLogsResponse]
 
+func (c *logServiceClient) ListIndexes(ctx context.Context, in *ListIndexesRequest, opts ...grpc.CallOption) (*ListIndexesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListIndexesResponse)
+	err := c.cc.Invoke(ctx, LogService_ListIndexes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logServiceClient) CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateIndexResponse)
+	err := c.cc.Invoke(ctx, LogService_CreateIndex_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logServiceClient) GetIndexLogs(ctx context.Context, in *GetIndexLogsRequest, opts ...grpc.CallOption) (*GetIndexLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetIndexLogsResponse)
+	err := c.cc.Invoke(ctx, LogService_GetIndexLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // LogServiceServer is the server API for LogService service.
 // All implementations should embed UnimplementedLogServiceServer
 // for forward compatibility.
@@ -182,6 +221,12 @@ type LogServiceServer interface {
 	// merged log lines in real time. The stream stays open until the client
 	// cancels it.
 	StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error
+	// ListIndexes returns all JSON log indexes configured on disk.
+	ListIndexes(context.Context, *ListIndexesRequest) (*ListIndexesResponse, error)
+	// CreateIndex creates a JSON key index and backfills it from existing pod logs.
+	CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error)
+	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
+	GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error)
 }
 
 // UnimplementedLogServiceServer should be embedded to have
@@ -211,6 +256,15 @@ func (UnimplementedLogServiceServer) GetDeploymentLogs(context.Context, *GetDepl
 }
 func (UnimplementedLogServiceServer) StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamDeploymentLogs not implemented")
+}
+func (UnimplementedLogServiceServer) ListIndexes(context.Context, *ListIndexesRequest) (*ListIndexesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListIndexes not implemented")
+}
+func (UnimplementedLogServiceServer) CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateIndex not implemented")
+}
+func (UnimplementedLogServiceServer) GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetIndexLogs not implemented")
 }
 func (UnimplementedLogServiceServer) testEmbeddedByValue() {}
 
@@ -344,6 +398,60 @@ func _LogService_StreamDeploymentLogs_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LogService_StreamDeploymentLogsServer = grpc.ServerStreamingServer[StreamDeploymentLogsResponse]
 
+func _LogService_ListIndexes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListIndexesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).ListIndexes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_ListIndexes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).ListIndexes(ctx, req.(*ListIndexesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogService_CreateIndex_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateIndexRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).CreateIndex(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_CreateIndex_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).CreateIndex(ctx, req.(*CreateIndexRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogService_GetIndexLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetIndexLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).GetIndexLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_GetIndexLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).GetIndexLogs(ctx, req.(*GetIndexLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // LogService_ServiceDesc is the grpc.ServiceDesc for LogService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -370,6 +478,18 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDeploymentLogs",
 			Handler:    _LogService_GetDeploymentLogs_Handler,
+		},
+		{
+			MethodName: "ListIndexes",
+			Handler:    _LogService_ListIndexes_Handler,
+		},
+		{
+			MethodName: "CreateIndex",
+			Handler:    _LogService_CreateIndex_Handler,
+		},
+		{
+			MethodName: "GetIndexLogs",
+			Handler:    _LogService_GetIndexLogs_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
