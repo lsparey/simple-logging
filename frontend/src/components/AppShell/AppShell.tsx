@@ -8,12 +8,13 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import PodSidebar from '../PodSidebar/PodSidebar.js';
 import LogPanel from '../LogPanel/LogPanel.js';
+import IndexPanel from '../LogPanel/IndexPanel.js';
 import { useLogStore } from '../../store/logStore.js';
 
 const DRAWER_WIDTH = 260;
 
 export default function AppShell() {
-  const { darkMode, toggleDarkMode, selectionKey } = useLogStore();
+  const { darkMode, toggleDarkMode, selectionKey, selectedIndexKey } = useLogStore();
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -62,7 +63,7 @@ export default function AppShell() {
           overflow: 'hidden',
         }}
       >
-        <LogPanel key={selectionKey} />
+        {selectedIndexKey !== null ? <IndexPanel key={selectionKey} /> : <LogPanel key={selectionKey} />}
       </Box>
     </Box>
   );

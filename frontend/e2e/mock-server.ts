@@ -38,6 +38,32 @@ const DEPLOYMENTS: Record<string, Array<{ name: string; namespace: string; activ
   ],
 };
 
+const INDEXES: Array<{ key: string }> = [
+  { key: 'companyUuid' },
+];
+
+const INDEX_LOG_LINES = [
+  '2024-01-15T10:00:00Z [default/web-app-6d8c7f/app] {"level":"INFO","companyUuid":"company-1","userUuid":"user-1","message":"indexed web request"}',
+  '2024-01-15T10:00:01Z [default/api-server-5b4c9e/app] {"level":"INFO","companyUuid":"company-1","userUuid":"user-2","message":"indexed api request"}',
+  '2024-01-15T10:00:02Z [default/web-app-6d8c7f/app] {"level":"INFO","companyUuid":"company-2","userUuid":"user-1","message":"other company request"}',
+];
+
+function indexValues(key: string): Array<{ value: string; count: bigint }> {
+  const counts = new Map<string, number>();
+  for (const line of INDEX_LOG_LINES) {
+    const match = line.match(/\{.*\}$/);
+    if (!match) continue;
+    const parsed = JSON.parse(match[0]) as Record<string, unknown>;
+    const value = parsed[key];
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') continue;
+    const text = String(value);
+    counts.set(text, (counts.get(text) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort(([aValue, aCount], [bValue, bCount]) => bCount - aCount || aValue.localeCompare(bValue))
+    .map(([value, count]) => ({ value, count: BigInt(count) }));
+}
+
 /**
  * Generates 2160 log lines spanning 3 days (2024-01-13 to 2024-01-15).
  *
@@ -179,6 +205,39 @@ function routes(router: ConnectRouter) {
         yield { line: `2024-01-15T10:00:0${i}Z INFO live deployment line ${i + 1} from ${req.deployment}` };
         await new Promise<void>((resolve) => setTimeout(resolve, 200));
       }
+    },
+
+    listIndexes() {
+      return { indexes: INDEXES };
+    },
+
+    createIndex(req) {
+      if (!INDEXES.some((idx) => idx.key === req.key)) {
+        INDEXES.push({ key: req.key });
+      }
+      return { index: { key: req.key } };
+    },
+
+    deleteIndex(req) {
+      const idx = INDEXES.findIndex((index) => index.key === req.key);
+      if (idx >= 0) {
+        INDEXES.splice(idx, 1);
+      }
+      return {};
+    },
+
+    listIndexValues(req) {
+      return { values: indexValues(req.key) };
+    },
+
+    getIndexLogs(req) {
+      const matches = INDEX_LOG_LINES
+        .filter((line) => line.includes(`"${req.key}":"${req.value}"`));
+      return getPage(matches, {
+        loadLastPage: req.loadLastPage,
+        pageToken: req.pageToken,
+        pageSize: req.pageSize,
+      });
     },
   });
 }

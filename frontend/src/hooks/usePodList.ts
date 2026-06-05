@@ -9,7 +9,6 @@ export function usePodList(namespace: string | null) {
 
   useEffect(() => {
     if (!namespace) {
-      setPods([]);
       return;
     }
     let cancelled = false;
@@ -38,5 +37,5 @@ export function usePodList(namespace: string | null) {
     };
   }, [namespace]);
 
-  return { pods, loading, error };
+  return { pods: namespace ? pods : [], loading: namespace ? loading : false, error };
 }
