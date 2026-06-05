@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -56,6 +57,7 @@ export default function IndexPanel() {
   useIndexLogHistory(selectedIndexKey, selectedIndexValue || null);
   const filteredLines = useFilteredLines();
   const draftValue = valueDraft.key === (selectedIndexKey ?? '') ? valueDraft.value : selectedIndexValue;
+  const valueOptions = values.map((item) => item.value);
 
   function handleValueSubmit(e: FormEvent) {
     e.preventDefault();
@@ -130,18 +132,32 @@ export default function IndexPanel() {
         >
           Create Index
         </Button>
-        {selectedIndexKey && (
+        {selectedIndexKey && !selectedIndexValue && (
           <Box component="form" onSubmit={handleValueSubmit} sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
-            <TextField
-              size="small"
-              label="Value"
-              value={draftValue}
-              onChange={(e) => setValueDraft({ key: selectedIndexKey ?? '', value: e.target.value })}
+            <Autocomplete
+              freeSolo
+              options={valueOptions}
+              inputValue={draftValue}
+              getOptionLabel={(option) => previewValue(option)}
+              onInputChange={(_, value) => setValueDraft({ key: selectedIndexKey ?? '', value })}
+              renderOption={(props, option) => {
+                const { key, ...optionProps } = props;
+                return (
+                  <Box component="li" key={key} {...optionProps} sx={{ fontFamily: 'monospace' }}>
+                    {previewValue(option)}
+                  </Box>
+                );
+              }}
+              renderInput={(params) => <TextField {...params} size="small" label="Value" />}
               sx={{ minWidth: 180, flex: '0 1 320px' }}
             />
             <Button type="submit" size="small" variant="contained" disabled={!draftValue.trim()}>
-              Search
+              Go
             </Button>
+          </Box>
+        )}
+        {selectedIndexKey && selectedIndexValue && (
+          <Box sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
             <TextField
               size="small"
               placeholder="Filter results..."
@@ -179,10 +195,9 @@ export default function IndexPanel() {
                   divider
                   onClick={() => selectValue(item.value)}
                   sx={{ px: 2, py: 1 }}
-                >
+                  >
                   <ListItemText
                     primary={previewValue(item.value)}
-                    secondary={`${formatCount(item.count)} log ${item.count === 1n ? 'message' : 'messages'}`}
                     slotProps={{
                       primary: {
                         sx: {
