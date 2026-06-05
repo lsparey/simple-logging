@@ -9,7 +9,6 @@ export function useDeploymentList(namespace: string | null) {
 
   useEffect(() => {
     if (!namespace) {
-      setDeployments([]);
       return;
     }
     let cancelled = false;
@@ -38,5 +37,5 @@ export function useDeploymentList(namespace: string | null) {
     };
   }, [namespace]);
 
-  return { deployments, loading, error };
+  return { deployments: namespace ? deployments : [], loading: namespace ? loading : false, error };
 }

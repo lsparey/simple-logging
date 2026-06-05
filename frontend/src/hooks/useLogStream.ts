@@ -26,7 +26,7 @@ export function useLogStream(
     // of many log messages from the server results in a single React render
     // instead of one render per message (which would exceed React's nested
     // update limit with large bursts).
-    let buffer: string[] = [];
+    const buffer: string[] = [];
     let rafId: number | null = null;
 
     (async () => {

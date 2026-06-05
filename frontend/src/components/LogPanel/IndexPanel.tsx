@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import Box from '@mui/material/Box';
@@ -38,10 +38,6 @@ export default function IndexPanel() {
 
   useIndexLogHistory(selectedIndexKey, selectedIndexValue || null);
   const filteredLines = useFilteredLines();
-
-  useEffect(() => {
-    setValueDraft(selectedIndexValue);
-  }, [selectedIndexKey, selectedIndexValue]);
 
   function handleValueSubmit(e: FormEvent) {
     e.preventDefault();

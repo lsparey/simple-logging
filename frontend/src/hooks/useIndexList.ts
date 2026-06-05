@@ -21,7 +21,7 @@ export function useIndexList() {
   }, []);
 
   useEffect(() => {
-    reload();
+    void Promise.resolve().then(reload);
   }, [reload]);
 
   return { indexes, loading, error, reload };
