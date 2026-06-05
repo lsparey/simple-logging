@@ -1,18 +1,22 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
+import DeleteIcon from '@mui/icons-material/Delete';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useNavigate } from 'react-router-dom';
 import { logClient } from '../../grpc/client.js';
@@ -141,21 +145,33 @@ export default function IndexPanel() {
       >
         {selectedIndexKey ? (
           <>
-            <Button
-              size="small"
-              variant="outlined"
-              endIcon={<ArrowDropDownIcon />}
-              onClick={(e) => setActionsAnchor(e.currentTarget)}
-            >
-              Index Actions
-            </Button>
+            <Tooltip title="Index actions">
+              <IconButton
+                aria-label="Index actions"
+                size="small"
+                color="primary"
+                onClick={(e) => setActionsAnchor(e.currentTarget)}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Menu
               anchorEl={actionsAnchor}
               open={Boolean(actionsAnchor)}
               onClose={() => setActionsAnchor(null)}
             >
-              <MenuItem onClick={openCreateDialog}>Create another index</MenuItem>
-              <MenuItem onClick={deleteSelectedIndex}>Delete index</MenuItem>
+              <MenuItem onClick={openCreateDialog} sx={{ fontSize: '0.8125rem' }}>
+                <ListItemIcon sx={{ minWidth: 30 }}>
+                  <AddIcon fontSize="small" />
+                </ListItemIcon>
+                Create another index
+              </MenuItem>
+              <MenuItem onClick={deleteSelectedIndex} sx={{ fontSize: '0.8125rem' }}>
+                <ListItemIcon sx={{ minWidth: 30 }}>
+                  <DeleteIcon fontSize="small" />
+                </ListItemIcon>
+                Delete index
+              </MenuItem>
             </Menu>
           </>
         ) : (
