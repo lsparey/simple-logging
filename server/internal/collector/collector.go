@@ -21,9 +21,36 @@ import (
 	"github.com/lsparey/simple-logging/internal/storage"
 )
 
-// jsonProbeLines is the number of non-empty log lines to sample before
-// deciding whether a pod's output is JSON-formatted.
-const jsonProbeLines = 5
+const (
+	// jsonProbeLines is the maximum number of non-empty log lines to sample.
+	jsonProbeLines = 10
+	// jsonRequiredMatches allows startup chatter before structured logs begin.
+	jsonRequiredMatches = 5
+)
+
+type jsonProbe struct {
+	samples int
+	matches int
+}
+
+func (p *jsonProbe) observe(line string) (decided, isJSON bool) {
+	if strings.TrimSpace(line) == "" {
+		return false, false
+	}
+
+	p.samples++
+	if isJSONLine(line) {
+		p.matches++
+	}
+
+	if p.matches >= jsonRequiredMatches {
+		return true, true
+	}
+	if p.samples >= jsonProbeLines {
+		return true, false
+	}
+	return false, false
+}
 
 type podKey struct {
 	namespace string
@@ -113,8 +140,8 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 }
 
 // detectJsonFromFile scans the first jsonProbeLines non-empty lines of the pod's
-// stored log file and immediately marks the pod as JSON-logging if they are all
-// valid JSON objects. This provides an instant result on server restarts before
+// stored log file and marks the pod as JSON-logging once enough valid JSON
+// objects are found. This provides an instant result on server restarts before
 // the live stream has had a chance to deliver enough lines.
 func (c *Collector) detectJsonFromFile(namespace, podName string) {
 	path := filepath.Join(c.logsRoot, namespace, podName+".log")
@@ -126,25 +153,19 @@ func (c *Collector) detectJsonFromFile(namespace, podName string) {
 
 	// Lines in the file have the prefix: "TIMESTAMP [ns/pod/container] <rawLog>"
 	// Strip up to and including the first "] " to recover the original log line.
-	samples, matches := 0, 0
+	var probe jsonProbe
 	scanner := bufio.NewScanner(f)
-	for scanner.Scan() && samples < jsonProbeLines {
+	for scanner.Scan() && probe.samples < jsonProbeLines {
 		line := scanner.Text()
 		idx := strings.Index(line, "] ")
 		if idx < 0 {
 			continue
 		}
 		payload := line[idx+2:]
-		if strings.TrimSpace(payload) == "" {
-			continue
+		if decided, isJSON := probe.observe(payload); decided {
+			c.setJsonLogging(namespace, podName, isJSON)
+			return
 		}
-		samples++
-		if isJSONLine(payload) {
-			matches++
-		}
-	}
-	if samples >= jsonProbeLines && matches == samples {
-		c.setJsonLogging(namespace, podName, true)
 	}
 }
 
@@ -333,7 +354,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 	seekToEnd := writer.HasContent()
 
 	var partial strings.Builder
-	jsonSamples, jsonMatches := 0, 0
+	var probe jsonProbe
 	jsonDecided := false
 
 	// Create a single fsnotify watcher shared across all files for this pod.
@@ -462,14 +483,10 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 			}
 
 			// Probe the first jsonProbeLines non-empty lines to detect JSON logging.
-			if !jsonDecided && strings.TrimSpace(logContent) != "" {
-				jsonSamples++
-				if isJSONLine(logContent) {
-					jsonMatches++
-				}
-				if jsonSamples >= jsonProbeLines {
+			if !jsonDecided {
+				if decided, isJSON := probe.observe(logContent); decided {
 					jsonDecided = true
-					c.setJsonLogging(pod.Namespace, pod.Name, jsonMatches == jsonSamples)
+					c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
 				}
 			}
 
@@ -614,22 +631,17 @@ func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, container
 	log.Info("log stream started")
 
 	scanner := bufio.NewScanner(stream)
-	jsonSamples := 0
-	jsonMatches := 0
+	var probe jsonProbe
 	jsonDecided := false
 
 	for scanner.Scan() {
 		rawLine := scanner.Text()
 
 		// Probe the first jsonProbeLines non-empty lines to detect JSON logging.
-		if !jsonDecided && strings.TrimSpace(rawLine) != "" {
-			jsonSamples++
-			if isJSONLine(rawLine) {
-				jsonMatches++
-			}
-			if jsonSamples >= jsonProbeLines {
+		if !jsonDecided {
+			if decided, isJSON := probe.observe(rawLine); decided {
 				jsonDecided = true
-				c.setJsonLogging(pod.Namespace, pod.Name, jsonMatches == jsonSamples)
+				c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
 			}
 		}
 
