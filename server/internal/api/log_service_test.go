@@ -116,6 +116,43 @@ func TestListPods_UnknownNamespace(t *testing.T) {
 	}
 }
 
+// ── ListLogFiles ─────────────────────────────────────────────────────────────
+
+func TestListLogFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeLogFile(t, dir, "default", "pod-a", []string{"alpha"})
+	writeLogFile(t, dir, "monitoring", "pod-b", []string{"bravo", "charlie"})
+	if err := os.WriteFile(filepath.Join(dir, "default", "index.json"), []byte("ignored"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	if err != nil {
+		t.Fatalf("ListLogFiles: %v", err)
+	}
+
+	if len(resp.Files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(resp.Files))
+	}
+
+	var summedSize int64
+	byPath := make(map[string]*pb.LogFileInfo)
+	for _, file := range resp.Files {
+		byPath[file.Namespace+"/"+file.Name] = file
+		summedSize += file.SizeBytes
+	}
+	if byPath["default/pod-a.log"] == nil {
+		t.Error("missing default/pod-a.log")
+	}
+	if byPath["monitoring/pod-b.log"] == nil {
+		t.Error("missing monitoring/pod-b.log")
+	}
+	if resp.TotalSizeBytes != summedSize {
+		t.Errorf("total size = %d, want %d", resp.TotalSizeBytes, summedSize)
+	}
+}
+
 // ── GetLogs ───────────────────────────────────────────────────────────────────
 
 func TestGetLogs_Basic(t *testing.T) {

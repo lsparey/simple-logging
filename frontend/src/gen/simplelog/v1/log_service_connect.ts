@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
+import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListLogFilesRequest, ListLogFilesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -98,6 +98,17 @@ export const LogService = {
       I: StreamDeploymentLogsRequest,
       O: StreamDeploymentLogsResponse,
       kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * ListLogFiles returns every persisted pod log file and its size.
+     *
+     * @generated from rpc simplelog.v1.LogService.ListLogFiles
+     */
+    listLogFiles: {
+      name: "ListLogFiles",
+      I: ListLogFilesRequest,
+      O: ListLogFilesResponse,
+      kind: MethodKind.Unary,
     },
     /**
      * ListIndexes returns all JSON log indexes configured on disk.

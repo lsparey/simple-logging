@@ -115,6 +115,52 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 	return &pb.ListPodsResponse{Pods: pods}, nil
 }
 
+// ListLogFiles returns metadata for every persisted pod log file.
+func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) (*pb.ListLogFilesResponse, error) {
+	namespaceEntries, err := os.ReadDir(s.logsRoot)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read logs root: %v", err)
+	}
+
+	var files []*pb.LogFileInfo
+	var totalSize int64
+	for _, namespaceEntry := range namespaceEntries {
+		if !namespaceEntry.IsDir() || strings.HasPrefix(namespaceEntry.Name(), ".") {
+			continue
+		}
+
+		namespace := namespaceEntry.Name()
+		entries, err := os.ReadDir(filepath.Join(s.logsRoot, namespace))
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "read namespace dir %q: %v", namespace, err)
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+				continue
+			}
+
+			info, err := entry.Info()
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "stat log file %q: %v", entry.Name(), err)
+			}
+
+			size := info.Size()
+			files = append(files, &pb.LogFileInfo{
+				Namespace: namespace,
+				Name:      entry.Name(),
+				SizeBytes: size,
+			})
+			totalSize += size
+		}
+	}
+
+	return &pb.ListLogFilesResponse{
+		Files:          files,
+		TotalSizeBytes: totalSize,
+	}, nil
+}
+
 // encodeOffsetToken encodes a byte offset as a base64 8-byte big-endian token.
 func encodeOffsetToken(offset int64) string {
 	b := make([]byte, 8)

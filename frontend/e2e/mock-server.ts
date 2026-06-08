@@ -42,6 +42,12 @@ const INDEXES: Array<{ key: string }> = [
   { key: 'companyUuid' },
 ];
 
+const LOG_FILES = [
+  { namespace: 'default', name: 'web-app-6d8c7f.log', sizeBytes: 1536n },
+  { namespace: 'default', name: 'api-server-5b4c9e.log', sizeBytes: 2048n },
+  { namespace: 'kube-system', name: 'coredns-7d4f8b.log', sizeBytes: 512n },
+];
+
 const INDEX_LOG_LINES = [
   '2024-01-15T10:00:00Z [default/web-app-6d8c7f/app] {"level":"INFO","companyUuid":"company-1","userUuid":"user-1","message":"indexed web request"}',
   '2024-01-15T10:00:01Z [default/api-server-5b4c9e/app] {"level":"INFO","companyUuid":"company-1","userUuid":"user-2","message":"indexed api request"}',
@@ -205,6 +211,13 @@ function routes(router: ConnectRouter) {
         yield { line: `2024-01-15T10:00:0${i}Z INFO live deployment line ${i + 1} from ${req.deployment}` };
         await new Promise<void>((resolve) => setTimeout(resolve, 200));
       }
+    },
+
+    listLogFiles() {
+      return {
+        files: LOG_FILES,
+        totalSizeBytes: LOG_FILES.reduce((total, file) => total + file.sizeBytes, 0n),
+      };
     },
 
     listIndexes() {
