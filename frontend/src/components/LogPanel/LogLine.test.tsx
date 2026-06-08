@@ -11,6 +11,15 @@ function renderLine(line: string, darkMode = false, jsonFormat?: JsonFormat) {
   return render(<LogLine line={line} darkMode={darkMode} jsonFormat={jsonFormat} />);
 }
 
+function expectColor(element: Element | null, color: string) {
+  expect(element).not.toBeNull();
+  if (color === 'inherit') {
+    expect((element as HTMLElement).style.color).toBe('inherit');
+    return;
+  }
+  expect(element).toHaveStyle({ color });
+}
+
 // ---------------------------------------------------------------------------
 // Plain log lines
 // ---------------------------------------------------------------------------
@@ -131,5 +140,46 @@ describe('LogLine — JSON formatting', () => {
 
     expect(container.querySelector('[data-json-field="timestamp"]')).toHaveStyle({ color: '#57606a' });
     expect(container.querySelector('[data-json-field="message"]')).toHaveStyle({ color: '#1f2328' });
+  });
+
+  it.each([
+    [10, '#6e7681'],
+    [20, '#6e7681'],
+    [30, 'inherit'],
+    [40, '#d29922'],
+    [50, '#f85149'],
+    [60, '#f85149'],
+  ])('maps Pino level %i while keeping the numeric label', (level, color) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"pino"}`;
+    const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
+    const levelElement = container.querySelector('[data-json-field="level"]');
+
+    expect(levelElement).toHaveTextContent(String(level));
+    expectColor(levelElement, color);
+  });
+
+  it.each([
+    [0, '#f85149'],
+    [1, '#d29922'],
+    [2, 'inherit'],
+    [5, '#6e7681'],
+    [6, '#6e7681'],
+  ])('maps Winston npm level %i', (level, color) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"winston"}`;
+    const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
+
+    expectColor(container.querySelector('[data-json-field="level"]'), color);
+  });
+
+  it.each([
+    [2, '#f85149'],
+    [4, '#d29922'],
+    [6, 'inherit'],
+    [7, '#6e7681'],
+  ])('maps syslog severity %i when the key identifies severity', (level, color) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] {"severity":${level},"message":"syslog"}`;
+    const { container } = renderLine(line, true, { levelKey: 'severity', messageKey: 'message' });
+
+    expectColor(container.querySelector('[data-json-field="level"]'), color);
   });
 });

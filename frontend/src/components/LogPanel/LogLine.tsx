@@ -145,6 +145,48 @@ const JSON_TIME_LIGHT = '#57606a';
 const JSON_DIM_DARK = '#484f58';
 const JSON_DIM_LIGHT = '#8c959f';
 
+function numericLevelName(value: number, key: string): string | null {
+  // Pino and Bunyan use ascending multiples of ten.
+  if (value >= 60) return 'FATAL';
+  if (value >= 50) return 'ERROR';
+  if (value >= 40) return 'WARN';
+  if (value >= 30) return 'INFO';
+  if (value >= 20) return 'DEBUG';
+  if (value >= 10) return 'TRACE';
+
+  const normalizedKey = key.toLowerCase();
+  const usesSyslogLevels = normalizedKey.includes('severity')
+    || normalizedKey.includes('syslog')
+    || normalizedKey.includes('priority');
+
+  if (usesSyslogLevels) {
+    if (value <= 3) return 'ERROR';
+    if (value === 4) return 'WARN';
+    if (value <= 6) return 'INFO';
+    if (value === 7) return 'DEBUG';
+    return null;
+  }
+
+  // Winston's default npm priorities: error, warn, info, http, verbose,
+  // debug, silly. Keep informational/verbose levels readable and de-emphasize
+  // debug/silly using the existing DEBUG palette.
+  if (value === 0) return 'ERROR';
+  if (value === 1) return 'WARN';
+  if (value >= 2 && value <= 4) return 'INFO';
+  if (value === 5 || value === 6) return 'DEBUG';
+  return null;
+}
+
+function levelColour(value: unknown, key: string, palette: Record<string, string>): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const name = numericLevelName(value, key);
+    return name ? (palette[name] ?? 'inherit') : 'inherit';
+  }
+
+  const name = String(value ?? '').toUpperCase();
+  return name ? (palette[name] ?? 'inherit') : 'inherit';
+}
+
 /** Format an ISO string or Unix timestamp (seconds or ms) to a short local datetime. */
 function formatJsonTimestamp(value: unknown): string {
   if (value === undefined || value === null || value === '') return '';
@@ -185,11 +227,14 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
       try {
         const obj = JSON.parse(stripped) as Record<string, unknown>;
         if (obj !== null && typeof obj === 'object') {
-          const level = jsonFormat.levelKey ? String(obj[jsonFormat.levelKey] ?? '').toUpperCase() : '';
+          const levelValue = jsonFormat.levelKey ? obj[jsonFormat.levelKey] : '';
+          const level = String(levelValue ?? '').toUpperCase();
           const msg = jsonFormat.messageKey ? String(obj[jsonFormat.messageKey] ?? '') : '';
-          const levelColour = level ? (palette[level] ?? 'inherit') : 'inherit';
+          const resolvedLevelColour = jsonFormat.levelKey
+            ? levelColour(levelValue, jsonFormat.levelKey, palette)
+            : 'inherit';
           const ts = jsonFormat.timestampKey ? formatJsonTimestamp(obj[jsonFormat.timestampKey]) : '';
-          jsonParsed = { ts, level, levelColour, msg, raw: stripped };
+          jsonParsed = { ts, level, levelColour: resolvedLevelColour, msg, raw: stripped };
         }
       } catch { /* not JSON */ }
     }
@@ -254,7 +299,10 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
             </span>
           )}
           {jsonParsed.level && (
-            <span style={{ color: jsonParsed.levelColour, fontWeight: 600 }}>
+            <span
+              data-json-field="level"
+              style={{ color: jsonParsed.levelColour, fontWeight: 600 }}
+            >
               {jsonParsed.level}{' '}
             </span>
           )}
