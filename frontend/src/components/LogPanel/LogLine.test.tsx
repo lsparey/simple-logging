@@ -1,13 +1,23 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import LogLine from './LogLine.js';
+import type { JsonFormat } from '../../store/logStore.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function renderLine(line: string, darkMode = false) {
-  return render(<LogLine line={line} darkMode={darkMode} />);
+function renderLine(line: string, darkMode = false, jsonFormat?: JsonFormat) {
+  return render(<LogLine line={line} darkMode={darkMode} jsonFormat={jsonFormat} />);
+}
+
+function expectColor(element: Element | null, color: string) {
+  expect(element).not.toBeNull();
+  if (color === 'inherit') {
+    expect((element as HTMLElement).style.color).toBe('inherit');
+    return;
+  }
+  expect(element).toHaveStyle({ color });
 }
 
 // ---------------------------------------------------------------------------
@@ -49,6 +59,19 @@ describe('LogLine — level colours', () => {
     const { container } = renderLine('2024-01-15T10:00:00Z WARN careful', false);
     const pre = container.querySelector('pre') as HTMLElement;
     expect(window.getComputedStyle(pre).color).toBe('rgb(154, 103, 0)'); // #9a6700
+  });
+
+  it('uses the configured info, trace, and debug colours', () => {
+    const { container: infoContainer } = renderLine('2024-01-15T10:00:00Z INFO ready', true);
+    const { container: traceContainer } = renderLine('2024-01-15T10:00:00Z TRACE request', true);
+    const { container: debugContainer } = renderLine('2024-01-15T10:00:00Z DEBUG detail', true);
+
+    expect(window.getComputedStyle(infoContainer.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(63, 185, 80)'); // #3fb950
+    expect(window.getComputedStyle(traceContainer.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(88, 166, 255)'); // #58a6ff
+    expect(window.getComputedStyle(debugContainer.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(188, 140, 255)'); // #bc8cff
   });
 });
 
@@ -103,5 +126,103 @@ describe('LogLine — ANSI sequences', () => {
       (el) => (el as HTMLElement).style.fontWeight === 'bold',
     );
     expect(boldSpan).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JSON formatting
+// ---------------------------------------------------------------------------
+
+describe('LogLine — JSON formatting', () => {
+  const FORMAT: JsonFormat = {
+    timestampKey: 'timestamp',
+    levelKey: 'level',
+    messageKey: 'message',
+  };
+  const LINE = '2024-01-15T10:00:00Z [default/api/app] {"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"request complete"}';
+
+  it.each([
+    '{"level":"error","message":"raw string severity"}',
+    '{"level":50,"message":"raw numeric severity"}',
+  ])('keeps unformatted JSON on the normal foreground: %s', (payload) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] ${payload}`;
+    const { container } = renderLine(line, true);
+
+    expect(window.getComputedStyle(container.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(255, 255, 255)');
+  });
+
+  it('keeps unformatted JSON readable in light mode', () => {
+    const line = '2024-01-15T10:00:00Z [default/api/app] {"level":"error","message":"raw"}';
+    const { container } = renderLine(line, false);
+
+    expect(window.getComputedStyle(container.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(31, 35, 40)');
+  });
+
+  it('renders a muted timestamp and white message in dark mode', () => {
+    const { container } = renderLine(LINE, true, FORMAT);
+
+    expect(container.querySelector('[data-json-field="timestamp"]')).toHaveStyle({ color: '#8c959f' });
+    expect(container.querySelector('[data-json-field="message"]')).toHaveStyle({ color: '#ffffff' });
+  });
+
+  it('uses readable foreground colours in light mode', () => {
+    const { container } = renderLine(LINE, false, FORMAT);
+
+    expect(container.querySelector('[data-json-field="timestamp"]')).toHaveStyle({ color: '#57606a' });
+    expect(container.querySelector('[data-json-field="message"]')).toHaveStyle({ color: '#1f2328' });
+  });
+
+  it.each([
+    [10, '#58a6ff'],
+    [20, '#bc8cff'],
+    [30, '#3fb950'],
+    [40, '#d29922'],
+    [50, '#f85149'],
+    [60, '#ffffff'],
+  ])('maps Pino level %i while keeping the numeric label', (level, color) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"pino"}`;
+    const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
+    const levelElement = container.querySelector('[data-json-field="level"]');
+
+    expect(levelElement).toHaveTextContent(String(level));
+    expectColor(levelElement, color);
+  });
+
+  it.each([
+    [0, '#f85149'],
+    [1, '#d29922'],
+    [2, '#3fb950'],
+    [5, '#bc8cff'],
+    [6, '#bc8cff'],
+  ])('maps Winston npm level %i', (level, color) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"winston"}`;
+    const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
+
+    expectColor(container.querySelector('[data-json-field="level"]'), color);
+  });
+
+  it.each([
+    [2, '#f85149'],
+    [4, '#d29922'],
+    [6, '#3fb950'],
+    [7, '#bc8cff'],
+  ])('maps syslog severity %i when the key identifies severity', (level, color) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] {"severity":${level},"message":"syslog"}`;
+    const { container } = renderLine(line, true, { levelKey: 'severity', messageKey: 'message' });
+
+    expectColor(container.querySelector('[data-json-field="level"]'), color);
+  });
+
+  it('renders fatal severity as white text on red like pino-pretty', () => {
+    const line = '2024-01-15T10:00:00Z [default/api/app] {"level":60,"message":"fatal"}';
+    const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
+    const levelElement = container.querySelector('[data-json-field="level"]');
+
+    expect(levelElement).toHaveStyle({
+      color: '#ffffff',
+      backgroundColor: '#b62324',
+    });
   });
 });
