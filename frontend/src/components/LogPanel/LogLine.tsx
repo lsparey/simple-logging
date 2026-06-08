@@ -196,6 +196,17 @@ function resolvedLevelName(value: unknown, key: string): string {
   return String(value ?? '').toUpperCase();
 }
 
+function isJSONObject(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('{')) return false;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+  } catch {
+    return false;
+  }
+}
+
 /** Format an ISO string or Unix timestamp (seconds or ms) to a short local datetime. */
 function formatJsonTimestamp(value: unknown): string {
   if (value === undefined || value === null || value === '') return '';
@@ -270,8 +281,13 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
       } catch { /* not JSON */ }
     }
 
-    const match = jsonParsed ? null : LEVEL_RE.exec(stripped);
-    const colour = match ? (palette[match[0].toUpperCase()] ?? 'inherit') : 'inherit';
+    const unformattedJSON = !jsonParsed && isJSONObject(stripped);
+    const match = jsonParsed || unformattedJSON ? null : LEVEL_RE.exec(stripped);
+    const colour = unformattedJSON
+      ? (darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT)
+      : match
+        ? (palette[match[0].toUpperCase()] ?? 'inherit')
+        : 'inherit';
     const segments = !jsonParsed && HAS_ANSI_RE.test(displayMessage) ? parseAnsi(displayMessage) : null;
     return {
       colour,

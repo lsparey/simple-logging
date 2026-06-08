@@ -141,6 +141,25 @@ describe('LogLine — JSON formatting', () => {
   };
   const LINE = '2024-01-15T10:00:00Z [default/api/app] {"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"request complete"}';
 
+  it.each([
+    '{"level":"error","message":"raw string severity"}',
+    '{"level":50,"message":"raw numeric severity"}',
+  ])('keeps unformatted JSON on the normal foreground: %s', (payload) => {
+    const line = `2024-01-15T10:00:00Z [default/api/app] ${payload}`;
+    const { container } = renderLine(line, true);
+
+    expect(window.getComputedStyle(container.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(255, 255, 255)');
+  });
+
+  it('keeps unformatted JSON readable in light mode', () => {
+    const line = '2024-01-15T10:00:00Z [default/api/app] {"level":"error","message":"raw"}';
+    const { container } = renderLine(line, false);
+
+    expect(window.getComputedStyle(container.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(31, 35, 40)');
+  });
+
   it('renders a muted timestamp and white message in dark mode', () => {
     const { container } = renderLine(LINE, true, FORMAT);
 
