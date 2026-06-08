@@ -60,6 +60,16 @@ describe('LogLine — level colours', () => {
     const pre = container.querySelector('pre') as HTMLElement;
     expect(window.getComputedStyle(pre).color).toBe('rgb(154, 103, 0)'); // #9a6700
   });
+
+  it('uses the pino-pretty-inspired info and debug colours', () => {
+    const { container: infoContainer } = renderLine('2024-01-15T10:00:00Z INFO ready', true);
+    const { container: debugContainer } = renderLine('2024-01-15T10:00:00Z DEBUG detail', true);
+
+    expect(window.getComputedStyle(infoContainer.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(63, 185, 80)'); // #3fb950
+    expect(window.getComputedStyle(debugContainer.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(88, 166, 255)'); // #58a6ff
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -143,12 +153,12 @@ describe('LogLine — JSON formatting', () => {
   });
 
   it.each([
-    [10, '#6e7681'],
-    [20, '#6e7681'],
-    [30, 'inherit'],
+    [10, '#8b949e'],
+    [20, '#58a6ff'],
+    [30, '#3fb950'],
     [40, '#d29922'],
     [50, '#f85149'],
-    [60, '#f85149'],
+    [60, '#ffffff'],
   ])('maps Pino level %i while keeping the numeric label', (level, color) => {
     const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"pino"}`;
     const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
@@ -161,9 +171,9 @@ describe('LogLine — JSON formatting', () => {
   it.each([
     [0, '#f85149'],
     [1, '#d29922'],
-    [2, 'inherit'],
-    [5, '#6e7681'],
-    [6, '#6e7681'],
+    [2, '#3fb950'],
+    [5, '#58a6ff'],
+    [6, '#58a6ff'],
   ])('maps Winston npm level %i', (level, color) => {
     const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"winston"}`;
     const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
@@ -174,12 +184,23 @@ describe('LogLine — JSON formatting', () => {
   it.each([
     [2, '#f85149'],
     [4, '#d29922'],
-    [6, 'inherit'],
-    [7, '#6e7681'],
+    [6, '#3fb950'],
+    [7, '#58a6ff'],
   ])('maps syslog severity %i when the key identifies severity', (level, color) => {
     const line = `2024-01-15T10:00:00Z [default/api/app] {"severity":${level},"message":"syslog"}`;
     const { container } = renderLine(line, true, { levelKey: 'severity', messageKey: 'message' });
 
     expectColor(container.querySelector('[data-json-field="level"]'), color);
+  });
+
+  it('renders fatal severity as white text on red like pino-pretty', () => {
+    const line = '2024-01-15T10:00:00Z [default/api/app] {"level":60,"message":"fatal"}';
+    const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
+    const levelElement = container.querySelector('[data-json-field="level"]');
+
+    expect(levelElement).toHaveStyle({
+      color: '#ffffff',
+      backgroundColor: '#b62324',
+    });
   });
 });

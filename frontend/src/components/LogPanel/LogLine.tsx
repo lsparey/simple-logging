@@ -117,9 +117,9 @@ function parseAnsi(input: string): Segment[] {
 const HAS_ANSI_RE = new RegExp(ESC + '\\[');
 
 const DARK_COLOURS: Record<string, string> = {
-  TRACE: '#6e7681',
-  DEBUG: '#6e7681',
-  INFO: 'inherit',
+  TRACE: '#8b949e',
+  DEBUG: '#58a6ff',
+  INFO: '#3fb950',
   WARN: '#d29922',
   WARNING: '#d29922',
   ERROR: '#f85149',
@@ -128,9 +128,9 @@ const DARK_COLOURS: Record<string, string> = {
 };
 
 const LIGHT_COLOURS: Record<string, string> = {
-  TRACE: '#57606a',
-  DEBUG: '#57606a',
-  INFO: 'inherit',
+  TRACE: '#6e7781',
+  DEBUG: '#0969da',
+  INFO: '#1a7f37',
   WARN: '#9a6700',
   WARNING: '#9a6700',
   ERROR: '#cf222e',
@@ -138,6 +138,8 @@ const LIGHT_COLOURS: Record<string, string> = {
   CRITICAL: '#cf222e',
 };
 
+const FATAL_BACKGROUND_DARK = '#b62324';
+const FATAL_BACKGROUND_LIGHT = '#cf222e';
 const JSON_MESSAGE_DARK = '#ffffff';
 const JSON_MESSAGE_LIGHT = '#1f2328';
 const JSON_TIME_DARK = '#8c959f';
@@ -187,6 +189,13 @@ function levelColour(value: unknown, key: string, palette: Record<string, string
   return name ? (palette[name] ?? 'inherit') : 'inherit';
 }
 
+function resolvedLevelName(value: unknown, key: string): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return numericLevelName(value, key) ?? '';
+  }
+  return String(value ?? '').toUpperCase();
+}
+
 /** Format an ISO string or Unix timestamp (seconds or ms) to a short local datetime. */
 function formatJsonTimestamp(value: unknown): string {
   if (value === undefined || value === null || value === '') return '';
@@ -222,7 +231,14 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
     const palette = darkMode ? DARK_COLOURS : LIGHT_COLOURS;
 
     // Try JSON parsing when a format is configured
-    let jsonParsed: { ts: string; level: string; levelColour: string; msg: string; raw: string } | null = null;
+    let jsonParsed: {
+      ts: string;
+      level: string;
+      levelColour: string;
+      levelBackground: string;
+      msg: string;
+      raw: string;
+    } | null = null;
     if (jsonFormat) {
       try {
         const obj = JSON.parse(stripped) as Record<string, unknown>;
@@ -230,11 +246,26 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
           const levelValue = jsonFormat.levelKey ? obj[jsonFormat.levelKey] : '';
           const level = String(levelValue ?? '').toUpperCase();
           const msg = jsonFormat.messageKey ? String(obj[jsonFormat.messageKey] ?? '') : '';
-          const resolvedLevelColour = jsonFormat.levelKey
-            ? levelColour(levelValue, jsonFormat.levelKey, palette)
-            : 'inherit';
+          const levelName = jsonFormat.levelKey
+            ? resolvedLevelName(levelValue, jsonFormat.levelKey)
+            : '';
+          const resolvedLevelColour = levelName === 'FATAL'
+            ? '#ffffff'
+            : jsonFormat.levelKey
+              ? levelColour(levelValue, jsonFormat.levelKey, palette)
+              : 'inherit';
+          const levelBackground = levelName === 'FATAL'
+            ? (darkMode ? FATAL_BACKGROUND_DARK : FATAL_BACKGROUND_LIGHT)
+            : '';
           const ts = jsonFormat.timestampKey ? formatJsonTimestamp(obj[jsonFormat.timestampKey]) : '';
-          jsonParsed = { ts, level, levelColour: resolvedLevelColour, msg, raw: stripped };
+          jsonParsed = {
+            ts,
+            level,
+            levelColour: resolvedLevelColour,
+            levelBackground,
+            msg,
+            raw: stripped,
+          };
         }
       } catch { /* not JSON */ }
     }
@@ -301,7 +332,13 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
           {jsonParsed.level && (
             <span
               data-json-field="level"
-              style={{ color: jsonParsed.levelColour, fontWeight: 600 }}
+              style={{
+                color: jsonParsed.levelColour,
+                backgroundColor: jsonParsed.levelBackground || undefined,
+                borderRadius: jsonParsed.levelBackground ? 3 : undefined,
+                padding: jsonParsed.levelBackground ? '0 3px' : undefined,
+                fontWeight: 600,
+              }}
             >
               {jsonParsed.level}{' '}
             </span>
