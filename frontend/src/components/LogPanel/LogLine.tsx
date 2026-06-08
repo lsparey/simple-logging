@@ -117,8 +117,8 @@ function parseAnsi(input: string): Segment[] {
 const HAS_ANSI_RE = new RegExp(ESC + '\\[');
 
 const DARK_COLOURS: Record<string, string> = {
-  TRACE: '#8b949e',
-  DEBUG: '#58a6ff',
+  TRACE: '#58a6ff',
+  DEBUG: '#bc8cff',
   INFO: '#3fb950',
   WARN: '#d29922',
   WARNING: '#d29922',
@@ -128,8 +128,8 @@ const DARK_COLOURS: Record<string, string> = {
 };
 
 const LIGHT_COLOURS: Record<string, string> = {
-  TRACE: '#6e7781',
-  DEBUG: '#0969da',
+  TRACE: '#0969da',
+  DEBUG: '#8250df',
   INFO: '#1a7f37',
   WARN: '#9a6700',
   WARNING: '#9a6700',

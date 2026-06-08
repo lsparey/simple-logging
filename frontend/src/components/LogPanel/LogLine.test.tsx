@@ -61,14 +61,17 @@ describe('LogLine — level colours', () => {
     expect(window.getComputedStyle(pre).color).toBe('rgb(154, 103, 0)'); // #9a6700
   });
 
-  it('uses the pino-pretty-inspired info and debug colours', () => {
+  it('uses the configured info, trace, and debug colours', () => {
     const { container: infoContainer } = renderLine('2024-01-15T10:00:00Z INFO ready', true);
+    const { container: traceContainer } = renderLine('2024-01-15T10:00:00Z TRACE request', true);
     const { container: debugContainer } = renderLine('2024-01-15T10:00:00Z DEBUG detail', true);
 
     expect(window.getComputedStyle(infoContainer.querySelector('pre') as HTMLElement).color)
       .toBe('rgb(63, 185, 80)'); // #3fb950
-    expect(window.getComputedStyle(debugContainer.querySelector('pre') as HTMLElement).color)
+    expect(window.getComputedStyle(traceContainer.querySelector('pre') as HTMLElement).color)
       .toBe('rgb(88, 166, 255)'); // #58a6ff
+    expect(window.getComputedStyle(debugContainer.querySelector('pre') as HTMLElement).color)
+      .toBe('rgb(188, 140, 255)'); // #bc8cff
   });
 });
 
@@ -153,8 +156,8 @@ describe('LogLine — JSON formatting', () => {
   });
 
   it.each([
-    [10, '#8b949e'],
-    [20, '#58a6ff'],
+    [10, '#58a6ff'],
+    [20, '#bc8cff'],
     [30, '#3fb950'],
     [40, '#d29922'],
     [50, '#f85149'],
@@ -172,8 +175,8 @@ describe('LogLine — JSON formatting', () => {
     [0, '#f85149'],
     [1, '#d29922'],
     [2, '#3fb950'],
-    [5, '#58a6ff'],
-    [6, '#58a6ff'],
+    [5, '#bc8cff'],
+    [6, '#bc8cff'],
   ])('maps Winston npm level %i', (level, color) => {
     const line = `2024-01-15T10:00:00Z [default/api/app] {"level":${level},"message":"winston"}`;
     const { container } = renderLine(line, true, { levelKey: 'level', messageKey: 'message' });
@@ -185,7 +188,7 @@ describe('LogLine — JSON formatting', () => {
     [2, '#f85149'],
     [4, '#d29922'],
     [6, '#3fb950'],
-    [7, '#58a6ff'],
+    [7, '#bc8cff'],
   ])('maps syslog severity %i when the key identifies severity', (level, color) => {
     const line = `2024-01-15T10:00:00Z [default/api/app] {"severity":${level},"message":"syslog"}`;
     const { container } = renderLine(line, true, { levelKey: 'severity', messageKey: 'message' });
