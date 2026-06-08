@@ -37,9 +37,9 @@ export default function AppShell() {
               simple-logging
             </Typography>
           </Box>
-          <Tooltip title="Data dashboard">
+          <Tooltip title="Storage dashboard">
             <IconButton
-              aria-label="Open data dashboard"
+              aria-label="Open storage dashboard"
               color="inherit"
               onClick={() => navigate('/dashboard')}
               size="small"

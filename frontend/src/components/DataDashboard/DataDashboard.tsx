@@ -18,6 +18,8 @@ import { formatDateTime } from '../../utils/formatDateTime.js';
 
 export default function DataDashboard() {
   const { files, totalSizeBytes, loading, error, refresh } = useLogFiles();
+  const logFileCount = files.filter((file) => file.kind === 'Log').length;
+  const indexFileCount = files.filter((file) => file.kind === 'Index').length;
   const sortedFiles = [...files].sort((a, b) => {
     if (a.sizeBytes === b.sizeBytes) {
       return `${a.namespace}/${a.name}`.localeCompare(`${b.namespace}/${b.name}`);
@@ -29,7 +31,7 @@ export default function DataDashboard() {
     <Box sx={{ p: 3, overflow: 'auto', height: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4" component="h1">Data dashboard</Typography>
+          <Typography variant="h4" component="h1">Storage dashboard</Typography>
           <Typography color="text.secondary">Storage used by persisted log and index files.</Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={refresh} disabled={loading}>
@@ -49,9 +51,15 @@ export default function DataDashboard() {
           </Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="body2" color="text.secondary">Data files</Typography>
+          <Typography variant="body2" color="text.secondary">Log files</Typography>
           <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>
-            {files.length}
+            {logFileCount}
+          </Typography>
+        </Paper>
+        <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Typography variant="body2" color="text.secondary">Index files</Typography>
+          <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>
+            {indexFileCount}
           </Typography>
         </Paper>
       </Box>

@@ -1,13 +1,15 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Data dashboard', () => {
+test.describe('Storage dashboard', () => {
   test('shows log and index file sizes with modified dates', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Open data dashboard' }).click();
+    await page.getByRole('button', { name: 'Open storage dashboard' }).click();
 
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByRole('heading', { name: 'Data dashboard' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Storage dashboard' })).toBeVisible();
     await expect(page.getByText('5.00 KB')).toBeVisible();
+    await expect(page.getByText('Log files', { exact: true }).locator('..')).toContainText('3');
+    await expect(page.getByText('Index files', { exact: true }).locator('..')).toContainText('2');
     const table = page.getByRole('table', { name: 'Data file sizes' });
     await expect(table).toContainText('api-server-5b4c9e.log');
     await expect(table).toContainText('2.00 KB');
