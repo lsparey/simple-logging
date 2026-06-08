@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -113,6 +114,121 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 	}
 
 	return &pb.ListPodsResponse{Pods: pods}, nil
+}
+
+// ListLogFiles returns metadata for every persisted pod log and index file.
+func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) (*pb.ListLogFilesResponse, error) {
+	namespaceEntries, err := os.ReadDir(s.logsRoot)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "read logs root: %v", err)
+	}
+
+	var files []*pb.LogFileInfo
+	var totalSize int64
+	for _, namespaceEntry := range namespaceEntries {
+		if !namespaceEntry.IsDir() || strings.HasPrefix(namespaceEntry.Name(), ".") {
+			continue
+		}
+
+		namespace := namespaceEntry.Name()
+		entries, err := os.ReadDir(filepath.Join(s.logsRoot, namespace))
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "read namespace dir %q: %v", namespace, err)
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
+				continue
+			}
+
+			info, err := entry.Info()
+			if err != nil {
+				return nil, status.Errorf(codes.Internal, "stat log file %q: %v", entry.Name(), err)
+			}
+
+			size := info.Size()
+			files = append(files, &pb.LogFileInfo{
+				Namespace:        namespace,
+				Name:             entry.Name(),
+				SizeBytes:        size,
+				Kind:             "Log",
+				ModifiedAtUnixMs: info.ModTime().UnixMilli(),
+				Subject:          namespace + " / " + strings.TrimSuffix(entry.Name(), ".log"),
+			})
+			totalSize += size
+		}
+	}
+
+	indexRoot := filepath.Join(s.logsRoot, ".indexes")
+	err = filepath.WalkDir(indexRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		relativePath, err := filepath.Rel(indexRoot, path)
+		if err != nil {
+			return err
+		}
+
+		size := info.Size()
+		files = append(files, &pb.LogFileInfo{
+			Namespace:        ".indexes",
+			Name:             filepath.ToSlash(relativePath),
+			SizeBytes:        size,
+			Kind:             "Index",
+			ModifiedAtUnixMs: info.ModTime().UnixMilli(),
+			Subject:          indexFileSubject(path, relativePath),
+		})
+		totalSize += size
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Errorf(codes.Internal, "read index files: %v", err)
+	}
+
+	return &pb.ListLogFilesResponse{
+		Files:          files,
+		TotalSizeBytes: totalSize,
+	}, nil
+}
+
+func indexFileSubject(path, relativePath string) string {
+	if filepath.ToSlash(relativePath) == "indexes.json" {
+		return "Index manifest"
+	}
+
+	parts := strings.Split(filepath.ToSlash(relativePath), "/")
+	if len(parts) < 5 || parts[0] != "keys" || parts[2] != "values" {
+		return "Index data"
+	}
+
+	keyBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "Index data"
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return string(keyBytes)
+	}
+	defer f.Close()
+
+	var entry indexes.Entry
+	if err := json.NewDecoder(f).Decode(&entry); err != nil || entry.Value == "" {
+		return string(keyBytes)
+	}
+	return string(keyBytes) + " = " + entry.Value
 }
 
 // encodeOffsetToken encodes a byte offset as a base64 8-byte big-endian token.

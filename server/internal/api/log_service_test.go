@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,6 +114,69 @@ func TestListPods_UnknownNamespace(t *testing.T) {
 	}
 	if len(resp.Pods) != 0 {
 		t.Errorf("expected empty pod list for unknown namespace, got %d", len(resp.Pods))
+	}
+}
+
+// ── ListLogFiles ─────────────────────────────────────────────────────────────
+
+func TestListLogFiles(t *testing.T) {
+	dir := t.TempDir()
+	writeLogFile(t, dir, "default", "pod-a", []string{"alpha"})
+	writeLogFile(t, dir, "monitoring", "pod-b", []string{"bravo", "charlie"})
+	if err := os.WriteFile(filepath.Join(dir, "default", "index.json"), []byte("ignored"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	encodedKey := base64.RawURLEncoding.EncodeToString([]byte("companyUuid"))
+	indexDir := filepath.Join(dir, ".indexes", "keys", encodedKey, "values", "ab")
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	indexPath := filepath.Join(indexDir, "company-1.jsonl")
+	indexEntry := `{"value":"company-1","line":"indexed"}` + "\n"
+	if err := os.WriteFile(indexPath, []byte(indexEntry), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	if err != nil {
+		t.Fatalf("ListLogFiles: %v", err)
+	}
+
+	if len(resp.Files) != 3 {
+		t.Fatalf("expected 3 files, got %d", len(resp.Files))
+	}
+
+	var summedSize int64
+	byPath := make(map[string]*pb.LogFileInfo)
+	for _, file := range resp.Files {
+		byPath[file.Namespace+"/"+file.Name] = file
+		summedSize += file.SizeBytes
+	}
+	if byPath["default/pod-a.log"] == nil {
+		t.Error("missing default/pod-a.log")
+	}
+	if byPath["monitoring/pod-b.log"] == nil {
+		t.Error("missing monitoring/pod-b.log")
+	}
+	indexFile := byPath[".indexes/keys/"+encodedKey+"/values/ab/company-1.jsonl"]
+	if indexFile == nil {
+		t.Error("missing index file")
+	} else if indexFile.Kind != "Index" {
+		t.Errorf("index file kind = %q, want Index", indexFile.Kind)
+	} else if indexFile.Subject != "companyUuid = company-1" {
+		t.Errorf("index file subject = %q, want %q", indexFile.Subject, "companyUuid = company-1")
+	}
+	if logFile := byPath["default/pod-a.log"]; logFile.Subject != "default / pod-a" {
+		t.Errorf("log file subject = %q, want %q", logFile.Subject, "default / pod-a")
+	}
+	for path, file := range byPath {
+		if file.ModifiedAtUnixMs <= 0 {
+			t.Errorf("%s has invalid modified time %d", path, file.ModifiedAtUnixMs)
+		}
+	}
+	if resp.TotalSizeBytes != summedSize {
+		t.Errorf("total size = %d, want %d", resp.TotalSizeBytes, summedSize)
 	}
 }
 
