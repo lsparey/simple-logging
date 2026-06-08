@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -125,12 +126,14 @@ func TestListLogFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "default", "index.json"), []byte("ignored"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	indexDir := filepath.Join(dir, ".indexes", "keys", "companyUuid", "values")
+	encodedKey := base64.RawURLEncoding.EncodeToString([]byte("companyUuid"))
+	indexDir := filepath.Join(dir, ".indexes", "keys", encodedKey, "values", "ab")
 	if err := os.MkdirAll(indexDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	indexPath := filepath.Join(indexDir, "company-1.jsonl")
-	if err := os.WriteFile(indexPath, []byte("indexed"), 0644); err != nil {
+	indexEntry := `{"value":"company-1","line":"indexed"}` + "\n"
+	if err := os.WriteFile(indexPath, []byte(indexEntry), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -156,11 +159,16 @@ func TestListLogFiles(t *testing.T) {
 	if byPath["monitoring/pod-b.log"] == nil {
 		t.Error("missing monitoring/pod-b.log")
 	}
-	indexFile := byPath[".indexes/keys/companyUuid/values/company-1.jsonl"]
+	indexFile := byPath[".indexes/keys/"+encodedKey+"/values/ab/company-1.jsonl"]
 	if indexFile == nil {
 		t.Error("missing index file")
 	} else if indexFile.Kind != "Index" {
 		t.Errorf("index file kind = %q, want Index", indexFile.Kind)
+	} else if indexFile.Subject != "companyUuid = company-1" {
+		t.Errorf("index file subject = %q, want %q", indexFile.Subject, "companyUuid = company-1")
+	}
+	if logFile := byPath["default/pod-a.log"]; logFile.Subject != "default / pod-a" {
+		t.Errorf("log file subject = %q, want %q", logFile.Subject, "default / pod-a")
 	}
 	for path, file := range byPath {
 		if file.ModifiedAtUnixMs <= 0 {

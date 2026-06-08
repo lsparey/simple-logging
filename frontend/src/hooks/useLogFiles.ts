@@ -7,6 +7,7 @@ export interface LogFileSummary {
   sizeBytes: bigint;
   kind: string;
   modifiedAtUnixMs: bigint;
+  subject: string;
 }
 
 interface LogFilesState {

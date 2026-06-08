@@ -984,6 +984,7 @@ type LogFileInfo struct {
 	SizeBytes        int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	Kind             string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
 	ModifiedAtUnixMs int64                  `protobuf:"varint,5,opt,name=modified_at_unix_ms,json=modifiedAtUnixMs,proto3" json:"modified_at_unix_ms,omitempty"`
+	Subject          string                 `protobuf:"bytes,6,opt,name=subject,proto3" json:"subject,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1051,6 +1052,13 @@ func (x *LogFileInfo) GetModifiedAtUnixMs() int64 {
 		return x.ModifiedAtUnixMs
 	}
 	return 0
+}
+
+func (x *LogFileInfo) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
 }
 
 type ListLogFilesResponse struct {
@@ -1747,14 +1755,15 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"deployment\"2\n" +
 	"\x1cStreamDeploymentLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\"\x15\n" +
-	"\x13ListLogFilesRequest\"\xa1\x01\n" +
+	"\x13ListLogFilesRequest\"\xbb\x01\n" +
 	"\vLogFileInfo\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x12\n" +
 	"\x04kind\x18\x04 \x01(\tR\x04kind\x12-\n" +
-	"\x13modified_at_unix_ms\x18\x05 \x01(\x03R\x10modifiedAtUnixMs\"q\n" +
+	"\x13modified_at_unix_ms\x18\x05 \x01(\x03R\x10modifiedAtUnixMs\x12\x18\n" +
+	"\asubject\x18\x06 \x01(\tR\asubject\"q\n" +
 	"\x14ListLogFilesResponse\x12/\n" +
 	"\x05files\x18\x01 \x03(\v2\x19.simplelog.v1.LogFileInfoR\x05files\x12(\n" +
 	"\x10total_size_bytes\x18\x02 \x01(\x03R\x0etotalSizeBytes\"\x14\n" +

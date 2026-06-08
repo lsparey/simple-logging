@@ -12,8 +12,12 @@ test.describe('Data dashboard', () => {
     await expect(table).toContainText('api-server-5b4c9e.log');
     await expect(table).toContainText('2.00 KB');
     await expect(table).toContainText('indexes.json');
-    await expect(table).toContainText('keys/companyUuid/values/a1/company-1.jsonl');
+    await expect(table).toContainText('keys/Y29tcGFueVV1aWQ/values/a1/company-1.jsonl');
     await expect(table).toContainText('Index');
+    await expect(table).toContainText('default / api-server-5b4c9e');
+    await expect(table).toContainText('companyUuid = company-1');
+    await expect(table.getByRole('columnheader', { name: 'Subject' })).toBeVisible();
+    await expect(table.getByRole('columnheader', { name: 'Namespace' })).toHaveCount(0);
     await expect(table.getByRole('columnheader', { name: 'Last updated' })).toBeVisible();
     await expect(table.getByRole('columnheader', { name: 'Bytes' })).toHaveCount(0);
   });

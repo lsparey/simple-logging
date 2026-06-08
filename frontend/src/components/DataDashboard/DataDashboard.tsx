@@ -71,7 +71,7 @@ export default function DataDashboard() {
           <TableHead>
             <TableRow>
               <TableCell>Type</TableCell>
-              <TableCell>Namespace</TableCell>
+              <TableCell>Subject</TableCell>
               <TableCell>File</TableCell>
               <TableCell align="right">Size</TableCell>
               <TableCell align="right">Last updated</TableCell>
@@ -93,7 +93,7 @@ export default function DataDashboard() {
             ) : sortedFiles.map((file) => (
               <TableRow key={`${file.namespace}/${file.name}`} hover>
                 <TableCell>{file.kind}</TableCell>
-                <TableCell>{file.namespace}</TableCell>
+                <TableCell>{file.subject}</TableCell>
                 <TableCell sx={{ fontFamily: 'monospace' }}>{file.name}</TableCell>
                 <TableCell align="right">{formatBytes(file.sizeBytes)}</TableCell>
                 <TableCell align="right">{formatDateTime(file.modifiedAtUnixMs)}</TableCell>

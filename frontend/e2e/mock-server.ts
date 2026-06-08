@@ -43,11 +43,11 @@ const INDEXES: Array<{ key: string }> = [
 ];
 
 const LOG_FILES = [
-  { namespace: 'default', name: 'web-app-6d8c7f.log', sizeBytes: 1536n, kind: 'Log', modifiedAtUnixMs: 1780912800000n },
-  { namespace: 'default', name: 'api-server-5b4c9e.log', sizeBytes: 2048n, kind: 'Log', modifiedAtUnixMs: 1780916400000n },
-  { namespace: 'kube-system', name: 'coredns-7d4f8b.log', sizeBytes: 512n, kind: 'Log', modifiedAtUnixMs: 1780920000000n },
-  { namespace: '.indexes', name: 'indexes.json', sizeBytes: 256n, kind: 'Index', modifiedAtUnixMs: 1780923600000n },
-  { namespace: '.indexes', name: 'keys/companyUuid/values/a1/company-1.jsonl', sizeBytes: 768n, kind: 'Index', modifiedAtUnixMs: 1780927200000n },
+  { namespace: 'default', name: 'web-app-6d8c7f.log', sizeBytes: 1536n, kind: 'Log', modifiedAtUnixMs: 1780912800000n, subject: 'default / web-app-6d8c7f' },
+  { namespace: 'default', name: 'api-server-5b4c9e.log', sizeBytes: 2048n, kind: 'Log', modifiedAtUnixMs: 1780916400000n, subject: 'default / api-server-5b4c9e' },
+  { namespace: 'kube-system', name: 'coredns-7d4f8b.log', sizeBytes: 512n, kind: 'Log', modifiedAtUnixMs: 1780920000000n, subject: 'kube-system / coredns-7d4f8b' },
+  { namespace: '.indexes', name: 'indexes.json', sizeBytes: 256n, kind: 'Index', modifiedAtUnixMs: 1780923600000n, subject: 'Index manifest' },
+  { namespace: '.indexes', name: 'keys/Y29tcGFueVV1aWQ/values/a1/company-1.jsonl', sizeBytes: 768n, kind: 'Index', modifiedAtUnixMs: 1780927200000n, subject: 'companyUuid = company-1' },
 ];
 
 const INDEX_LOG_LINES = [

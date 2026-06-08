@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -152,6 +153,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 				SizeBytes:        size,
 				Kind:             "Log",
 				ModifiedAtUnixMs: info.ModTime().UnixMilli(),
+				Subject:          namespace + " / " + strings.TrimSuffix(entry.Name(), ".log"),
 			})
 			totalSize += size
 		}
@@ -186,6 +188,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 			SizeBytes:        size,
 			Kind:             "Index",
 			ModifiedAtUnixMs: info.ModTime().UnixMilli(),
+			Subject:          indexFileSubject(path, relativePath),
 		})
 		totalSize += size
 		return nil
@@ -198,6 +201,34 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 		Files:          files,
 		TotalSizeBytes: totalSize,
 	}, nil
+}
+
+func indexFileSubject(path, relativePath string) string {
+	if filepath.ToSlash(relativePath) == "indexes.json" {
+		return "Index manifest"
+	}
+
+	parts := strings.Split(filepath.ToSlash(relativePath), "/")
+	if len(parts) < 5 || parts[0] != "keys" || parts[2] != "values" {
+		return "Index data"
+	}
+
+	keyBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "Index data"
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return string(keyBytes)
+	}
+	defer f.Close()
+
+	var entry indexes.Entry
+	if err := json.NewDecoder(f).Decode(&entry); err != nil || entry.Value == "" {
+		return string(keyBytes)
+	}
+	return string(keyBytes) + " = " + entry.Value
 }
 
 // encodeOffsetToken encodes a byte offset as a base64 8-byte big-endian token.

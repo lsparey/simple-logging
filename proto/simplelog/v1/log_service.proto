@@ -208,6 +208,7 @@ message LogFileInfo {
   int64 size_bytes = 3;
   string kind = 4;
   int64 modified_at_unix_ms = 5;
+  string subject = 6;
 }
 
 message ListLogFilesResponse {
