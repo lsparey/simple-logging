@@ -138,8 +138,10 @@ const LIGHT_COLOURS: Record<string, string> = {
   CRITICAL: '#cf222e',
 };
 
-const JSON_MESSAGE_DARK = '#4dd0e1';
-const JSON_MESSAGE_LIGHT = '#00695c';
+const JSON_MESSAGE_DARK = '#ffffff';
+const JSON_MESSAGE_LIGHT = '#1f2328';
+const JSON_TIME_DARK = '#8c959f';
+const JSON_TIME_LIGHT = '#57606a';
 const JSON_DIM_DARK = '#484f58';
 const JSON_DIM_LIGHT = '#8c959f';
 
@@ -244,7 +246,10 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
       {jsonParsed ? (
         <>
           {jsonParsed.ts && (
-            <span>
+            <span
+              data-json-field="timestamp"
+              style={{ color: darkMode ? JSON_TIME_DARK : JSON_TIME_LIGHT }}
+            >
               {jsonParsed.ts}{' '}
             </span>
           )}
@@ -254,7 +259,10 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
             </span>
           )}
           {jsonParsed.msg && (
-            <span style={{ color: darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT }}>
+            <span
+              data-json-field="message"
+              style={{ color: darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT }}
+            >
               {jsonParsed.msg}{' '}
             </span>
           )}

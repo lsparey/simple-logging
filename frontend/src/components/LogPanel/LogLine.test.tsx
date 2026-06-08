@@ -1,13 +1,14 @@
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import LogLine from './LogLine.js';
+import type { JsonFormat } from '../../store/logStore.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function renderLine(line: string, darkMode = false) {
-  return render(<LogLine line={line} darkMode={darkMode} />);
+function renderLine(line: string, darkMode = false, jsonFormat?: JsonFormat) {
+  return render(<LogLine line={line} darkMode={darkMode} jsonFormat={jsonFormat} />);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,5 +104,32 @@ describe('LogLine — ANSI sequences', () => {
       (el) => (el as HTMLElement).style.fontWeight === 'bold',
     );
     expect(boldSpan).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JSON formatting
+// ---------------------------------------------------------------------------
+
+describe('LogLine — JSON formatting', () => {
+  const FORMAT: JsonFormat = {
+    timestampKey: 'timestamp',
+    levelKey: 'level',
+    messageKey: 'message',
+  };
+  const LINE = '2024-01-15T10:00:00Z [default/api/app] {"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"request complete"}';
+
+  it('renders a muted timestamp and white message in dark mode', () => {
+    const { container } = renderLine(LINE, true, FORMAT);
+
+    expect(container.querySelector('[data-json-field="timestamp"]')).toHaveStyle({ color: '#8c959f' });
+    expect(container.querySelector('[data-json-field="message"]')).toHaveStyle({ color: '#ffffff' });
+  });
+
+  it('uses readable foreground colours in light mode', () => {
+    const { container } = renderLine(LINE, false, FORMAT);
+
+    expect(container.querySelector('[data-json-field="timestamp"]')).toHaveStyle({ color: '#57606a' });
+    expect(container.querySelector('[data-json-field="message"]')).toHaveStyle({ color: '#1f2328' });
   });
 });
