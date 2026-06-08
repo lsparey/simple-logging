@@ -14,6 +14,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useLogFiles } from '../../hooks/useLogFiles.js';
 import { formatBytes } from '../../utils/formatBytes.js';
+import { formatDateTime } from '../../utils/formatDateTime.js';
 
 export default function DataDashboard() {
   const { files, totalSizeBytes, loading, error, refresh } = useLogFiles();
@@ -29,7 +30,7 @@ export default function DataDashboard() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
           <Typography variant="h4" component="h1">Data dashboard</Typography>
-          <Typography color="text.secondary">Storage used by persisted log files.</Typography>
+          <Typography color="text.secondary">Storage used by persisted log and index files.</Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={refresh} disabled={loading}>
           Refresh
@@ -48,7 +49,7 @@ export default function DataDashboard() {
           </Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
-          <Typography variant="body2" color="text.secondary">Log files</Typography>
+          <Typography variant="body2" color="text.secondary">Data files</Typography>
           <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>
             {files.length}
           </Typography>
@@ -66,36 +67,36 @@ export default function DataDashboard() {
       )}
 
       <TableContainer component={Paper} variant="outlined">
-        <Table aria-label="Log file sizes">
+        <Table aria-label="Data file sizes">
           <TableHead>
             <TableRow>
+              <TableCell>Type</TableCell>
               <TableCell>Namespace</TableCell>
               <TableCell>File</TableCell>
               <TableCell align="right">Size</TableCell>
-              <TableCell align="right">Bytes</TableCell>
+              <TableCell align="right">Last updated</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading && files.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 6 }}>
-                  <CircularProgress size={28} aria-label="Loading log files" />
+                <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <CircularProgress size={28} aria-label="Loading data files" />
                 </TableCell>
               </TableRow>
             ) : sortedFiles.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                  No log files found.
+                <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                  No data files found.
                 </TableCell>
               </TableRow>
             ) : sortedFiles.map((file) => (
               <TableRow key={`${file.namespace}/${file.name}`} hover>
+                <TableCell>{file.kind}</TableCell>
                 <TableCell>{file.namespace}</TableCell>
                 <TableCell sx={{ fontFamily: 'monospace' }}>{file.name}</TableCell>
                 <TableCell align="right">{formatBytes(file.sizeBytes)}</TableCell>
-                <TableCell align="right" sx={{ fontFamily: 'monospace' }}>
-                  {file.sizeBytes.toLocaleString()}
-                </TableCell>
+                <TableCell align="right">{formatDateTime(file.modifiedAtUnixMs)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

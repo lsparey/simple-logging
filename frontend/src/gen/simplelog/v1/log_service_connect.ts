@@ -100,7 +100,7 @@ export const LogService = {
       kind: MethodKind.ServerStreaming,
     },
     /**
-     * ListLogFiles returns every persisted pod log file and its size.
+     * ListLogFiles returns every persisted pod log and index file with metadata.
      *
      * @generated from rpc simplelog.v1.LogService.ListLogFiles
      */

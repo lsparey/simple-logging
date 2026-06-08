@@ -35,7 +35,7 @@ service LogService {
   // cancels it.
   rpc StreamDeploymentLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse);
 
-  // ListLogFiles returns every persisted pod log file and its size.
+  // ListLogFiles returns every persisted pod log and index file with metadata.
   rpc ListLogFiles(ListLogFilesRequest) returns (ListLogFilesResponse);
 
   // ListIndexes returns all JSON log indexes configured on disk.
@@ -206,6 +206,8 @@ message LogFileInfo {
   string namespace = 1;
   string name = 2;
   int64 size_bytes = 3;
+  string kind = 4;
+  int64 modified_at_unix_ms = 5;
 }
 
 message ListLogFilesResponse {

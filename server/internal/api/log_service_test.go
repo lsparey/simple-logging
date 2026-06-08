@@ -125,6 +125,14 @@ func TestListLogFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "default", "index.json"), []byte("ignored"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
+	indexDir := filepath.Join(dir, ".indexes", "keys", "companyUuid", "values")
+	if err := os.MkdirAll(indexDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	indexPath := filepath.Join(indexDir, "company-1.jsonl")
+	if err := os.WriteFile(indexPath, []byte("indexed"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
@@ -132,8 +140,8 @@ func TestListLogFiles(t *testing.T) {
 		t.Fatalf("ListLogFiles: %v", err)
 	}
 
-	if len(resp.Files) != 2 {
-		t.Fatalf("expected 2 files, got %d", len(resp.Files))
+	if len(resp.Files) != 3 {
+		t.Fatalf("expected 3 files, got %d", len(resp.Files))
 	}
 
 	var summedSize int64
@@ -147,6 +155,17 @@ func TestListLogFiles(t *testing.T) {
 	}
 	if byPath["monitoring/pod-b.log"] == nil {
 		t.Error("missing monitoring/pod-b.log")
+	}
+	indexFile := byPath[".indexes/keys/companyUuid/values/company-1.jsonl"]
+	if indexFile == nil {
+		t.Error("missing index file")
+	} else if indexFile.Kind != "Index" {
+		t.Errorf("index file kind = %q, want Index", indexFile.Kind)
+	}
+	for path, file := range byPath {
+		if file.ModifiedAtUnixMs <= 0 {
+			t.Errorf("%s has invalid modified time %d", path, file.ModifiedAtUnixMs)
+		}
 	}
 	if resp.TotalSizeBytes != summedSize {
 		t.Errorf("total size = %d, want %d", resp.TotalSizeBytes, summedSize)

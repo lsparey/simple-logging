@@ -5,6 +5,8 @@ export interface LogFileSummary {
   namespace: string;
   name: string;
   sizeBytes: bigint;
+  kind: string;
+  modifiedAtUnixMs: bigint;
 }
 
 interface LogFilesState {

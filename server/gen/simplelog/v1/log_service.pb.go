@@ -978,12 +978,14 @@ func (*ListLogFilesRequest) Descriptor() ([]byte, []int) {
 }
 
 type LogFileInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	SizeBytes     int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Namespace        string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Name             string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	SizeBytes        int64                  `protobuf:"varint,3,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	Kind             string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	ModifiedAtUnixMs int64                  `protobuf:"varint,5,opt,name=modified_at_unix_ms,json=modifiedAtUnixMs,proto3" json:"modified_at_unix_ms,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *LogFileInfo) Reset() {
@@ -1033,6 +1035,20 @@ func (x *LogFileInfo) GetName() string {
 func (x *LogFileInfo) GetSizeBytes() int64 {
 	if x != nil {
 		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *LogFileInfo) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *LogFileInfo) GetModifiedAtUnixMs() int64 {
+	if x != nil {
+		return x.ModifiedAtUnixMs
 	}
 	return 0
 }
@@ -1731,12 +1747,14 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"deployment\"2\n" +
 	"\x1cStreamDeploymentLogsResponse\x12\x12\n" +
 	"\x04line\x18\x01 \x01(\tR\x04line\"\x15\n" +
-	"\x13ListLogFilesRequest\"^\n" +
+	"\x13ListLogFilesRequest\"\xa1\x01\n" +
 	"\vLogFileInfo\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\"q\n" +
+	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x12\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\x12-\n" +
+	"\x13modified_at_unix_ms\x18\x05 \x01(\x03R\x10modifiedAtUnixMs\"q\n" +
 	"\x14ListLogFilesResponse\x12/\n" +
 	"\x05files\x18\x01 \x03(\v2\x19.simplelog.v1.LogFileInfoR\x05files\x12(\n" +
 	"\x10total_size_bytes\x18\x02 \x01(\x03R\x0etotalSizeBytes\"\x14\n" +

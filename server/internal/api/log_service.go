@@ -115,7 +115,7 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 	return &pb.ListPodsResponse{Pods: pods}, nil
 }
 
-// ListLogFiles returns metadata for every persisted pod log file.
+// ListLogFiles returns metadata for every persisted pod log and index file.
 func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) (*pb.ListLogFilesResponse, error) {
 	namespaceEntries, err := os.ReadDir(s.logsRoot)
 	if err != nil {
@@ -147,12 +147,51 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 
 			size := info.Size()
 			files = append(files, &pb.LogFileInfo{
-				Namespace: namespace,
-				Name:      entry.Name(),
-				SizeBytes: size,
+				Namespace:        namespace,
+				Name:             entry.Name(),
+				SizeBytes:        size,
+				Kind:             "Log",
+				ModifiedAtUnixMs: info.ModTime().UnixMilli(),
 			})
 			totalSize += size
 		}
+	}
+
+	indexRoot := filepath.Join(s.logsRoot, ".indexes")
+	err = filepath.WalkDir(indexRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		relativePath, err := filepath.Rel(indexRoot, path)
+		if err != nil {
+			return err
+		}
+
+		size := info.Size()
+		files = append(files, &pb.LogFileInfo{
+			Namespace:        ".indexes",
+			Name:             filepath.ToSlash(relativePath),
+			SizeBytes:        size,
+			Kind:             "Index",
+			ModifiedAtUnixMs: info.ModTime().UnixMilli(),
+		})
+		totalSize += size
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Errorf(codes.Internal, "read index files: %v", err)
 	}
 
 	return &pb.ListLogFilesResponse{

@@ -62,7 +62,7 @@ type LogServiceClient interface {
 	// merged log lines in real time. The stream stays open until the client
 	// cancels it.
 	StreamDeploymentLogs(ctx context.Context, in *StreamDeploymentLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDeploymentLogsResponse], error)
-	// ListLogFiles returns every persisted pod log file and its size.
+	// ListLogFiles returns every persisted pod log and index file with metadata.
 	ListLogFiles(ctx context.Context, in *ListLogFilesRequest, opts ...grpc.CallOption) (*ListLogFilesResponse, error)
 	// ListIndexes returns all JSON log indexes configured on disk.
 	ListIndexes(ctx context.Context, in *ListIndexesRequest, opts ...grpc.CallOption) (*ListIndexesResponse, error)
@@ -260,7 +260,7 @@ type LogServiceServer interface {
 	// merged log lines in real time. The stream stays open until the client
 	// cancels it.
 	StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error
-	// ListLogFiles returns every persisted pod log file and its size.
+	// ListLogFiles returns every persisted pod log and index file with metadata.
 	ListLogFiles(context.Context, *ListLogFilesRequest) (*ListLogFilesResponse, error)
 	// ListIndexes returns all JSON log indexes configured on disk.
 	ListIndexes(context.Context, *ListIndexesRequest) (*ListIndexesResponse, error)
