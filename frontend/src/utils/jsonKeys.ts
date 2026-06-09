@@ -1,4 +1,4 @@
-export function candidateJsonKeys(lines: string[], sampleSize = 100): string[] {
+function jsonKeyCounts(lines: string[], sampleSize: number) {
   const prefixJsonRe = /^(\S+) \[\S+\] ([\s\S]*)$/;
   const keyCounts = new Map<string, number>();
   let jsonLineCount = 0;
@@ -22,10 +22,20 @@ export function candidateJsonKeys(lines: string[], sampleSize = 100): string[] {
     } catch { /* not json */ }
   }
 
+  return { keyCounts, jsonLineCount };
+}
+
+export function candidateJsonKeys(lines: string[], sampleSize = 100): string[] {
+  const { keyCounts, jsonLineCount } = jsonKeyCounts(lines, sampleSize);
   if (jsonLineCount === 0) return [];
 
   return [...keyCounts.entries()]
     .filter(([, count]) => count === jsonLineCount)
     .map(([key]) => key)
     .sort();
+}
+
+export function observedJsonKeys(lines: string[], sampleSize = 100): string[] {
+  const { keyCounts } = jsonKeyCounts(lines, sampleSize);
+  return [...keyCounts.keys()].sort();
 }

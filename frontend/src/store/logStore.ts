@@ -73,7 +73,7 @@ interface LogStore {
   darkMode: boolean;
   toggleDarkMode: () => void;
 
-  // JSON log format configuration (per pod/deployment, keyed by makeFormatKey())
+  // JSON log format configuration (per pod, deployment, or index)
   jsonFormats: Record<string, JsonFormat>;
   setJsonFormat: (key: string, format: JsonFormat | null) => void;
 }
@@ -255,6 +255,10 @@ export function makeFormatKey(
   if (pod) return `pod:${namespace}/${pod}`;
   if (deployment) return `deployment:${namespace}/${deployment}`;
   return '';
+}
+
+export function makeIndexFormatKey(indexKey: string): string {
+  return `index:${indexKey}`;
 }
 
 /** Derived: lines filtered by current searchText */

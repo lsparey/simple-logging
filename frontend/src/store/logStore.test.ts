@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
-import { useLogStore, useFilteredLines } from './logStore.js';
+import { makeIndexFormatKey, useLogStore, useFilteredLines } from './logStore.js';
 
 // Reset the store to a clean state between tests so they don't bleed into each other.
 beforeEach(() => {
@@ -169,5 +169,11 @@ describe('useFilteredLines', () => {
 
     act(() => useLogStore.getState().setSearchText('foo'));
     expect(result.current).toEqual(['INFO foo']);
+  });
+});
+
+describe('makeIndexFormatKey', () => {
+  it('scopes formats to an index key', () => {
+    expect(makeIndexFormatKey('companyUuid')).toBe('index:companyUuid');
   });
 });
