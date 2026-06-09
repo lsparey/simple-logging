@@ -99,6 +99,64 @@ func TestGetLogsPaginates(t *testing.T) {
 	}
 }
 
+func TestGetLogsOrdersEntriesAcrossPodsByTimestamp(t *testing.T) {
+	root := t.TempDir()
+	writePodLog(t, root, "default", "api", []string{
+		`2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1","msg":"api zero"}`,
+		`2026-06-05T08:00:02Z [default/api/app] {"companyUuid":"co-1","msg":"api two"}`,
+		`2026-06-05T08:00:04Z [default/api/app] {"companyUuid":"co-1","msg":"api four"}`,
+	})
+	writePodLog(t, root, "default", "worker", []string{
+		`2026-06-05T08:00:01Z [default/worker/app] {"companyUuid":"co-1","msg":"worker one"}`,
+		`2026-06-05T08:00:03Z [default/worker/app] {"companyUuid":"co-1","msg":"worker three"}`,
+		`2026-06-05T08:00:05Z [default/worker/app] {"companyUuid":"co-1","msg":"worker five"}`,
+	})
+
+	m := NewManager(root)
+	if err := m.Create("companyUuid"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	page1, next, prev, err := m.GetLogs("companyUuid", "co-1", 2, "", false)
+	if err != nil {
+		t.Fatalf("GetLogs page1: %v", err)
+	}
+	if prev != "" || next == "" {
+		t.Fatalf("unexpected page1 tokens next=%q prev=%q", next, prev)
+	}
+	assertMessages(t, page1, "api zero", "worker one")
+
+	page2, next, prev, err := m.GetLogs("companyUuid", "co-1", 2, next, false)
+	if err != nil {
+		t.Fatalf("GetLogs page2: %v", err)
+	}
+	if prev == "" || next == "" {
+		t.Fatalf("unexpected page2 tokens next=%q prev=%q", next, prev)
+	}
+	assertMessages(t, page2, "api two", "worker three")
+
+	lastPage, next, prev, err := m.GetLogs("companyUuid", "co-1", 2, "", true)
+	if err != nil {
+		t.Fatalf("GetLogs last page: %v", err)
+	}
+	if next != "" || prev == "" {
+		t.Fatalf("unexpected last-page tokens next=%q prev=%q", next, prev)
+	}
+	assertMessages(t, lastPage, "api four", "worker five")
+}
+
+func assertMessages(t *testing.T, lines []string, messages ...string) {
+	t.Helper()
+	if len(lines) != len(messages) {
+		t.Fatalf("got %d lines, want %d: %#v", len(lines), len(messages), lines)
+	}
+	for i, message := range messages {
+		if !strings.Contains(lines[i], message) {
+			t.Errorf("line %d = %q, want message %q", i, lines[i], message)
+		}
+	}
+}
+
 func TestListValuesReturnsCountsDescending(t *testing.T) {
 	root := t.TempDir()
 	writePodLog(t, root, "default", "api", []string{
