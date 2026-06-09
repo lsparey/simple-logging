@@ -144,7 +144,7 @@ export const LogService = {
       kind: MethodKind.Unary,
     },
     /**
-     * ListIndexValues returns observed values for an index ordered by match count.
+     * ListIndexValues returns observed values ordered by most recent match.
      *
      * @generated from rpc simplelog.v1.LogService.ListIndexValues
      */

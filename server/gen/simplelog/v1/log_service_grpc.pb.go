@@ -70,7 +70,7 @@ type LogServiceClient interface {
 	CreateIndex(ctx context.Context, in *CreateIndexRequest, opts ...grpc.CallOption) (*CreateIndexResponse, error)
 	// DeleteIndex removes a JSON key index and its persisted value files.
 	DeleteIndex(ctx context.Context, in *DeleteIndexRequest, opts ...grpc.CallOption) (*DeleteIndexResponse, error)
-	// ListIndexValues returns observed values for an index ordered by match count.
+	// ListIndexValues returns observed values ordered by most recent match.
 	ListIndexValues(ctx context.Context, in *ListIndexValuesRequest, opts ...grpc.CallOption) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
 	GetIndexLogs(ctx context.Context, in *GetIndexLogsRequest, opts ...grpc.CallOption) (*GetIndexLogsResponse, error)
@@ -268,7 +268,7 @@ type LogServiceServer interface {
 	CreateIndex(context.Context, *CreateIndexRequest) (*CreateIndexResponse, error)
 	// DeleteIndex removes a JSON key index and its persisted value files.
 	DeleteIndex(context.Context, *DeleteIndexRequest) (*DeleteIndexResponse, error)
-	// ListIndexValues returns observed values for an index ordered by match count.
+	// ListIndexValues returns observed values ordered by most recent match.
 	ListIndexValues(context.Context, *ListIndexValuesRequest) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
 	GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error)

@@ -23,6 +23,7 @@ import { logClient } from '../../grpc/client.js';
 import { useIndexLogHistory } from '../../hooks/useIndexLogHistory.js';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useFilteredLines, useLogStore } from '../../store/logStore.js';
+import { formatDateTime } from '../../utils/formatDateTime.js';
 import { observedJsonKeys } from '../../utils/jsonKeys.js';
 import CreateIndexDialog from './CreateIndexDialog.js';
 import JsonFormatModal from './JsonFormatModal.js';
@@ -68,6 +69,10 @@ export default function IndexPanel() {
     values,
     loading: valuesLoading,
     error: valuesError,
+    hasNextPage: hasNextValuesPage,
+    hasPrevPage: hasPrevValuesPage,
+    nextPage: nextValuesPage,
+    prevPage: prevValuesPage,
   } = useIndexValues(selectedIndexKey || null);
   useIndexLogHistory(selectedIndexKey, selectedIndexValue || null);
   const filteredLines = useFilteredLines();
@@ -275,31 +280,56 @@ export default function IndexPanel() {
               <Typography>No values found for {selectedIndexKey}.</Typography>
             </Box>
           ) : (
-            <List disablePadding>
-              {values.map((item, idx) => (
-                <ListItemButton
-                  key={`${idx}-${item.count}`}
-                  divider
-                  onClick={() => selectValue(item.value)}
-                  sx={{ px: 2, py: 1 }}
+            <>
+              <List disablePadding>
+                {values.map((item) => (
+                  <ListItemButton
+                    key={item.value}
+                    divider
+                    onClick={() => selectValue(item.value)}
+                    sx={{ px: 2, py: 1 }}
                   >
-                  <ListItemText
-                    primary={previewValue(item.value)}
-                    slotProps={{
-                      primary: {
-                        sx: {
-                          fontFamily: 'monospace',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                    <ListItemText
+                      primary={previewValue(item.value)}
+                      secondary={item.lastUpdatedUnixMs > 0n
+                        ? `Last updated ${formatDateTime(item.lastUpdatedUnixMs)}`
+                        : 'Last updated unknown'}
+                      slotProps={{
+                        primary: {
+                          sx: {
+                            fontFamily: 'monospace',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          },
                         },
-                      },
-                    }}
-                  />
-                  <Chip size="small" label={formatCount(item.count)} />
-                </ListItemButton>
-              ))}
-            </List>
+                      }}
+                    />
+                    <Chip size="small" label={formatCount(item.count)} />
+                  </ListItemButton>
+                ))}
+              </List>
+              {(hasPrevValuesPage || hasNextValuesPage) && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: 1,
+                    px: 2,
+                    py: 1.5,
+                    borderTop: 1,
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Button size="small" disabled={!hasPrevValuesPage || valuesLoading} onClick={prevValuesPage}>
+                    Previous
+                  </Button>
+                  <Button size="small" disabled={!hasNextValuesPage || valuesLoading} onClick={nextValuesPage}>
+                    Next
+                  </Button>
+                </Box>
+              )}
+            </>
           )}
         </Box>
       ) : mode === 'loading' ? (

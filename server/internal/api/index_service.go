@@ -47,18 +47,30 @@ func (s *LogService) ListIndexValues(_ context.Context, req *pb.ListIndexValuesR
 	if req.Key == "" {
 		return nil, status.Error(codes.InvalidArgument, "key is required")
 	}
-	values, err := s.indexes.ListValues(req.Key)
+	values, next, prev, err := s.indexes.ListValues(req.Key, int(req.PageSize), req.PageToken)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "index %q not found", req.Key)
 		}
+		if err.Error() == "invalid page_token" {
+			return nil, status.Error(codes.InvalidArgument, "invalid page_token")
+		}
 		return nil, status.Errorf(codes.Internal, "list index values: %v", err)
 	}
-	resp := &pb.ListIndexValuesResponse{Values: make([]*pb.LogIndexValueInfo, 0, len(values))}
+	resp := &pb.ListIndexValuesResponse{
+		Values:        make([]*pb.LogIndexValueInfo, 0, len(values)),
+		NextPageToken: next,
+		PrevPageToken: prev,
+	}
 	for _, value := range values {
+		var lastUpdatedUnixMs int64
+		if !value.LastUpdated.IsZero() {
+			lastUpdatedUnixMs = value.LastUpdated.UnixMilli()
+		}
 		resp.Values = append(resp.Values, &pb.LogIndexValueInfo{
-			Value: value.Value,
-			Count: value.Count,
+			Value:             value.Value,
+			Count:             value.Count,
+			LastUpdatedUnixMs: lastUpdatedUnixMs,
 		})
 	}
 	return resp, nil

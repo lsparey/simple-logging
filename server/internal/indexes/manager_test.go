@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writePodLog(t *testing.T, root, namespace, pod string, lines []string) {
@@ -157,7 +158,7 @@ func assertMessages(t *testing.T, lines []string, messages ...string) {
 	}
 }
 
-func TestListValuesReturnsCountsDescending(t *testing.T) {
+func TestListValuesReturnsNewestValuesFirst(t *testing.T) {
 	root := t.TempDir()
 	writePodLog(t, root, "default", "api", []string{
 		`2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1","msg":"one"}`,
@@ -173,21 +174,89 @@ func TestListValuesReturnsCountsDescending(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	values, err := m.ListValues("companyUuid")
+	values, next, prev, err := m.ListValues("companyUuid", 50, "")
 	if err != nil {
 		t.Fatalf("ListValues: %v", err)
+	}
+	if next != "" || prev != "" {
+		t.Fatalf("unexpected pagination tokens next=%q prev=%q", next, prev)
 	}
 	if len(values) != 3 {
 		t.Fatalf("expected 3 values, got %d: %#v", len(values), values)
 	}
 	want := []ValueInfo{
-		{Value: "co-2", Count: 3},
-		{Value: "co-1", Count: 2},
-		{Value: "co-3", Count: 1},
+		{Value: "co-2", Count: 3, LastUpdated: mustParseTime(t, "2026-06-05T08:00:05Z")},
+		{Value: "co-3", Count: 1, LastUpdated: mustParseTime(t, "2026-06-05T08:00:03Z")},
+		{Value: "co-1", Count: 2, LastUpdated: mustParseTime(t, "2026-06-05T08:00:02Z")},
 	}
 	for i := range want {
-		if values[i] != want[i] {
+		if values[i].Value != want[i].Value ||
+			values[i].Count != want[i].Count ||
+			!values[i].LastUpdated.Equal(want[i].LastUpdated) {
 			t.Fatalf("value %d got %#v want %#v", i, values[i], want[i])
+		}
+	}
+}
+
+func TestListValuesPaginatesNewestFirst(t *testing.T) {
+	root := t.TempDir()
+	lines := make([]string, 0, 5)
+	for i := 0; i < 5; i++ {
+		lines = append(lines, fmt.Sprintf(
+			`2026-06-05T08:00:0%dZ [default/api/app] {"companyUuid":"co-%d"}`,
+			i,
+			i,
+		))
+	}
+	writePodLog(t, root, "default", "api", lines)
+
+	m := NewManager(root)
+	if err := m.Create("companyUuid"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	page1, next, prev, err := m.ListValues("companyUuid", 2, "")
+	if err != nil {
+		t.Fatalf("ListValues page1: %v", err)
+	}
+	if next == "" || prev != "" {
+		t.Fatalf("unexpected page1 tokens next=%q prev=%q", next, prev)
+	}
+	assertValues(t, page1, "co-4", "co-3")
+
+	page2, next2, prev2, err := m.ListValues("companyUuid", 2, next)
+	if err != nil {
+		t.Fatalf("ListValues page2: %v", err)
+	}
+	if next2 == "" || prev2 == "" {
+		t.Fatalf("unexpected page2 tokens next=%q prev=%q", next2, prev2)
+	}
+	assertValues(t, page2, "co-2", "co-1")
+
+	page1Again, _, _, err := m.ListValues("companyUuid", 2, prev2)
+	if err != nil {
+		t.Fatalf("ListValues previous page: %v", err)
+	}
+	assertValues(t, page1Again, "co-4", "co-3")
+}
+
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("parse time %q: %v", value, err)
+	}
+	return parsed
+}
+
+func assertValues(t *testing.T, values []ValueInfo, expected ...string) {
+	t.Helper()
+	if len(values) != len(expected) {
+		t.Fatalf("got %d values, want %d: %#v", len(values), len(expected), values)
+	}
+	for i, value := range expected {
+		if values[i].Value != value {
+			t.Errorf("value %d = %q, want %q", i, values[i].Value, value)
 		}
 	}
 }
@@ -202,7 +271,7 @@ func TestDeleteRemovesManifestKeyAndIndexFiles(t *testing.T) {
 	if err := m.Create("companyUuid"); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if values, err := m.ListValues("companyUuid"); err != nil || len(values) != 1 {
+	if values, _, _, err := m.ListValues("companyUuid", 50, ""); err != nil || len(values) != 1 {
 		t.Fatalf("ListValues before delete got values=%#v err=%v", values, err)
 	}
 
@@ -247,7 +316,7 @@ func TestCreateBackfillsLongJSONLines(t *testing.T) {
 		t.Fatalf("long line changed during indexing")
 	}
 
-	values, err := m.ListValues("message")
+	values, _, _, err := m.ListValues("message", 50, "")
 	if err != nil {
 		t.Fatalf("ListValues: %v", err)
 	}

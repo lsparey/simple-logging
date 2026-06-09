@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useLogStore } from '../../store/logStore.js';
 import IndexPanel from './IndexPanel.js';
 
@@ -10,13 +11,10 @@ vi.mock('../../hooks/useIndexLogHistory.js', () => ({
 }));
 
 vi.mock('../../hooks/useIndexValues.js', () => ({
-  useIndexValues: vi.fn(() => ({
-    values: [],
-    loading: false,
-    error: null,
-  })),
+  useIndexValues: vi.fn(),
 }));
 
+const mockUseIndexValues = vi.mocked(useIndexValues);
 const theme = createTheme();
 
 function Wrapper({ children }: { children: React.ReactNode }) {
@@ -30,6 +28,16 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 describe('IndexPanel JSON formatting', () => {
   beforeEach(() => {
     localStorage.removeItem('simple-logging.jsonFormats');
+    mockUseIndexValues.mockReturnValue({
+      values: [],
+      loading: false,
+      error: null,
+      hasNextPage: false,
+      hasPrevPage: false,
+      nextPage: vi.fn(),
+      prevPage: vi.fn(),
+      reload: vi.fn(),
+    });
     useLogStore.setState({
       selectedIndexKey: 'companyUuid',
       selectedIndexValue: '',
@@ -40,6 +48,32 @@ describe('IndexPanel JSON formatting', () => {
       jsonFormats: {},
       mode: 'idle',
     });
+  });
+
+  it('shows last-updated activity and value pagination controls', () => {
+    const nextPage = vi.fn();
+    mockUseIndexValues.mockReturnValue({
+      values: [{
+        value: 'company-1',
+        count: 12n,
+        lastUpdatedUnixMs: 1_749_470_400_000n,
+      }],
+      loading: false,
+      error: null,
+      hasNextPage: true,
+      hasPrevPage: false,
+      nextPage,
+      prevPage: vi.fn(),
+      reload: vi.fn(),
+    });
+
+    render(<IndexPanel />, { wrapper: Wrapper });
+
+    expect(screen.getByText('company-1')).toBeInTheDocument();
+    expect(screen.getByText(/Last updated/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(nextPage).toHaveBeenCalledOnce();
   });
 
   it('opens the shared formatter and saves a format for the selected index', () => {
