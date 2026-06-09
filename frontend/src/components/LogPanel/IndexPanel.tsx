@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -22,8 +22,10 @@ import { useNavigate } from 'react-router-dom';
 import { logClient } from '../../grpc/client.js';
 import { useIndexLogHistory } from '../../hooks/useIndexLogHistory.js';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
-import { useFilteredLines, useLogStore } from '../../store/logStore.js';
+import { makeIndexFormatKey, useFilteredLines, useLogStore } from '../../store/logStore.js';
+import { observedJsonKeys } from '../../utils/jsonKeys.js';
 import CreateIndexDialog from './CreateIndexDialog.js';
+import JsonFormatModal from './JsonFormatModal.js';
 import LogList from './LogList.js';
 
 function formatCount(count: bigint) {
@@ -49,9 +51,13 @@ export default function IndexPanel() {
     isFetchingMore,
     searchText,
     setSearchText,
+    lines,
+    jsonFormats,
+    setJsonFormat,
   } = useLogStore();
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [formatModalOpen, setFormatModalOpen] = useState(false);
   const [actionsAnchor, setActionsAnchor] = useState<HTMLElement | null>(null);
   const [valueDraft, setValueDraft] = useState({ key: selectedIndexKey ?? '', value: selectedIndexValue });
   const [autoScroll, setAutoScroll] = useState(true);
@@ -65,6 +71,9 @@ export default function IndexPanel() {
   } = useIndexValues(selectedIndexKey || null);
   useIndexLogHistory(selectedIndexKey, selectedIndexValue || null);
   const filteredLines = useFilteredLines();
+  const formatKey = selectedIndexKey ? makeIndexFormatKey(selectedIndexKey) : '';
+  const jsonFormat = formatKey ? (jsonFormats[formatKey] ?? null) : null;
+  const candidateKeys = useMemo(() => observedJsonKeys(lines), [lines]);
   const draftValue = valueDraft.key === (selectedIndexKey ?? '') ? valueDraft.value : selectedIndexValue;
   const valueOptions = values.map((item) => item.value);
 
@@ -185,12 +194,30 @@ export default function IndexPanel() {
           </Button>
         )}
         {selectedIndexKey && (
-          <Chip
-            label={selectedIndexKey}
-            size="small"
-            variant="outlined"
-            sx={{ fontFamily: 'monospace' }}
-          />
+          <>
+            <Chip
+              label={selectedIndexKey}
+              size="small"
+              variant="outlined"
+              sx={{ fontFamily: 'monospace' }}
+            />
+            <Chip
+              label="{JSON}"
+              size="small"
+              variant="outlined"
+              onClick={() => setFormatModalOpen(true)}
+              sx={{
+                height: 20,
+                fontSize: '0.7rem',
+                fontFamily: 'monospace',
+                cursor: 'pointer',
+                color: 'warning.main',
+                borderColor: 'warning.main',
+                borderStyle: 'solid',
+                '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
+          </>
         )}
         {selectedIndexKey && !selectedIndexValue && (
           <Box component="form" onSubmit={handleValueSubmit} sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
@@ -283,7 +310,7 @@ export default function IndexPanel() {
         <LogList
           lines={filteredLines}
           darkMode={darkMode}
-          jsonFormat={null}
+          jsonFormat={jsonFormat}
           autoScroll={autoScroll}
           liveEnabled={false}
           isFetchingMore={isFetchingMore}
@@ -306,6 +333,20 @@ export default function IndexPanel() {
           setSelectedIndex(key);
           navigate(`/index/${encodeURIComponent(key)}`);
         }}
+      />
+      <JsonFormatModal
+        open={formatModalOpen}
+        current={jsonFormat}
+        candidateKeys={candidateKeys}
+        onSave={(format) => {
+          setJsonFormat(formatKey, format);
+          setFormatModalOpen(false);
+        }}
+        onClear={() => {
+          setJsonFormat(formatKey, null);
+          setFormatModalOpen(false);
+        }}
+        onClose={() => setFormatModalOpen(false)}
       />
     </Box>
   );
