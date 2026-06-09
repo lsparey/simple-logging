@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -166,6 +167,7 @@ func (m *Manager) GetLogs(key, value string, pageSize int, pageToken string, loa
 	if err != nil {
 		return nil, "", "", err
 	}
+	sortEntriesByTimestamp(entries)
 
 	start := 0
 	if loadLastPage {
@@ -204,6 +206,29 @@ func (m *Manager) GetLogs(key, value string, pageSize int, pageToken string, loa
 	}
 
 	return lines, next, prev, nil
+}
+
+func sortEntriesByTimestamp(entries []Entry) {
+	type timedEntry struct {
+		entry Entry
+		time  time.Time
+		valid bool
+	}
+
+	timed := make([]timedEntry, len(entries))
+	for i, entry := range entries {
+		parsed, err := time.Parse(time.RFC3339, entry.Timestamp)
+		timed[i] = timedEntry{entry: entry, time: parsed, valid: err == nil}
+	}
+	sort.SliceStable(timed, func(i, j int) bool {
+		if timed[i].valid != timed[j].valid {
+			return timed[i].valid
+		}
+		return timed[i].valid && timed[i].time.Before(timed[j].time)
+	})
+	for i := range timed {
+		entries[i] = timed[i].entry
+	}
 }
 
 func (m *Manager) ListValues(key string) ([]ValueInfo, error) {
