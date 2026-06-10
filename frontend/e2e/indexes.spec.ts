@@ -7,7 +7,7 @@ test.describe('Indexes', () => {
     await page.getByRole('option', { name: 'Indexes' }).click();
   });
 
-  test('lists values by count and drills into matching log messages', async ({ page }) => {
+  test('lists values by latest activity and drills into matching log messages', async ({ page }) => {
     await page.getByText('companyUuid').click();
 
     await expect(page.getByRole('button', { name: /index actions/i })).toBeVisible();
@@ -18,15 +18,17 @@ test.describe('Indexes', () => {
     await expect(company2).toBeVisible();
     await expect(company2.getByText('1')).toBeVisible();
     await expect(page.getByText(/log messages?/)).not.toBeVisible();
-    await expect(page.getByPlaceholder('Filter results...')).not.toBeVisible();
+    await expect(page.getByPlaceholder('Search…')).not.toBeVisible();
 
     await company1.click();
     await expect(page.getByText('indexed web request')).toBeVisible();
     await expect(page.getByText('indexed api request')).toBeVisible();
     await expect(page.getByText('other company request')).not.toBeVisible();
-    await expect(page.getByLabel('Value')).not.toBeVisible();
+    await expect(page.getByLabel('Value', { exact: true })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Go' })).not.toBeVisible();
-    await expect(page.getByPlaceholder('Filter results...')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to index values' })).toBeVisible();
+    await expect(page.locator('.MuiChip-root').filter({ hasText: 'company-1' })).toBeVisible();
+    await expect(page.getByPlaceholder('Search…')).toBeVisible();
   });
 
   test('manual autocomplete value search renders matching log messages', async ({ page }) => {
@@ -34,13 +36,14 @@ test.describe('Indexes', () => {
     page.on('pageerror', (err) => pageErrors.push(err.message));
 
     await page.getByText('companyUuid').click();
-    await page.getByLabel('Value').fill('company-2');
+    await page.getByLabel('Value', { exact: true }).fill('company-2');
     await page.getByRole('button', { name: 'Go' }).click();
 
     await expect(page.getByText('other company request')).toBeVisible();
-    await expect(page.getByLabel('Value')).not.toBeVisible();
+    await expect(page.getByLabel('Value', { exact: true })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Go' })).not.toBeVisible();
-    await expect(page.getByPlaceholder('Filter results...')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to index values' })).toBeVisible();
+    await expect(page.getByPlaceholder('Search…')).toBeVisible();
     expect(pageErrors).toEqual([]);
   });
 

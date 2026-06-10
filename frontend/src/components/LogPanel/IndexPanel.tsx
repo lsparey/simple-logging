@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MenuIcon from '@mui/icons-material/Menu';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -12,7 +13,6 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
@@ -23,9 +23,11 @@ import { logClient } from '../../grpc/client.js';
 import { useIndexLogHistory } from '../../hooks/useIndexLogHistory.js';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useFilteredLines, useLogStore } from '../../store/logStore.js';
+import { formatDateTime } from '../../utils/formatDateTime.js';
 import { observedJsonKeys } from '../../utils/jsonKeys.js';
 import CreateIndexDialog from './CreateIndexDialog.js';
 import JsonFormatModal from './JsonFormatModal.js';
+import LogHistogram from './LogHistogram.js';
 import LogList from './LogList.js';
 
 function formatCount(count: bigint) {
@@ -34,6 +36,10 @@ function formatCount(count: bigint) {
 
 function previewValue(value: string) {
   return value.length > 240 ? `${value.slice(0, 240)}...` : value;
+}
+
+function titleValue(value: string) {
+  return value.length > 32 ? `${value.slice(0, 29)}...` : value;
 }
 
 export default function IndexPanel() {
@@ -68,6 +74,10 @@ export default function IndexPanel() {
     values,
     loading: valuesLoading,
     error: valuesError,
+    hasNextPage: hasNextValuesPage,
+    hasPrevPage: hasPrevValuesPage,
+    nextPage: nextValuesPage,
+    prevPage: prevValuesPage,
   } = useIndexValues(selectedIndexKey || null);
   useIndexLogHistory(selectedIndexKey, selectedIndexValue || null);
   const filteredLines = useFilteredLines();
@@ -86,6 +96,12 @@ export default function IndexPanel() {
   const selectValue = useCallback((value: string) => {
     setValueDraft({ key: selectedIndexKey ?? '', value });
     setSelectedIndexValue(value);
+    setAutoScroll(true);
+  }, [selectedIndexKey, setSelectedIndexValue]);
+
+  const showIndexValues = useCallback(() => {
+    setValueDraft({ key: selectedIndexKey ?? '', value: '' });
+    setSelectedIndexValue('');
     setAutoScroll(true);
   }, [selectedIndexKey, setSelectedIndexValue]);
 
@@ -152,7 +168,18 @@ export default function IndexPanel() {
           borderColor: 'divider',
         }}
       >
-        {selectedIndexKey ? (
+        {selectedIndexKey && selectedIndexValue ? (
+          <Tooltip title="Back to index values">
+            <IconButton
+              aria-label="Back to index values"
+              size="small"
+              color="primary"
+              onClick={showIndexValues}
+            >
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        ) : selectedIndexKey ? (
           <>
             <Tooltip title="Index actions">
               <IconButton
@@ -194,33 +221,28 @@ export default function IndexPanel() {
           </Button>
         )}
         {selectedIndexKey && (
-          <>
+          <Tooltip title={selectedIndexValue || selectedIndexKey}>
             <Chip
-              label={selectedIndexKey}
+              label={selectedIndexValue ? titleValue(selectedIndexValue) : selectedIndexKey}
               size="small"
               variant="outlined"
-              sx={{ fontFamily: 'monospace' }}
-            />
-            <Chip
-              label="{JSON}"
-              size="small"
-              variant="outlined"
-              onClick={() => setFormatModalOpen(true)}
               sx={{
-                height: 20,
-                fontSize: '0.7rem',
+                maxWidth: 260,
                 fontFamily: 'monospace',
-                cursor: 'pointer',
-                color: 'warning.main',
-                borderColor: 'warning.main',
-                borderStyle: 'solid',
-                '& .MuiChip-label': { px: 0.75 },
+                '& .MuiChip-label': {
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                },
               }}
             />
-          </>
+          </Tooltip>
         )}
         {selectedIndexKey && !selectedIndexValue && (
-          <Box component="form" onSubmit={handleValueSubmit} sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
+          <Box
+            component="form"
+            onSubmit={handleValueSubmit}
+            sx={{ display: 'flex', gap: 1, ml: 'auto', minWidth: 280 }}
+          >
             <Autocomplete
               freeSolo
               options={valueOptions}
@@ -236,7 +258,7 @@ export default function IndexPanel() {
                 );
               }}
               renderInput={(params) => <TextField {...params} size="small" label="Value" />}
-              sx={{ minWidth: 180, flex: '0 1 320px' }}
+              sx={{ minWidth: 280, width: 420 }}
             />
             <Button type="submit" size="small" variant="contained" disabled={!draftValue.trim()}>
               Go
@@ -245,9 +267,27 @@ export default function IndexPanel() {
         )}
         {selectedIndexKey && selectedIndexValue && (
           <Box sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
+            <Chip
+              label="{JSON}"
+              size="small"
+              variant="outlined"
+              onClick={() => setFormatModalOpen(true)}
+              sx={{
+                alignSelf: 'center',
+                height: 20,
+                fontSize: '0.7rem',
+                fontFamily: 'monospace',
+                cursor: 'pointer',
+                color: 'warning.main',
+                borderColor: 'warning.main',
+                borderStyle: 'solid',
+                '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
+            <LogHistogram />
             <TextField
               size="small"
-              placeholder="Filter results..."
+              placeholder="Search…"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               sx={{ flex: 1, minWidth: 160 }}
@@ -275,31 +315,59 @@ export default function IndexPanel() {
               <Typography>No values found for {selectedIndexKey}.</Typography>
             </Box>
           ) : (
-            <List disablePadding>
-              {values.map((item, idx) => (
-                <ListItemButton
-                  key={`${idx}-${item.count}`}
-                  divider
-                  onClick={() => selectValue(item.value)}
-                  sx={{ px: 2, py: 1 }}
+            <>
+              <List disablePadding>
+                {values.map((item) => (
+                  <ListItemButton
+                    key={item.value}
+                    divider
+                    onClick={() => selectValue(item.value)}
+                    sx={{ px: 2, py: 1 }}
                   >
-                  <ListItemText
-                    primary={previewValue(item.value)}
-                    slotProps={{
-                      primary: {
-                        sx: {
-                          fontFamily: 'monospace',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        },
-                      },
-                    }}
-                  />
-                  <Chip size="small" label={formatCount(item.count)} />
-                </ListItemButton>
-              ))}
-            </List>
+                    <Typography
+                      sx={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontFamily: 'monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {previewValue(item.value)}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ ml: 2, whiteSpace: 'nowrap' }}
+                    >
+                      {item.lastUpdatedUnixMs > 0n ? formatDateTime(item.lastUpdatedUnixMs) : '-'}
+                    </Typography>
+                    <Chip size="small" label={formatCount(item.count)} sx={{ ml: 2 }} />
+                  </ListItemButton>
+                ))}
+              </List>
+              {(hasPrevValuesPage || hasNextValuesPage) && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    gap: 1,
+                    px: 2,
+                    py: 1.5,
+                    borderTop: 1,
+                    borderColor: 'divider',
+                  }}
+                >
+                  <Button size="small" disabled={!hasPrevValuesPage || valuesLoading} onClick={prevValuesPage}>
+                    Previous
+                  </Button>
+                  <Button size="small" disabled={!hasNextValuesPage || valuesLoading} onClick={nextValuesPage}>
+                    Next
+                  </Button>
+                </Box>
+              )}
+            </>
           )}
         </Box>
       ) : mode === 'loading' ? (

@@ -1406,8 +1406,13 @@ func (*DeleteIndexResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListIndexValuesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	// page_size is the maximum number of index values to return.
+	// Defaults to 50 if unset or 0; capped at a server-defined maximum.
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token is an opaque cursor returned by a previous ListIndexValues call.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1449,12 +1454,27 @@ func (x *ListIndexValuesRequest) GetKey() string {
 	return ""
 }
 
+func (x *ListIndexValuesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListIndexValuesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type LogIndexValueInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	Count         int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Value             string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	Count             int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+	LastUpdatedUnixMs int64                  `protobuf:"varint,3,opt,name=last_updated_unix_ms,json=lastUpdatedUnixMs,proto3" json:"last_updated_unix_ms,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *LogIndexValueInfo) Reset() {
@@ -1501,9 +1521,18 @@ func (x *LogIndexValueInfo) GetCount() int64 {
 	return 0
 }
 
+func (x *LogIndexValueInfo) GetLastUpdatedUnixMs() int64 {
+	if x != nil {
+		return x.LastUpdatedUnixMs
+	}
+	return 0
+}
+
 type ListIndexValuesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Values        []*LogIndexValueInfo   `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	PrevPageToken string                 `protobuf:"bytes,3,opt,name=prev_page_token,json=prevPageToken,proto3" json:"prev_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1543,6 +1572,20 @@ func (x *ListIndexValuesResponse) GetValues() []*LogIndexValueInfo {
 		return x.Values
 	}
 	return nil
+}
+
+func (x *ListIndexValuesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+func (x *ListIndexValuesResponse) GetPrevPageToken() string {
+	if x != nil {
+		return x.PrevPageToken
+	}
+	return ""
 }
 
 type GetIndexLogsRequest struct {
@@ -1778,14 +1821,20 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\x05index\x18\x01 \x01(\v2\x1a.simplelog.v1.LogIndexInfoR\x05index\"&\n" +
 	"\x12DeleteIndexRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"\x15\n" +
-	"\x13DeleteIndexResponse\"*\n" +
+	"\x13DeleteIndexResponse\"f\n" +
 	"\x16ListIndexValuesRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\"?\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"p\n" +
 	"\x11LogIndexValueInfo\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"R\n" +
+	"\x05count\x18\x02 \x01(\x03R\x05count\x12/\n" +
+	"\x14last_updated_unix_ms\x18\x03 \x01(\x03R\x11lastUpdatedUnixMs\"\xa2\x01\n" +
 	"\x17ListIndexValuesResponse\x127\n" +
-	"\x06values\x18\x01 \x03(\v2\x1f.simplelog.v1.LogIndexValueInfoR\x06values\"\x9f\x01\n" +
+	"\x06values\x18\x01 \x03(\v2\x1f.simplelog.v1.LogIndexValueInfoR\x06values\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12&\n" +
+	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken\"\x9f\x01\n" +
 	"\x13GetIndexLogsRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1b\n" +

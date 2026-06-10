@@ -2,7 +2,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useLogStore } from '../../store/logStore.js';
+import { formatDateTime } from '../../utils/formatDateTime.js';
 import IndexPanel from './IndexPanel.js';
 
 vi.mock('../../hooks/useIndexLogHistory.js', () => ({
@@ -10,13 +12,18 @@ vi.mock('../../hooks/useIndexLogHistory.js', () => ({
 }));
 
 vi.mock('../../hooks/useIndexValues.js', () => ({
-  useIndexValues: vi.fn(() => ({
-    values: [],
-    loading: false,
-    error: null,
-  })),
+  useIndexValues: vi.fn(),
 }));
 
+vi.mock('./LogList.js', () => ({
+  default: () => <div>Log list</div>,
+}));
+
+vi.mock('./LogHistogram.js', () => ({
+  default: () => <div data-testid="log-histogram">Histogram</div>,
+}));
+
+const mockUseIndexValues = vi.mocked(useIndexValues);
 const theme = createTheme();
 
 function Wrapper({ children }: { children: React.ReactNode }) {
@@ -30,6 +37,16 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 describe('IndexPanel JSON formatting', () => {
   beforeEach(() => {
     localStorage.removeItem('simple-logging.jsonFormats');
+    mockUseIndexValues.mockReturnValue({
+      values: [],
+      loading: false,
+      error: null,
+      hasNextPage: false,
+      hasPrevPage: false,
+      nextPage: vi.fn(),
+      prevPage: vi.fn(),
+      reload: vi.fn(),
+    });
     useLogStore.setState({
       selectedIndexKey: 'companyUuid',
       selectedIndexValue: '',
@@ -42,7 +59,41 @@ describe('IndexPanel JSON formatting', () => {
     });
   });
 
+  it('shows single-row dates, pagination controls, and no JSON button', () => {
+    const nextPage = vi.fn();
+    mockUseIndexValues.mockReturnValue({
+      values: [{
+        value: 'company-1',
+        count: 12n,
+        lastUpdatedUnixMs: 1_749_470_400_000n,
+      }],
+      loading: false,
+      error: null,
+      hasNextPage: true,
+      hasPrevPage: false,
+      nextPage,
+      prevPage: vi.fn(),
+      reload: vi.fn(),
+    });
+
+    render(<IndexPanel />, { wrapper: Wrapper });
+
+    expect(screen.getByText('company-1')).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(1_749_470_400_000n))).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
+    expect(screen.queryByText('{JSON}')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Index actions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to index values' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(nextPage).toHaveBeenCalledOnce();
+  });
+
   it('opens the shared formatter and saves a format for the selected index', () => {
+    useLogStore.setState({
+      selectedIndexValue: 'company-1',
+      mode: 'history',
+    });
     render(<IndexPanel />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByText('{JSON}'));
@@ -59,5 +110,33 @@ describe('IndexPanel JSON formatting', () => {
       levelKey: 'level',
       messageKey: 'message',
     });
+  });
+
+  it('shows the selected value, histogram, and search input in the log toolbar', () => {
+    const selectedValue = 'company-value-that-is-longer-than-thirty-two-characters';
+    useLogStore.setState({
+      selectedIndexValue: selectedValue,
+      mode: 'history',
+    });
+    render(<IndexPanel />, { wrapper: Wrapper });
+
+    expect(screen.getByText(`${selectedValue.slice(0, 29)}...`)).toBeInTheDocument();
+    expect(screen.queryByText('companyUuid')).not.toBeInTheDocument();
+    expect(screen.getByTestId('log-histogram')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search…')).toBeInTheDocument();
+  });
+
+  it('shows a back button for logs and returns to the index values', () => {
+    useLogStore.setState({
+      selectedIndexValue: 'company-1',
+      mode: 'history',
+    });
+    render(<IndexPanel />, { wrapper: Wrapper });
+
+    expect(screen.queryByRole('button', { name: 'Index actions' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to index values' }));
+
+    expect(useLogStore.getState().selectedIndexValue).toBe('');
+    expect(screen.getByRole('button', { name: 'Index actions' })).toBeInTheDocument();
   });
 });

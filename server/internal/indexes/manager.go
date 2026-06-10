@@ -39,8 +39,9 @@ type Entry struct {
 }
 
 type ValueInfo struct {
-	Value string
-	Count int64
+	Value       string
+	Count       int64
+	LastUpdated time.Time
 }
 
 type Manager struct {
@@ -231,19 +232,25 @@ func sortEntriesByTimestamp(entries []Entry) {
 	}
 }
 
-func (m *Manager) ListValues(key string) ([]ValueInfo, error) {
+func (m *Manager) ListValues(key string, pageSize int, pageToken string) ([]ValueInfo, string, string, error) {
 	if err := ValidateKey(key); err != nil {
-		return nil, err
+		return nil, "", "", err
+	}
+	if pageSize <= 0 {
+		pageSize = 50
+	}
+	if pageSize > 200 {
+		pageSize = 200
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if _, exists := m.keys[key]; !exists {
-		return nil, os.ErrNotExist
+		return nil, "", "", os.ErrNotExist
 	}
 
-	counts := make(map[string]int64)
+	valueInfo := make(map[string]ValueInfo)
 	valuesRoot := filepath.Join(m.keyRoot(key), "values")
 	if err := filepath.WalkDir(valuesRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -257,27 +264,59 @@ func (m *Manager) ListValues(key string) ([]ValueInfo, error) {
 			return err
 		}
 		for _, entry := range entries {
-			counts[entry.Value]++
+			info := valueInfo[entry.Value]
+			info.Value = entry.Value
+			info.Count++
+			if timestamp, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil && timestamp.After(info.LastUpdated) {
+				info.LastUpdated = timestamp
+			}
+			valueInfo[entry.Value] = info
 		}
 		return nil
 	}); err != nil {
 		if os.IsNotExist(err) {
-			return []ValueInfo{}, nil
+			return []ValueInfo{}, "", "", nil
 		}
-		return nil, err
+		return nil, "", "", err
 	}
 
-	values := make([]ValueInfo, 0, len(counts))
-	for value, count := range counts {
-		values = append(values, ValueInfo{Value: value, Count: count})
+	values := make([]ValueInfo, 0, len(valueInfo))
+	for _, info := range valueInfo {
+		values = append(values, info)
 	}
 	sort.Slice(values, func(i, j int) bool {
-		if values[i].Count == values[j].Count {
+		if values[i].LastUpdated.Equal(values[j].LastUpdated) {
 			return values[i].Value < values[j].Value
 		}
-		return values[i].Count > values[j].Count
+		return values[i].LastUpdated.After(values[j].LastUpdated)
 	})
-	return values, nil
+
+	start := 0
+	if pageToken != "" {
+		var err error
+		start, err = strconv.Atoi(pageToken)
+		if err != nil || start < 0 || start > len(values) {
+			return nil, "", "", errors.New("invalid page_token")
+		}
+	}
+	end := start + pageSize
+	if end > len(values) {
+		end = len(values)
+	}
+
+	next := ""
+	if end < len(values) {
+		next = strconv.Itoa(end)
+	}
+	prev := ""
+	if start > 0 {
+		prevStart := start - pageSize
+		if prevStart < 0 {
+			prevStart = 0
+		}
+		prev = strconv.Itoa(prevStart)
+	}
+	return values[start:end], next, prev, nil
 }
 
 func (m *Manager) load() error {

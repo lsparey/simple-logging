@@ -6,21 +6,32 @@ export function useIndexValues(key: string | null) {
   const [values, setValues] = useState<LogIndexValueInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pageToken, setPageToken] = useState('');
+  const [nextPageToken, setNextPageToken] = useState('');
+  const [prevPageToken, setPrevPageToken] = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (token = '') => {
     if (!key) {
       setValues([]);
       setError(null);
       setLoading(false);
+      setPageToken('');
+      setNextPageToken('');
+      setPrevPageToken('');
       return;
     }
     setLoading(true);
     try {
-      const resp = await logClient.listIndexValues({ key });
+      const resp = await logClient.listIndexValues({ key, pageSize: 50, pageToken: token });
       setValues(resp.values);
+      setPageToken(token);
+      setNextPageToken(resp.nextPageToken);
+      setPrevPageToken(resp.prevPageToken);
       setError(null);
     } catch (err) {
       setValues([]);
+      setNextPageToken('');
+      setPrevPageToken('');
       setError(err instanceof Error ? err.message : 'Failed to load index values');
     } finally {
       setLoading(false);
@@ -28,8 +39,17 @@ export function useIndexValues(key: string | null) {
   }, [key]);
 
   useEffect(() => {
-    void Promise.resolve().then(load);
+    void Promise.resolve().then(() => load(''));
   }, [load]);
 
-  return { values, loading, error, reload: load };
+  return {
+    values,
+    loading,
+    error,
+    hasNextPage: nextPageToken !== '',
+    hasPrevPage: prevPageToken !== '',
+    nextPage: () => load(nextPageToken),
+    prevPage: () => load(prevPageToken),
+    reload: () => load(pageToken),
+  };
 }

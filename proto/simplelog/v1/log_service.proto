@@ -47,7 +47,7 @@ service LogService {
   // DeleteIndex removes a JSON key index and its persisted value files.
   rpc DeleteIndex(DeleteIndexRequest) returns (DeleteIndexResponse);
 
-  // ListIndexValues returns observed values for an index ordered by match count.
+  // ListIndexValues returns observed values ordered by most recent match.
   rpc ListIndexValues(ListIndexValuesRequest) returns (ListIndexValuesResponse);
 
   // GetIndexLogs returns log lines whose indexed JSON key matches the value.
@@ -244,15 +244,23 @@ message DeleteIndexResponse {}
 
 message ListIndexValuesRequest {
   string key = 1;
+  // page_size is the maximum number of index values to return.
+  // Defaults to 50 if unset or 0; capped at a server-defined maximum.
+  int32 page_size = 2;
+  // page_token is an opaque cursor returned by a previous ListIndexValues call.
+  string page_token = 3;
 }
 
 message LogIndexValueInfo {
   string value = 1;
   int64 count = 2;
+  int64 last_updated_unix_ms = 3;
 }
 
 message ListIndexValuesResponse {
   repeated LogIndexValueInfo values = 1;
+  string next_page_token = 2;
+  string prev_page_token = 3;
 }
 
 message GetIndexLogsRequest {
