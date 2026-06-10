@@ -12,7 +12,6 @@ import IconButton from '@mui/material/IconButton';
 import List from '@mui/material/List';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
@@ -23,7 +22,7 @@ import { logClient } from '../../grpc/client.js';
 import { useIndexLogHistory } from '../../hooks/useIndexLogHistory.js';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useFilteredLines, useLogStore } from '../../store/logStore.js';
-import { formatDateTime } from '../../utils/formatDateTime.js';
+import { formatDate } from '../../utils/formatDateTime.js';
 import { observedJsonKeys } from '../../utils/jsonKeys.js';
 import CreateIndexDialog from './CreateIndexDialog.js';
 import JsonFormatModal from './JsonFormatModal.js';
@@ -199,33 +198,19 @@ export default function IndexPanel() {
           </Button>
         )}
         {selectedIndexKey && (
-          <>
-            <Chip
-              label={selectedIndexKey}
-              size="small"
-              variant="outlined"
-              sx={{ fontFamily: 'monospace' }}
-            />
-            <Chip
-              label="{JSON}"
-              size="small"
-              variant="outlined"
-              onClick={() => setFormatModalOpen(true)}
-              sx={{
-                height: 20,
-                fontSize: '0.7rem',
-                fontFamily: 'monospace',
-                cursor: 'pointer',
-                color: 'warning.main',
-                borderColor: 'warning.main',
-                borderStyle: 'solid',
-                '& .MuiChip-label': { px: 0.75 },
-              }}
-            />
-          </>
+          <Chip
+            label={selectedIndexKey}
+            size="small"
+            variant="outlined"
+            sx={{ fontFamily: 'monospace' }}
+          />
         )}
         {selectedIndexKey && !selectedIndexValue && (
-          <Box component="form" onSubmit={handleValueSubmit} sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
+          <Box
+            component="form"
+            onSubmit={handleValueSubmit}
+            sx={{ display: 'flex', gap: 1, ml: 'auto', minWidth: 280 }}
+          >
             <Autocomplete
               freeSolo
               options={valueOptions}
@@ -250,6 +235,23 @@ export default function IndexPanel() {
         )}
         {selectedIndexKey && selectedIndexValue && (
           <Box sx={{ display: 'flex', gap: 1, flex: 1, minWidth: 280 }}>
+            <Chip
+              label="{JSON}"
+              size="small"
+              variant="outlined"
+              onClick={() => setFormatModalOpen(true)}
+              sx={{
+                alignSelf: 'center',
+                height: 20,
+                fontSize: '0.7rem',
+                fontFamily: 'monospace',
+                cursor: 'pointer',
+                color: 'warning.main',
+                borderColor: 'warning.main',
+                borderStyle: 'solid',
+                '& .MuiChip-label': { px: 0.75 },
+              }}
+            />
             <TextField
               size="small"
               placeholder="Filter results..."
@@ -289,22 +291,25 @@ export default function IndexPanel() {
                     onClick={() => selectValue(item.value)}
                     sx={{ px: 2, py: 1 }}
                   >
-                    <ListItemText
-                      primary={previewValue(item.value)}
-                      secondary={item.lastUpdatedUnixMs > 0n
-                        ? `Last updated ${formatDateTime(item.lastUpdatedUnixMs)}`
-                        : 'Last updated unknown'}
-                      slotProps={{
-                        primary: {
-                          sx: {
-                            fontFamily: 'monospace',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          },
-                        },
+                    <Typography
+                      sx={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontFamily: 'monospace',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
                       }}
-                    />
+                    >
+                      {previewValue(item.value)}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ ml: 2, whiteSpace: 'nowrap' }}
+                    >
+                      {item.lastUpdatedUnixMs > 0n ? formatDate(item.lastUpdatedUnixMs) : '-'}
+                    </Typography>
                     <Chip size="small" label={formatCount(item.count)} />
                   </ListItemButton>
                 ))}

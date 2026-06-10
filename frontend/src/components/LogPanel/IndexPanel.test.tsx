@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useLogStore } from '../../store/logStore.js';
+import { formatDate } from '../../utils/formatDateTime.js';
 import IndexPanel from './IndexPanel.js';
 
 vi.mock('../../hooks/useIndexLogHistory.js', () => ({
@@ -12,6 +13,10 @@ vi.mock('../../hooks/useIndexLogHistory.js', () => ({
 
 vi.mock('../../hooks/useIndexValues.js', () => ({
   useIndexValues: vi.fn(),
+}));
+
+vi.mock('./LogList.js', () => ({
+  default: () => <div>Log list</div>,
 }));
 
 const mockUseIndexValues = vi.mocked(useIndexValues);
@@ -50,7 +55,7 @@ describe('IndexPanel JSON formatting', () => {
     });
   });
 
-  it('shows last-updated activity and value pagination controls', () => {
+  it('shows single-row dates, pagination controls, and no JSON button', () => {
     const nextPage = vi.fn();
     mockUseIndexValues.mockReturnValue({
       values: [{
@@ -70,13 +75,19 @@ describe('IndexPanel JSON formatting', () => {
     render(<IndexPanel />, { wrapper: Wrapper });
 
     expect(screen.getByText('company-1')).toBeInTheDocument();
-    expect(screen.getByText(/Last updated/)).toBeInTheDocument();
+    expect(screen.getByText(formatDate(1_749_470_400_000n))).toBeInTheDocument();
+    expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
+    expect(screen.queryByText('{JSON}')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(nextPage).toHaveBeenCalledOnce();
   });
 
   it('opens the shared formatter and saves a format for the selected index', () => {
+    useLogStore.setState({
+      selectedIndexValue: 'company-1',
+      mode: 'history',
+    });
     render(<IndexPanel />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByText('{JSON}'));
