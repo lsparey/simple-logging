@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useLogStore } from '../../store/logStore.js';
-import { formatDate } from '../../utils/formatDateTime.js';
+import { formatDateTime } from '../../utils/formatDateTime.js';
 import IndexPanel from './IndexPanel.js';
 
 vi.mock('../../hooks/useIndexLogHistory.js', () => ({
@@ -75,7 +75,7 @@ describe('IndexPanel JSON formatting', () => {
     render(<IndexPanel />, { wrapper: Wrapper });
 
     expect(screen.getByText('company-1')).toBeInTheDocument();
-    expect(screen.getByText(formatDate(1_749_470_400_000n))).toBeInTheDocument();
+    expect(screen.getByText(formatDateTime(1_749_470_400_000n))).toBeInTheDocument();
     expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
     expect(screen.queryByText('{JSON}')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();

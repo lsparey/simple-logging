@@ -22,7 +22,7 @@ import { logClient } from '../../grpc/client.js';
 import { useIndexLogHistory } from '../../hooks/useIndexLogHistory.js';
 import { useIndexValues } from '../../hooks/useIndexValues.js';
 import { makeIndexFormatKey, useFilteredLines, useLogStore } from '../../store/logStore.js';
-import { formatDate } from '../../utils/formatDateTime.js';
+import { formatDateTime } from '../../utils/formatDateTime.js';
 import { observedJsonKeys } from '../../utils/jsonKeys.js';
 import CreateIndexDialog from './CreateIndexDialog.js';
 import JsonFormatModal from './JsonFormatModal.js';
@@ -226,7 +226,7 @@ export default function IndexPanel() {
                 );
               }}
               renderInput={(params) => <TextField {...params} size="small" label="Value" />}
-              sx={{ minWidth: 180, flex: '0 1 320px' }}
+              sx={{ minWidth: 280, width: 420 }}
             />
             <Button type="submit" size="small" variant="contained" disabled={!draftValue.trim()}>
               Go
@@ -308,9 +308,9 @@ export default function IndexPanel() {
                       color="text.secondary"
                       sx={{ ml: 2, whiteSpace: 'nowrap' }}
                     >
-                      {item.lastUpdatedUnixMs > 0n ? formatDate(item.lastUpdatedUnixMs) : '-'}
+                      {item.lastUpdatedUnixMs > 0n ? formatDateTime(item.lastUpdatedUnixMs) : '-'}
                     </Typography>
-                    <Chip size="small" label={formatCount(item.count)} />
+                    <Chip size="small" label={formatCount(item.count)} sx={{ ml: 2 }} />
                   </ListItemButton>
                 ))}
               </List>
