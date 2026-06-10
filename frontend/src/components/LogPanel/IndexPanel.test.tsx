@@ -78,6 +78,8 @@ describe('IndexPanel JSON formatting', () => {
     expect(screen.getByText(formatDateTime(1_749_470_400_000n))).toBeInTheDocument();
     expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
     expect(screen.queryByText('{JSON}')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Index actions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to index values' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(nextPage).toHaveBeenCalledOnce();
@@ -104,5 +106,19 @@ describe('IndexPanel JSON formatting', () => {
       levelKey: 'level',
       messageKey: 'message',
     });
+  });
+
+  it('shows a back button for logs and returns to the index values', () => {
+    useLogStore.setState({
+      selectedIndexValue: 'company-1',
+      mode: 'history',
+    });
+    render(<IndexPanel />, { wrapper: Wrapper });
+
+    expect(screen.queryByRole('button', { name: 'Index actions' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to index values' }));
+
+    expect(useLogStore.getState().selectedIndexValue).toBe('');
+    expect(screen.getByRole('button', { name: 'Index actions' })).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MenuIcon from '@mui/icons-material/Menu';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -93,6 +94,12 @@ export default function IndexPanel() {
     setAutoScroll(true);
   }, [selectedIndexKey, setSelectedIndexValue]);
 
+  const showIndexValues = useCallback(() => {
+    setValueDraft({ key: selectedIndexKey ?? '', value: '' });
+    setSelectedIndexValue('');
+    setAutoScroll(true);
+  }, [selectedIndexKey, setSelectedIndexValue]);
+
   const loadOlder = useCallback(async () => {
     const {
       selectedIndexKey: key,
@@ -156,7 +163,18 @@ export default function IndexPanel() {
           borderColor: 'divider',
         }}
       >
-        {selectedIndexKey ? (
+        {selectedIndexKey && selectedIndexValue ? (
+          <Tooltip title="Back to index values">
+            <IconButton
+              aria-label="Back to index values"
+              size="small"
+              color="primary"
+              onClick={showIndexValues}
+            >
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        ) : selectedIndexKey ? (
           <>
             <Tooltip title="Index actions">
               <IconButton
