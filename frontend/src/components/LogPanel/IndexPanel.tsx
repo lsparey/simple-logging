@@ -27,6 +27,7 @@ import { formatDateTime } from '../../utils/formatDateTime.js';
 import { observedJsonKeys } from '../../utils/jsonKeys.js';
 import CreateIndexDialog from './CreateIndexDialog.js';
 import JsonFormatModal from './JsonFormatModal.js';
+import LogHistogram from './LogHistogram.js';
 import LogList from './LogList.js';
 
 function formatCount(count: bigint) {
@@ -35,6 +36,10 @@ function formatCount(count: bigint) {
 
 function previewValue(value: string) {
   return value.length > 240 ? `${value.slice(0, 240)}...` : value;
+}
+
+function titleValue(value: string) {
+  return value.length > 32 ? `${value.slice(0, 29)}...` : value;
 }
 
 export default function IndexPanel() {
@@ -216,12 +221,21 @@ export default function IndexPanel() {
           </Button>
         )}
         {selectedIndexKey && (
-          <Chip
-            label={selectedIndexKey}
-            size="small"
-            variant="outlined"
-            sx={{ fontFamily: 'monospace' }}
-          />
+          <Tooltip title={selectedIndexValue || selectedIndexKey}>
+            <Chip
+              label={selectedIndexValue ? titleValue(selectedIndexValue) : selectedIndexKey}
+              size="small"
+              variant="outlined"
+              sx={{
+                maxWidth: 260,
+                fontFamily: 'monospace',
+                '& .MuiChip-label': {
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                },
+              }}
+            />
+          </Tooltip>
         )}
         {selectedIndexKey && !selectedIndexValue && (
           <Box
@@ -270,9 +284,10 @@ export default function IndexPanel() {
                 '& .MuiChip-label': { px: 0.75 },
               }}
             />
+            <LogHistogram />
             <TextField
               size="small"
-              placeholder="Filter results..."
+              placeholder="Search…"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               sx={{ flex: 1, minWidth: 160 }}

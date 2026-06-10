@@ -19,6 +19,10 @@ vi.mock('./LogList.js', () => ({
   default: () => <div>Log list</div>,
 }));
 
+vi.mock('./LogHistogram.js', () => ({
+  default: () => <div data-testid="log-histogram">Histogram</div>,
+}));
+
 const mockUseIndexValues = vi.mocked(useIndexValues);
 const theme = createTheme();
 
@@ -106,6 +110,20 @@ describe('IndexPanel JSON formatting', () => {
       levelKey: 'level',
       messageKey: 'message',
     });
+  });
+
+  it('shows the selected value, histogram, and search input in the log toolbar', () => {
+    const selectedValue = 'company-value-that-is-longer-than-thirty-two-characters';
+    useLogStore.setState({
+      selectedIndexValue: selectedValue,
+      mode: 'history',
+    });
+    render(<IndexPanel />, { wrapper: Wrapper });
+
+    expect(screen.getByText(`${selectedValue.slice(0, 29)}...`)).toBeInTheDocument();
+    expect(screen.queryByText('companyUuid')).not.toBeInTheDocument();
+    expect(screen.getByTestId('log-histogram')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search…')).toBeInTheDocument();
   });
 
   it('shows a back button for logs and returns to the index values', () => {
