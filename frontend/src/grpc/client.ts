@@ -8,10 +8,14 @@ declare global {
   }
 }
 
-const baseUrl =
-  window.__CONFIG__?.grpcWebUrl ??
-  (import.meta.env.VITE_GRPC_WEB_URL as string | undefined) ??
-  'http://localhost:8080';
+const configuredUrl =
+  window.__CONFIG__?.grpcWebUrl ||
+  (import.meta.env.VITE_GRPC_WEB_URL as string | undefined);
+
+// In deployed browser builds, use the same origin as the frontend by default.
+// This lets an ingress or reverse proxy route gRPC-Web without baking its
+// externally-visible host, scheme, or port into the image.
+const baseUrl = configuredUrl?.trim() || window.location.origin;
 
 const transport = createGrpcWebTransport({ baseUrl });
 

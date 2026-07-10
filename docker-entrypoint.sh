@@ -2,11 +2,11 @@
 set -e
 
 # Write runtime configuration for the frontend.
-# When running the combined image locally, the browser reaches the backend
-# on the same host via port 8080.  Override GRPC_WEB_URL for other environments.
+# Leave GRPC_WEB_URL blank to use the frontend's current browser origin.
+# Set it only when the gRPC-Web backend is exposed at a different origin.
 cat > /usr/share/nginx/html/config.js <<EOF
 window.__CONFIG__ = {
-  grpcWebUrl: "${GRPC_WEB_URL:-http://localhost:8080}"
+  grpcWebUrl: "${GRPC_WEB_URL:-}"
 };
 EOF
 

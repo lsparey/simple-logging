@@ -34,9 +34,9 @@ spec:
               {{- if .Values.grpcWebUrl }}
               value: {{ .Values.grpcWebUrl | quote }}
               {{- else if and .Values.ingress.enabled .Values.ingress.host }}
-              value: {{ printf "http://%s" .Values.ingress.host | quote }}
+              value: {{ printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host | quote }}
               {{- else }}
-              value: "http://localhost:8080"
+              value: ""
               {{- end }}
             - name: LOGS_ROOT
               value: {{ .Values.config.logsRoot | quote }}

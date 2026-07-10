@@ -53,6 +53,7 @@ func NewServer(port int, svc *LogService, enableDebug bool, log *zap.Logger) *Se
 		ct := r.Header.Get("Content-Type")
 		if wrappedGrpc.IsGrpcWebRequest(r) ||
 			wrappedGrpc.IsGrpcWebSocketRequest(r) ||
+			wrappedGrpc.IsAcceptableGrpcCorsRequest(r) ||
 			strings.HasPrefix(ct, "application/grpc") {
 			wrappedGrpc.ServeHTTP(w, r)
 			return

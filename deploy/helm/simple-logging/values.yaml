@@ -7,8 +7,9 @@ image:
   pullPolicy: IfNotPresent
 
 # URL the browser uses to reach the gRPC-Web backend.
-# When ingress.enabled=true and ingress.host is set this is derived automatically
-# as http://<host>. Set explicitly only when you need a different host or scheme.
+# With an ingress host this is derived automatically (including TLS). Without
+# ingress, leave blank to use the frontend's current browser origin. Set it
+# explicitly only when the backend is exposed at a different origin.
 grpcWebUrl: ""
 
 ingress:
