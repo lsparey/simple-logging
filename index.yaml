@@ -2,6 +2,18 @@ apiVersion: v1
 entries:
   simple-logging:
   - apiVersion: v2
+    appVersion: 0.10.1
+    created: "2026-07-10T15:11:10.755696011Z"
+    description: Combined image — collects Kubernetes pod logs, stores them on a PVC,
+      exposes a gRPC-Web API on port 8080, and serves the React frontend via nginx
+      on port 80.
+    digest: f20859b8fb88b18100f96edc76a683289e755bda07f4e8f428f97deecbbf491a
+    name: simple-logging
+    type: application
+    urls:
+    - https://github.com/lsparey/simple-logging/releases/download/simple-logging-0.10.1/simple-logging-0.10.1.tgz
+    version: 0.10.1
+  - apiVersion: v2
     appVersion: 0.10.0
     created: "2026-06-10T09:38:23.851885018Z"
     description: Combined image — collects Kubernetes pod logs, stores them on a PVC,
@@ -73,4 +85,4 @@ entries:
     urls:
     - https://github.com/lsparey/simple-logging/releases/download/simple-logging-0.2.0/simple-logging-0.2.0.tgz
     version: 0.2.0
-generated: "2026-06-10T09:38:23.851911337Z"
+generated: "2026-07-10T15:11:10.755717215Z"
