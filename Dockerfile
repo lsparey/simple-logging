@@ -7,11 +7,12 @@ RUN npm run build
 
 # Build backend
 FROM golang:1.26-alpine AS backend-build
+ARG VERSION=dev
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 COPY server/ .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" \
     -o /out/simple-logging ./cmd/server
 
 # Runtime

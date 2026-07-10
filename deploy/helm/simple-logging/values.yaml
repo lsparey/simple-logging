@@ -3,7 +3,9 @@ fullnameOverride: ""
 
 image:
   repository: lsparey/simple-logging
-  tag: "latest"
+  # Defaults to Chart.appVersion so each chart release deploys its matching,
+  # immutable image. Override only to test a specific image tag.
+  tag: ""
   pullPolicy: IfNotPresent
 
 # URL the browser uses to reach the gRPC-Web backend.

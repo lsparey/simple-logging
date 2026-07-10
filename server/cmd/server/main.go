@@ -20,6 +20,9 @@ import (
 	"github.com/lsparey/simple-logging/internal/storage"
 )
 
+// version is set at image build time with -ldflags. Local builds use "dev".
+var version = "dev"
+
 func main() {
 	// Bootstrap a temporary logger for startup errors before the real one is ready.
 	tmpLog, _ := zap.NewProduction()
@@ -36,6 +39,7 @@ func main() {
 	defer log.Sync() //nolint:errcheck
 
 	log.Info("simple-logging starting",
+		zap.String("version", version),
 		zap.String("logs_root", cfg.LogsRoot),
 		zap.Int("grpc_web_port", cfg.GRPCWebPort),
 		zap.Int("retention_days", cfg.RetentionDays),

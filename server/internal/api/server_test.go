@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -93,5 +95,26 @@ func TestNewServer_Smoke(t *testing.T) {
 	srv := NewServer(0, svc, false, zap.NewNop())
 	if srv == nil {
 		t.Fatal("expected non-nil Server")
+	}
+}
+
+func TestServer_CorsPreflight(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	srv := NewServer(0, svc, false, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodOptions, "/simplelog.v1.LogService/ListNamespaces", nil)
+	req.Header.Set("Origin", "http://logs.dev.internal")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "content-type,x-grpc-web,x-user-agent")
+	recorder := httptest.NewRecorder()
+
+	srv.httpServer.Handler.ServeHTTP(recorder, req)
+
+	if recorder.Code < 200 || recorder.Code >= 300 {
+		t.Fatalf("preflight status: got %d, want 2xx", recorder.Code)
+	}
+	if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "http://logs.dev.internal" {
+		t.Errorf("Access-Control-Allow-Origin: got %q, want request origin", got)
 	}
 }

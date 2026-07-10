@@ -58,6 +58,8 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            VERSION=${{ steps.ver.outputs.version }}
           tags: |
             lsparey/simple-logging:${{ steps.ver.outputs.version }}
             lsparey/simple-logging:${{ steps.ver.outputs.major_minor }}
