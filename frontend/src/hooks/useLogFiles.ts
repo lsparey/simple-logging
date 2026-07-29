@@ -13,6 +13,8 @@ export interface LogFileSummary {
 interface LogFilesState {
   files: LogFileSummary[];
   totalSizeBytes: bigint;
+  totalLogFileCount: number;
+  totalIndexFileCount: number;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -21,6 +23,8 @@ interface LogFilesState {
 export function useLogFiles(): LogFilesState {
   const [files, setFiles] = useState<LogFileSummary[]>([]);
   const [totalSizeBytes, setTotalSizeBytes] = useState(0n);
+  const [totalLogFileCount, setTotalLogFileCount] = useState(0);
+  const [totalIndexFileCount, setTotalIndexFileCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -33,6 +37,8 @@ export function useLogFiles(): LogFilesState {
         if (cancelled) return;
         setFiles(response.files);
         setTotalSizeBytes(response.totalSizeBytes);
+        setTotalLogFileCount(response.totalLogFileCount);
+        setTotalIndexFileCount(response.totalIndexFileCount);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -53,5 +59,5 @@ export function useLogFiles(): LogFilesState {
     setRefreshKey((key) => key + 1);
   }, []);
 
-  return { files, totalSizeBytes, loading, error, refresh };
+  return { files, totalSizeBytes, totalLogFileCount, totalIndexFileCount, loading, error, refresh };
 }

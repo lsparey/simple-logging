@@ -17,15 +17,8 @@ import { formatBytes } from '../../utils/formatBytes.js';
 import { formatDateTime } from '../../utils/formatDateTime.js';
 
 export default function DataDashboard() {
-  const { files, totalSizeBytes, loading, error, refresh } = useLogFiles();
-  const logFileCount = files.filter((file) => file.kind === 'Log').length;
-  const indexFileCount = files.filter((file) => file.kind === 'Index').length;
-  const sortedFiles = [...files].sort((a, b) => {
-    if (a.sizeBytes === b.sizeBytes) {
-      return `${a.namespace}/${a.name}`.localeCompare(`${b.namespace}/${b.name}`);
-    }
-    return a.sizeBytes > b.sizeBytes ? -1 : 1;
-  });
+  const { files, totalSizeBytes, totalLogFileCount, totalIndexFileCount, loading, error, refresh } = useLogFiles();
+  const totalFileCount = totalLogFileCount + totalIndexFileCount;
 
   return (
     <Box sx={{ p: 3, overflow: 'auto', height: '100%' }}>
@@ -53,13 +46,13 @@ export default function DataDashboard() {
         <Paper variant="outlined" sx={{ p: 2.5 }}>
           <Typography variant="body2" color="text.secondary">Log files</Typography>
           <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>
-            {logFileCount}
+            {totalLogFileCount}
           </Typography>
         </Paper>
         <Paper variant="outlined" sx={{ p: 2.5 }}>
           <Typography variant="body2" color="text.secondary">Index files</Typography>
           <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>
-            {indexFileCount}
+            {totalIndexFileCount}
           </Typography>
         </Paper>
       </Box>
@@ -92,13 +85,13 @@ export default function DataDashboard() {
                   <CircularProgress size={28} aria-label="Loading data files" />
                 </TableCell>
               </TableRow>
-            ) : sortedFiles.length === 0 ? (
+            ) : files.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                   No data files found.
                 </TableCell>
               </TableRow>
-            ) : sortedFiles.map((file) => (
+            ) : files.map((file) => (
               <TableRow key={`${file.namespace}/${file.name}`} hover>
                 <TableCell>{file.kind}</TableCell>
                 <TableCell>{file.subject}</TableCell>
@@ -110,6 +103,11 @@ export default function DataDashboard() {
           </TableBody>
         </Table>
       </TableContainer>
+      {totalFileCount > files.length && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          Showing the {files.length} largest files out of {totalFileCount.toLocaleString()}.
+        </Typography>
+      )}
     </Box>
   );
 }

@@ -1062,11 +1062,15 @@ func (x *LogFileInfo) GetSubject() string {
 }
 
 type ListLogFilesResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Files          []*LogFileInfo         `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
-	TotalSizeBytes int64                  `protobuf:"varint,2,opt,name=total_size_bytes,json=totalSizeBytes,proto3" json:"total_size_bytes,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only the largest files are returned (see server-side limit); use the
+	// counts below for accurate totals across all persisted files.
+	Files               []*LogFileInfo `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	TotalSizeBytes      int64          `protobuf:"varint,2,opt,name=total_size_bytes,json=totalSizeBytes,proto3" json:"total_size_bytes,omitempty"`
+	TotalLogFileCount   int32          `protobuf:"varint,3,opt,name=total_log_file_count,json=totalLogFileCount,proto3" json:"total_log_file_count,omitempty"`
+	TotalIndexFileCount int32          `protobuf:"varint,4,opt,name=total_index_file_count,json=totalIndexFileCount,proto3" json:"total_index_file_count,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ListLogFilesResponse) Reset() {
@@ -1109,6 +1113,20 @@ func (x *ListLogFilesResponse) GetFiles() []*LogFileInfo {
 func (x *ListLogFilesResponse) GetTotalSizeBytes() int64 {
 	if x != nil {
 		return x.TotalSizeBytes
+	}
+	return 0
+}
+
+func (x *ListLogFilesResponse) GetTotalLogFileCount() int32 {
+	if x != nil {
+		return x.TotalLogFileCount
+	}
+	return 0
+}
+
+func (x *ListLogFilesResponse) GetTotalIndexFileCount() int32 {
+	if x != nil {
+		return x.TotalIndexFileCount
 	}
 	return 0
 }
@@ -1806,10 +1824,12 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"size_bytes\x18\x03 \x01(\x03R\tsizeBytes\x12\x12\n" +
 	"\x04kind\x18\x04 \x01(\tR\x04kind\x12-\n" +
 	"\x13modified_at_unix_ms\x18\x05 \x01(\x03R\x10modifiedAtUnixMs\x12\x18\n" +
-	"\asubject\x18\x06 \x01(\tR\asubject\"q\n" +
+	"\asubject\x18\x06 \x01(\tR\asubject\"\xd7\x01\n" +
 	"\x14ListLogFilesResponse\x12/\n" +
 	"\x05files\x18\x01 \x03(\v2\x19.simplelog.v1.LogFileInfoR\x05files\x12(\n" +
-	"\x10total_size_bytes\x18\x02 \x01(\x03R\x0etotalSizeBytes\"\x14\n" +
+	"\x10total_size_bytes\x18\x02 \x01(\x03R\x0etotalSizeBytes\x12/\n" +
+	"\x14total_log_file_count\x18\x03 \x01(\x05R\x11totalLogFileCount\x123\n" +
+	"\x16total_index_file_count\x18\x04 \x01(\x05R\x13totalIndexFileCount\"\x14\n" +
 	"\x12ListIndexesRequest\" \n" +
 	"\fLogIndexInfo\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"K\n" +

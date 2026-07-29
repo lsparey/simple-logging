@@ -212,8 +212,12 @@ message LogFileInfo {
 }
 
 message ListLogFilesResponse {
+  // Only the largest files are returned (see server-side limit); use the
+  // counts below for accurate totals across all persisted files.
   repeated LogFileInfo files = 1;
   int64 total_size_bytes = 2;
+  int32 total_log_file_count = 3;
+  int32 total_index_file_count = 4;
 }
 
 // ── Indexes ──────────────────────────────────────────────────────────────────

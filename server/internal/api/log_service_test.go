@@ -178,6 +178,48 @@ func TestListLogFiles(t *testing.T) {
 	if resp.TotalSizeBytes != summedSize {
 		t.Errorf("total size = %d, want %d", resp.TotalSizeBytes, summedSize)
 	}
+	if resp.TotalLogFileCount != 2 {
+		t.Errorf("total log file count = %d, want 2", resp.TotalLogFileCount)
+	}
+	if resp.TotalIndexFileCount != 1 {
+		t.Errorf("total index file count = %d, want 1", resp.TotalIndexFileCount)
+	}
+}
+
+func TestListLogFiles_TruncatesToLargestFiles(t *testing.T) {
+	dir := t.TempDir()
+	const fileCount = maxListedLogFiles + 5
+	for i := 0; i < fileCount; i++ {
+		lines := make([]string, i+1)
+		for j := range lines {
+			lines[j] = "x"
+		}
+		writeLogFile(t, dir, "default", fmt.Sprintf("pod-%02d", i), lines)
+	}
+
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	if err != nil {
+		t.Fatalf("ListLogFiles: %v", err)
+	}
+
+	if len(resp.Files) != maxListedLogFiles {
+		t.Fatalf("expected %d files, got %d", maxListedLogFiles, len(resp.Files))
+	}
+	if resp.TotalLogFileCount != int32(fileCount) {
+		t.Errorf("total log file count = %d, want %d", resp.TotalLogFileCount, fileCount)
+	}
+	for i, file := range resp.Files {
+		if i > 0 && file.SizeBytes > resp.Files[i-1].SizeBytes {
+			t.Fatalf("files not sorted by size descending at index %d", i)
+		}
+	}
+	// The smallest file (pod-00, 1 line) should have been dropped in favor of larger ones.
+	for _, file := range resp.Files {
+		if file.Name == "pod-00.log" {
+			t.Errorf("expected smallest file pod-00.log to be truncated from results")
+		}
+	}
 }
 
 // ── GetLogs ───────────────────────────────────────────────────────────────────

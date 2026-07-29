@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +22,11 @@ import (
 )
 
 const (
+	// maxListedLogFiles bounds how many files ListLogFiles returns, so a
+	// namespace with a huge number of log/index files doesn't make the
+	// storage dashboard slow to load.
+	maxListedLogFiles = 50
+
 	defaultPageSize = 200
 	maxPageSize     = 1000
 )
@@ -116,7 +122,8 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 	return &pb.ListPodsResponse{Pods: pods}, nil
 }
 
-// ListLogFiles returns metadata for every persisted pod log and index file.
+// ListLogFiles returns metadata for the largest persisted pod log and index
+// files, up to maxListedLogFiles, along with totals across all of them.
 func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) (*pb.ListLogFilesResponse, error) {
 	namespaceEntries, err := os.ReadDir(s.logsRoot)
 	if err != nil {
@@ -125,6 +132,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 
 	var files []*pb.LogFileInfo
 	var totalSize int64
+	var totalLogFileCount, totalIndexFileCount int32
 	for _, namespaceEntry := range namespaceEntries {
 		if !namespaceEntry.IsDir() || strings.HasPrefix(namespaceEntry.Name(), ".") {
 			continue
@@ -156,6 +164,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 				Subject:          namespace + " / " + strings.TrimSuffix(entry.Name(), ".log"),
 			})
 			totalSize += size
+			totalLogFileCount++
 		}
 	}
 
@@ -191,15 +200,25 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 			Subject:          indexFileSubject(path, relativePath),
 		})
 		totalSize += size
+		totalIndexFileCount++
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "read index files: %v", err)
 	}
 
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].SizeBytes > files[j].SizeBytes
+	})
+	if len(files) > maxListedLogFiles {
+		files = files[:maxListedLogFiles]
+	}
+
 	return &pb.ListLogFilesResponse{
-		Files:          files,
-		TotalSizeBytes: totalSize,
+		Files:               files,
+		TotalSizeBytes:      totalSize,
+		TotalLogFileCount:   totalLogFileCount,
+		TotalIndexFileCount: totalIndexFileCount,
 	}, nil
 }
 
