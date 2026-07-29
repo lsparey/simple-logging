@@ -226,3 +226,61 @@ describe('LogLine — JSON formatting', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// wrap mode — pretty-printed, syntax-highlighted JSON
+// ---------------------------------------------------------------------------
+
+describe('LogLine — wrap mode', () => {
+  it('does not pretty-print JSON when wrap is false (list rendering unaffected)', () => {
+    const line = '2024-01-15T10:00:00Z [default/api/app] {"level":"info","message":"hi"}';
+    const { container } = render(<LogLine line={line} darkMode={false} />);
+    expect(container.querySelector('pre')?.textContent).toBe('api{"level":"info","message":"hi"}');
+  });
+
+  it('pretty-prints unformatted JSON when wrap is true', () => {
+    const line = '{"level":"info","message":"hi"}';
+    const { container } = render(<LogLine line={line} darkMode={false} wrap />);
+    const pre = container.querySelector('pre');
+    expect(pre?.textContent).toContain('\n');
+    expect(pre?.textContent).toContain('"level": "info"');
+  });
+
+  it('colours JSON keys, strings, numbers, and booleans distinctly when wrapped', () => {
+    const line = '{"name":"svc","count":3,"active":true}';
+    const { container } = render(<LogLine line={line} darkMode={true} wrap />);
+    const spans = Array.from(container.querySelectorAll('pre span'));
+
+    const keySpan = spans.find((el) => el.textContent === '"name":');
+    const stringSpan = spans.find((el) => el.textContent === '"svc"');
+    const numberSpan = spans.find((el) => el.textContent === '3');
+    const boolSpan = spans.find((el) => el.textContent === 'true');
+
+    expect(keySpan).toHaveStyle({ color: '#79c0ff' });
+    expect(stringSpan).toHaveStyle({ color: '#7ee787' });
+    expect(numberSpan).toHaveStyle({ color: '#d2a8ff' });
+    expect(boolSpan).toHaveStyle({ color: '#ffa657' });
+  });
+
+  it('pretty-prints the raw JSON of a configured jsonFormat message when wrapped', () => {
+    const line = '{"timestamp":"2024-01-15T10:00:00Z","level":"info","message":"done","extra":"field"}';
+    const { container } = render(
+      <LogLine
+        line={line}
+        darkMode={false}
+        wrap
+        jsonFormat={{ timestampKey: 'timestamp', levelKey: 'level', messageKey: 'message' }}
+      />,
+    );
+    const pre = container.querySelector('pre');
+    // Extracted fields still shown, plus the full pretty-printed object (including the extra key).
+    expect(pre?.textContent).toContain('done');
+    expect(pre?.textContent).toContain('"extra": "field"');
+  });
+
+  it('wraps long lines instead of clipping them', () => {
+    const { container } = render(<LogLine line="plain long message" darkMode={false} wrap />);
+    const pre = container.querySelector('pre') as HTMLElement;
+    expect(window.getComputedStyle(pre).whiteSpace).toBe('pre-wrap');
+  });
+});

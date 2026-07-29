@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import type { JsonFormat } from '../../store/logStore.js';
 
@@ -147,6 +147,63 @@ const JSON_TIME_LIGHT = '#57606a';
 const JSON_DIM_DARK = '#484f58';
 const JSON_DIM_LIGHT = '#8c959f';
 
+// Syntax-highlight colours for pretty-printed JSON (used when wrapping a
+// message in full, e.g. inside the "view full message" modal).
+const JSON_SYNTAX_COLOURS = {
+  key: { dark: '#79c0ff', light: '#0550ae' },
+  string: { dark: '#7ee787', light: '#116329' },
+  number: { dark: '#d2a8ff', light: '#8250df' },
+  boolNull: { dark: '#ffa657', light: '#953800' },
+  punctuation: { dark: '#8b949e', light: '#6e7781' },
+};
+
+// Matches JSON string literals (optionally followed by their key colon),
+// numbers, and true/false/null — used to tokenize pretty-printed JSON text
+// for syntax highlighting.
+const JSON_TOKEN_RE = /"(?:\\.|[^"\\])*"(?:\s*:)?|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\btrue\b|\bfalse\b|\bnull\b/g;
+
+/** Render pretty-printed JSON text as coloured spans (keys, strings, numbers, booleans/null). */
+function renderJsonHighlighted(pretty: string, darkMode: boolean): ReactNode[] {
+  const mode = darkMode ? 'dark' : 'light';
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+
+  JSON_TOKEN_RE.lastIndex = 0;
+  while ((match = JSON_TOKEN_RE.exec(pretty)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(
+        <span key={key++} style={{ color: JSON_SYNTAX_COLOURS.punctuation[mode] }}>
+          {pretty.slice(lastIndex, match.index)}
+        </span>,
+      );
+    }
+
+    const token = match[0];
+    let colour: string;
+    if (token.startsWith('"')) {
+      colour = token.trimEnd().endsWith(':') ? JSON_SYNTAX_COLOURS.key[mode] : JSON_SYNTAX_COLOURS.string[mode];
+    } else if (token === 'true' || token === 'false' || token === 'null') {
+      colour = JSON_SYNTAX_COLOURS.boolNull[mode];
+    } else {
+      colour = JSON_SYNTAX_COLOURS.number[mode];
+    }
+    nodes.push(<span key={key++} style={{ color: colour }}>{token}</span>);
+    lastIndex = JSON_TOKEN_RE.lastIndex;
+  }
+
+  if (lastIndex < pretty.length) {
+    nodes.push(
+      <span key={key++} style={{ color: JSON_SYNTAX_COLOURS.punctuation[mode] }}>
+        {pretty.slice(lastIndex)}
+      </span>,
+    );
+  }
+
+  return nodes;
+}
+
 function numericLevelName(value: number, key: string): string | null {
   // Pino and Bunyan use ascending multiples of ten.
   if (value >= 60) return 'FATAL';
@@ -196,14 +253,17 @@ function resolvedLevelName(value: unknown, key: string): string {
   return String(value ?? '').toUpperCase();
 }
 
-function isJSONObject(value: string): boolean {
+/** Parses a value as a JSON object (not array/primitive), returning null if it isn't one. */
+function parseJSONObject(value: string): Record<string, unknown> | null {
   const trimmed = value.trim();
-  if (!trimmed.startsWith('{')) return false;
+  if (!trimmed.startsWith('{')) return null;
   try {
     const parsed = JSON.parse(trimmed);
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed);
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -232,10 +292,12 @@ interface Props {
   line: string;
   darkMode: boolean;
   jsonFormat?: JsonFormat | null;
+  /** Renders the full message, wrapped instead of clipped, with pretty-printed/highlighted JSON. Used outside the virtualized list (e.g. the full-message modal). */
+  wrap?: boolean;
 }
 
-export default function LogLine({ line, darkMode, jsonFormat }: Props) {
-  const { colour, prefix, message, segments, jsonParsed } = useMemo(() => {
+export default function LogLine({ line, darkMode, jsonFormat, wrap = false }: Props) {
+  const { colour, prefix, message, segments, jsonParsed, prettyJsonNodes } = useMemo(() => {
     const parsed = parsePrefix(line);
     const displayMessage = parsed ? parsed.message : line;
     const stripped = displayMessage.replace(ANSI_ESCAPE_RE, '');
@@ -249,6 +311,7 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
       levelBackground: string;
       msg: string;
       raw: string;
+      parsedObj: Record<string, unknown>;
     } | null = null;
     if (jsonFormat) {
       try {
@@ -276,12 +339,14 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
             levelBackground,
             msg,
             raw: stripped,
+            parsedObj: obj,
           };
         }
       } catch { /* not JSON */ }
     }
 
-    const unformattedJSON = !jsonParsed && isJSONObject(stripped);
+    const unformattedJsonObj = jsonParsed ? null : parseJSONObject(stripped);
+    const unformattedJSON = unformattedJsonObj !== null;
     const match = jsonParsed || unformattedJSON ? null : LEVEL_RE.exec(stripped);
     const colour = unformattedJSON
       ? (darkMode ? JSON_MESSAGE_DARK : JSON_MESSAGE_LIGHT)
@@ -289,14 +354,23 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
         ? (palette[match[0].toUpperCase()] ?? 'inherit')
         : 'inherit';
     const segments = !jsonParsed && HAS_ANSI_RE.test(displayMessage) ? parseAnsi(displayMessage) : null;
+
+    // Only worth pretty-printing/highlighting when the message will actually
+    // be shown in full (wrap) — the virtualized list keeps messages flat.
+    const jsonObjForPretty = wrap ? (jsonParsed?.parsedObj ?? unformattedJsonObj) : null;
+    const prettyJsonNodes = jsonObjForPretty
+      ? renderJsonHighlighted(JSON.stringify(jsonObjForPretty, null, 2), darkMode)
+      : null;
+
     return {
       colour,
       prefix: parsed ? { podName: parsed.podName } : null,
       message: displayMessage,
       segments,
       jsonParsed,
+      prettyJsonNodes,
     };
-  }, [line, darkMode, jsonFormat]);
+  }, [line, darkMode, jsonFormat, wrap]);
 
   return (
     <Box
@@ -308,8 +382,9 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
         fontFamily: 'inherit',
         fontSize: '0.75rem',
         lineHeight: 1.6,
-        whiteSpace: 'pre',
-        overflow: 'hidden',
+        whiteSpace: wrap ? 'pre-wrap' : 'pre',
+        overflow: wrap ? 'visible' : 'hidden',
+        wordBreak: wrap ? 'break-word' : undefined,
         color: colour,
         '&:hover': { bgcolor: 'action.hover' },
       }}
@@ -367,11 +442,20 @@ export default function LogLine({ line, darkMode, jsonFormat }: Props) {
               {jsonParsed.msg}{' '}
             </span>
           )}
-          <span style={jsonParsed.ts || jsonParsed.level || jsonParsed.msg ? { color: darkMode ? JSON_DIM_DARK : JSON_DIM_LIGHT } : undefined}>
-            {jsonParsed.raw}
-          </span>
+          {prettyJsonNodes ? (
+            <>
+              {'\n'}
+              {prettyJsonNodes}
+            </>
+          ) : (
+            <span style={jsonParsed.ts || jsonParsed.level || jsonParsed.msg ? { color: darkMode ? JSON_DIM_DARK : JSON_DIM_LIGHT } : undefined}>
+              {jsonParsed.raw}
+            </span>
+          )}
         </>
-      ) : segments
+      ) : prettyJsonNodes
+        ? prettyJsonNodes
+        : segments
         ? segments.map((seg, i) => (
             <span
               key={i}

@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import LogLine from "./LogLine.js";
+import LogMessageModal from "./LogMessageModal.js";
 import { useLogStore, type JsonFormat } from "../../store/logStore.js";
 
 const ROW_HEIGHT = 22;
@@ -76,6 +77,11 @@ export default function LogList({
     { ts: null, start: 0, stop: 0 },
   );
 
+  // Full text of the line clicked by the user, shown in a modal so it can be
+  // read in full and copied even when the row itself is visually clipped.
+  const [selectedLine, setSelectedLine] = useState<string | null>(null);
+  const handleLineClick = useCallback((line: string) => setSelectedLine(line), []);
+
   // On initial selection load (selectionKey changes), scroll to the bottom
   // once the first batch of lines arrives. While settling, suppress the
   // near-top trigger so we don't immediately fire loadOlder.
@@ -131,12 +137,16 @@ export default function LogList({
     ({ index, style }: RowComponentProps) => {
       const currentLines = linesRef.current;
       return index < currentLines.length
-        ? <div style={style} ref={index === currentLines.length - 1 ? lastRowRef : undefined}>
+        ? <div
+            style={{ ...style, cursor: 'pointer' }}
+            ref={index === currentLines.length - 1 ? lastRowRef : undefined}
+            onClick={() => handleLineClick(currentLines[index])}
+          >
             <LogLine line={currentLines[index]} darkMode={darkMode} jsonFormat={jsonFormat} />
           </div>
         : <div style={style} />;
     },
-    [darkMode, jsonFormat],
+    [darkMode, jsonFormat, handleLineClick],
   );
 
   const handleRowsRendered = useCallback(
@@ -308,6 +318,13 @@ export default function LogList({
           )}
         </>
       )}
+      <LogMessageModal
+        open={selectedLine !== null}
+        line={selectedLine}
+        darkMode={darkMode}
+        jsonFormat={jsonFormat}
+        onClose={() => setSelectedLine(null)}
+      />
     </Box>
   );
 }

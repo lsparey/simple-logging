@@ -219,6 +219,8 @@ function routes(router: ConnectRouter) {
       return {
         files: LOG_FILES,
         totalSizeBytes: LOG_FILES.reduce((total, file) => total + file.sizeBytes, 0n),
+        totalLogFileCount: LOG_FILES.filter((file) => file.kind === 'Log').length,
+        totalIndexFileCount: LOG_FILES.filter((file) => file.kind === 'Index').length,
       };
     },
 

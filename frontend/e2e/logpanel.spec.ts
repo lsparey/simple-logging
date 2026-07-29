@@ -61,6 +61,29 @@ test.describe('LogPanel — pod mode', () => {
   });
 });
 
+test.describe('LogPanel — log message modal', () => {
+  test('clicking a log line opens a modal with the full message and can copy it', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await selectDeployment(page, 'default', 'web-app');
+
+    const line = page.getByText(/burst 1 from web-app/).first();
+    await expect(line).toBeVisible();
+    await line.click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('burst 1 from web-app');
+
+    await dialog.getByRole('button', { name: 'Copy' }).click();
+    await expect(dialog.getByRole('button', { name: 'Copied!' })).toBeVisible();
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toContain('burst 1 from web-app');
+
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).not.toBeVisible();
+  });
+});
+
 test.describe('LogPanel — dark mode', () => {
   test('dark mode toggle changes the visual theme', async ({ page }) => {
     await page.goto('/');
