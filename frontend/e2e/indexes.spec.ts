@@ -3,8 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Indexes', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Indexes' }).click();
+    await page.getByText('Indexes').click();
   });
 
   test('lists values by latest activity and drills into matching log messages', async ({ page }) => {

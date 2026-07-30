@@ -3,13 +3,7 @@ import type { Page } from '@playwright/test';
 /** Navigate to the app, switch to deployments view, and click a deployment. */
 export async function selectDeployment(page: Page, namespace: string, deployment: string) {
   await page.goto('/');
-  // Ensure deployments view mode is active (it's the default, but be explicit)
-  const combo = page.getByRole('combobox');
-  const current = await combo.inputValue().catch(() => null) ?? await combo.textContent();
-  if (!current?.toLowerCase().includes('deployment')) {
-    await combo.click();
-    await page.getByRole('option', { name: 'Deployments' }).click();
-  }
+  await page.getByText('Deployments').click();
   await page.getByText(namespace).click();
   await page.getByText(deployment).first().click();
 }
@@ -17,8 +11,7 @@ export async function selectDeployment(page: Page, namespace: string, deployment
 /** Navigate to the app, switch to pods view, and click a pod. */
 export async function selectPod(page: Page, namespace: string, pod: string) {
   await page.goto('/');
-  await page.getByRole('combobox').click();
-  await page.getByRole('option', { name: 'Pods' }).click();
+  await page.getByText('Pods').click();
   await page.getByText(namespace).click();
   await page.getByText(pod).click();
 }
