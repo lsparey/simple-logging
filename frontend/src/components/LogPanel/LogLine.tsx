@@ -294,9 +294,11 @@ interface Props {
   jsonFormat?: JsonFormat | null;
   /** Renders the full message, wrapped instead of clipped, with pretty-printed/highlighted JSON. Used outside the virtualized list (e.g. the full-message modal). */
   wrap?: boolean;
+  /** Collapses the pod/deployment badge to a colour dot to save horizontal space (narrow/mobile viewports). Ignored when `wrap` is set. */
+  compact?: boolean;
 }
 
-export default function LogLine({ line, darkMode, jsonFormat, wrap = false }: Props) {
+export default function LogLine({ line, darkMode, jsonFormat, wrap = false, compact = false }: Props) {
   const { colour, prefix, message, segments, jsonParsed, prettyJsonNodes } = useMemo(() => {
     const parsed = parsePrefix(line);
     const displayMessage = parsed ? parsed.message : line;
@@ -390,25 +392,42 @@ export default function LogLine({ line, darkMode, jsonFormat, wrap = false }: Pr
       }}
     >
       {prefix && (
-        <Box
-          component="span"
-          sx={{
-            display: 'inline-block',
-            bgcolor: podBadgeColour(prefix.podName),
-            color: '#fff',
-            borderRadius: '4px',
-            px: 0.75,
-            py: 0,
-            mr: 0.75,
-            fontSize: '0.7rem',
-            fontWeight: 600,
-            lineHeight: 1.5,
-            verticalAlign: 'middle',
-            userSelect: 'none',
-          }}
-        >
-          {prefix.podName}
-        </Box>
+        !wrap && compact ? (
+          <Box
+            component="span"
+            title={prefix.podName}
+            sx={{
+              display: 'inline-block',
+              width: 8,
+              height: 8,
+              bgcolor: podBadgeColour(prefix.podName),
+              borderRadius: '50%',
+              mr: 0.75,
+              verticalAlign: 'middle',
+              userSelect: 'none',
+            }}
+          />
+        ) : (
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-block',
+              bgcolor: podBadgeColour(prefix.podName),
+              color: '#fff',
+              borderRadius: '4px',
+              px: 0.75,
+              py: 0,
+              mr: 0.75,
+              fontSize: '0.7rem',
+              fontWeight: 600,
+              lineHeight: 1.5,
+              verticalAlign: 'middle',
+              userSelect: 'none',
+            }}
+          >
+            {prefix.podName}
+          </Box>
+        )
       )}
       {jsonParsed ? (
         <>

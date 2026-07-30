@@ -7,7 +7,11 @@ import { useIndexList } from '../../hooks/useIndexList.js';
 import { useLogStore } from '../../store/logStore.js';
 import IndexNode from './IndexNode.js';
 
-export default function IndexSidebar() {
+interface Props {
+  onLeafSelect?: () => void;
+}
+
+export default function IndexSidebar({ onLeafSelect }: Props) {
   const { indexes, loading, error, reload } = useIndexList();
   const indexListVersion = useLogStore((s) => s.indexListVersion);
 
@@ -33,7 +37,7 @@ export default function IndexSidebar() {
         </Typography>
       )}
       <List disablePadding>
-        {indexes.map((idx) => <IndexNode key={idx.key} index={idx} />)}
+        {indexes.map((idx) => <IndexNode key={idx.key} index={idx} onSelect={onLeafSelect} />)}
       </List>
     </Box>
   );

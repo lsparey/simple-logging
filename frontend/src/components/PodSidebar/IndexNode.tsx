@@ -9,9 +9,10 @@ import { useLogStore } from '../../store/logStore.js';
 
 interface Props {
   index: LogIndexInfo;
+  onSelect?: () => void;
 }
 
-export default function IndexNode({ index }: Props) {
+export default function IndexNode({ index, onSelect }: Props) {
   const { selectedIndexKey, setSelectedIndex } = useLogStore();
   const navigate = useNavigate();
   const selected = selectedIndexKey === index.key;
@@ -24,6 +25,7 @@ export default function IndexNode({ index }: Props) {
         onClick={() => {
           setSelectedIndex(index.key);
           navigate(`/index/${encodeURIComponent(index.key)}`);
+          onSelect?.();
         }}
       >
         <ListItemIcon sx={{ minWidth: 32 }}>

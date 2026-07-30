@@ -18,9 +18,10 @@ import DeploymentNode from './DeploymentNode.js';
 interface Props {
   namespace: string;
   viewMode: 'pods' | 'deployments';
+  onLeafSelect?: () => void;
 }
 
-export default function NamespaceNode({ namespace, viewMode }: Props) {
+export default function NamespaceNode({ namespace, viewMode, onLeafSelect }: Props) {
   const selectedNamespace = useLogStore((s) => s.selectedNamespace);
   const [open, setOpen] = useState(() => selectedNamespace === namespace);
   const { pods } = usePodList(open && viewMode === 'pods' ? namespace : null);
@@ -52,8 +53,8 @@ export default function NamespaceNode({ namespace, viewMode }: Props) {
       <Collapse in={open} unmountOnExit>
         <List disablePadding>
           {viewMode === 'pods'
-            ? pods.map((p) => <PodNode key={p.name} pod={p} />)
-            : deployments.map((d) => <DeploymentNode key={d.name} deployment={d} />)}
+            ? pods.map((p) => <PodNode key={p.name} pod={p} onSelect={onLeafSelect} />)
+            : deployments.map((d) => <DeploymentNode key={d.name} deployment={d} onSelect={onLeafSelect} />)}
         </List>
       </Collapse>
     </>

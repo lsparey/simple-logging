@@ -67,33 +67,50 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('PodSidebar', () => {
+  it('shows the section menu by default, with no namespaces until a section is chosen', () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: [], loading: false, error: null });
+    render(<PodSidebar />, { wrapper: Wrapper });
+    expect(screen.getByText('Pods')).toBeInTheDocument();
+    expect(screen.getByText('Deployments')).toBeInTheDocument();
+    expect(screen.getByText('Indexes')).toBeInTheDocument();
+  });
+
   it('shows a loading spinner while namespaces are loading', () => {
     mockUseNamespaces.mockReturnValue({ namespaces: [], loading: true, error: null });
     render(<PodSidebar />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText('Deployments'));
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
   });
 
   it('shows an error message when namespace fetch fails', () => {
     mockUseNamespaces.mockReturnValue({ namespaces: [], loading: false, error: 'connection refused' });
     render(<PodSidebar />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText('Deployments'));
     expect(screen.getByText(/connection refused/)).toBeInTheDocument();
   });
 
-  it('renders namespace buttons after loading', () => {
+  it('renders namespace buttons after choosing a section', () => {
     mockUseNamespaces.mockReturnValue({
       namespaces: ['default', 'kube-system'],
       loading: false,
       error: null,
     });
     render(<PodSidebar />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText('Deployments'));
     expect(screen.getByText('default')).toBeInTheDocument();
     expect(screen.getByText('kube-system')).toBeInTheDocument();
   });
 
-  it('defaults to deployments view mode', () => {
-    mockUseNamespaces.mockReturnValue({ namespaces: [], loading: false, error: null });
+  it('shows a back button and the section label after choosing a section, and returns to the menu', () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
     render(<PodSidebar />, { wrapper: Wrapper });
-    expect(screen.getByRole('combobox')).toHaveTextContent('Deployments');
+
+    fireEvent.click(screen.getByText('Deployments'));
+    expect(screen.getByText('default')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
+    expect(screen.getByText('Pods')).toBeInTheDocument();
   });
 });
 

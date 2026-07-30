@@ -5,11 +5,14 @@ import Drawer from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PodSidebar from '../PodSidebar/PodSidebar.js';
+import MobileSidebarNav, { MOBILE_NAV_HEIGHT } from '../PodSidebar/MobileSidebarNav.js';
 import LogPanel from '../LogPanel/LogPanel.js';
 import IndexPanel from '../LogPanel/IndexPanel.js';
 import DataDashboard from '../DataDashboard/DataDashboard.js';
@@ -22,6 +25,9 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const dashboardOpen = /^\/dashboard\/?$/.test(location.pathname);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
@@ -56,21 +62,25 @@ export default function AppShell() {
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: DRAWER_WIDTH,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
+      {isMobile ? (
+        <MobileSidebarNav />
+      ) : (
+        <Drawer
+          variant="permanent"
+          sx={{
             width: DRAWER_WIDTH,
-            boxSizing: 'border-box',
-            top: '48px',  // below AppBar (dense = 48px)
-            height: 'calc(100% - 48px)',
-          },
-        }}
-      >
-        <PodSidebar />
-      </Drawer>
+            flexShrink: 0,
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+              top: '48px',  // below AppBar (dense = 48px)
+              height: 'calc(100% - 48px)',
+            },
+          }}
+        >
+          <PodSidebar />
+        </Drawer>
+      )}
 
       <Box
         component="main"
@@ -80,6 +90,7 @@ export default function AppShell() {
           flexDirection: 'column',
           height: '100vh',
           pt: '48px',  // dense AppBar height
+          pb: isMobile ? `${MOBILE_NAV_HEIGHT}px` : 0,
           overflow: 'hidden',
         }}
       >

@@ -9,9 +9,10 @@ import { useLogStore } from '../../store/logStore.js';
 
 interface Props {
   deployment: DeploymentInfo;
+  onSelect?: () => void;
 }
 
-export default function DeploymentNode({ deployment }: Props) {
+export default function DeploymentNode({ deployment, onSelect }: Props) {
   const { selectedNamespace, selectedDeployment, setSelectedDeployment, setJsonLogging } = useLogStore();
   const navigate = useNavigate();
   const selected =
@@ -31,6 +32,7 @@ export default function DeploymentNode({ deployment }: Props) {
         onClick={() => {
           setSelectedDeployment(deployment.namespace, deployment.name, deployment.jsonLogging);
           navigate(`/deployment/${encodeURIComponent(deployment.namespace)}/${encodeURIComponent(deployment.name)}`);
+          onSelect?.();
         }}
       >
         <Box

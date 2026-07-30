@@ -3,6 +3,8 @@ import { List, useListRef, type RowComponentProps } from "react-window";
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import LogLine from "./LogLine.js";
 import LogMessageModal from "./LogMessageModal.js";
 import { useLogStore, type JsonFormat } from "../../store/logStore.js";
@@ -52,6 +54,9 @@ export default function LogList({
   onScrollBottom,
   onNearTop,
 }: Props) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
   const listRef = useListRef(null);
   // Ref attached to the last rendered row, used to scroll it into view.
   const lastRowRef = useRef<HTMLDivElement | null>(null);
@@ -142,11 +147,11 @@ export default function LogList({
             ref={index === currentLines.length - 1 ? lastRowRef : undefined}
             onClick={() => handleLineClick(currentLines[index])}
           >
-            <LogLine line={currentLines[index]} darkMode={darkMode} jsonFormat={jsonFormat} />
+            <LogLine line={currentLines[index]} darkMode={darkMode} jsonFormat={jsonFormat} compact={isMobile} />
           </div>
         : <div style={style} />;
     },
-    [darkMode, jsonFormat, handleLineClick],
+    [darkMode, jsonFormat, isMobile, handleLineClick],
   );
 
   const handleRowsRendered = useCallback(

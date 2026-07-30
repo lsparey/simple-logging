@@ -9,9 +9,10 @@ import { useLogStore } from '../../store/logStore.js';
 
 interface Props {
   pod: PodInfo;
+  onSelect?: () => void;
 }
 
-export default function PodNode({ pod }: Props) {
+export default function PodNode({ pod, onSelect }: Props) {
   const { selectedNamespace, selectedPod, setSelectedPod, setJsonLogging } = useLogStore();
   const navigate = useNavigate();
   const selected = selectedNamespace === pod.namespace && selectedPod === pod.name;
@@ -29,6 +30,7 @@ export default function PodNode({ pod }: Props) {
         onClick={() => {
           setSelectedPod(pod.namespace, pod.name, pod.jsonLogging);
           navigate(`/pod/${encodeURIComponent(pod.namespace)}/${encodeURIComponent(pod.name)}`);
+          onSelect?.();
         }}
       >
         <Box

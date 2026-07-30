@@ -82,9 +82,22 @@ describe('LogLine — level colours', () => {
 describe('LogLine — pod badge', () => {
   const STRUCTURED = '2024-01-15T10:00:00Z [default/web-app/web-app-abc123] INFO started';
 
-  it('renders the pod name as a badge', () => {
+  it('renders the full pod name as a badge by default (desktop list view)', () => {
     renderLine(STRUCTURED);
     // PREFIX_RE: [namespace/pod/container] — m[3] is the pod ('web-app'), not the container
+    expect(screen.getByText('web-app')).toBeInTheDocument();
+  });
+
+  it('collapses to a titled colour dot when compact is set (narrow/mobile viewports)', () => {
+    const { container } = render(<LogLine line={STRUCTURED} darkMode={false} compact />);
+    expect(screen.queryByText('web-app')).not.toBeInTheDocument();
+    const dot = container.querySelector('[title="web-app"]');
+    expect(dot).toBeInTheDocument();
+    expect(dot).toHaveStyle({ borderRadius: '50%' });
+  });
+
+  it('renders the full pod name as a badge in wrap mode even when compact', () => {
+    render(<LogLine line={STRUCTURED} darkMode={false} wrap compact />);
     expect(screen.getByText('web-app')).toBeInTheDocument();
   });
 
@@ -236,6 +249,12 @@ describe('LogLine — wrap mode', () => {
     const line = '2024-01-15T10:00:00Z [default/api/app] {"level":"info","message":"hi"}';
     const { container } = render(<LogLine line={line} darkMode={false} />);
     expect(container.querySelector('pre')?.textContent).toBe('api{"level":"info","message":"hi"}');
+  });
+
+  it('collapses to a colour dot (no text) when compact and not wrapped', () => {
+    const line = '2024-01-15T10:00:00Z [default/api/app] {"level":"info","message":"hi"}';
+    const { container } = render(<LogLine line={line} darkMode={false} compact />);
+    expect(container.querySelector('pre')?.textContent).toBe('{"level":"info","message":"hi"}');
   });
 
   it('pretty-prints unformatted JSON when wrap is true', () => {
