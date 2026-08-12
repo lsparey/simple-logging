@@ -182,7 +182,9 @@ func (c *Collector) Close() {
 }
 
 // OnDelete is called by the PodWatcher when a pod is deleted.
-// It cancels the running stream goroutine if one exists.
+// It cancels the running stream goroutine if one exists and prunes the pod
+// from all tracking maps so they don't grow unbounded over the collector's
+// lifetime.
 func (c *Collector) OnDelete(pod *corev1.Pod) {
 	key := podKey{namespace: pod.Namespace, name: pod.Name}
 
@@ -191,6 +193,19 @@ func (c *Collector) OnDelete(pod *corev1.Pod) {
 	if ok {
 		existing.cancel()
 		delete(c.streams, key)
+	}
+	delete(c.jsonLogging, key)
+
+	podMapKey := pod.Namespace + "/" + pod.Name
+	if depName, tracked := c.podDeployment[podMapKey]; tracked {
+		delete(c.podDeployment, podMapKey)
+		depKey := pod.Namespace + "/" + depName
+		if pods, ok := c.deploymentPods[depKey]; ok {
+			delete(pods, pod.Name)
+			if len(pods) == 0 {
+				delete(c.deploymentPods, depKey)
+			}
+		}
 	}
 	c.mu.Unlock()
 

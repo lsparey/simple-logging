@@ -97,7 +97,7 @@ rbac:
 
 readinessProbe:
   httpGet:
-    path: /
+    path: /healthz
     port: 80
   initialDelaySeconds: 5
   periodSeconds: 10
@@ -110,7 +110,7 @@ extraEnv: []
 
 livenessProbe:
   httpGet:
-    path: /
+    path: /healthz
     port: 80
   initialDelaySeconds: 15
   periodSeconds: 30
