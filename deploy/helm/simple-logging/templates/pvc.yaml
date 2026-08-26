@@ -1,8 +1,8 @@
-{{- if .Values.persistence.enabled }}
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "simple-logging.fullname" . }}-logs
+  name: {{ include "simple-logging.persistenceClaimName" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "simple-logging.labels" . | nindent 4 }}

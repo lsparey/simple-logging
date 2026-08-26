@@ -58,6 +58,8 @@ Once the pod is running, open `http://logs.example.com` in your browser to view 
 | `config.retentionDays` | `30` | Days to keep log files after last write |
 | `persistence.size` | `20Gi` | PVC size for log storage |
 | `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
+| `persistence.existingClaim` | `""` | Existing PVC to mount instead of creating one |
+| `persistence.claimSuffix` | `logs-v3` | Suffix for the chart-created PVC |
 
 ### Full example with custom values
 
@@ -120,4 +122,3 @@ helm uninstall simple-logging --namespace simple-logging
 ```
 
 > **Note:** Uninstalling does not delete the PVC. To remove persisted logs, delete the PVC manually: `kubectl delete pvc -n simple-logging -l app.kubernetes.io/instance=simple-logging`
-

@@ -78,7 +78,7 @@ spec:
         - name: logs
           {{- if .Values.persistence.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "simple-logging.fullname" . }}-logs
+            claimName: {{ include "simple-logging.persistenceClaimName" . }}
           {{- else }}
           emptyDir: {}
           {{- end }}

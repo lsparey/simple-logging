@@ -6,6 +6,17 @@ Expand the name of the chart.
 {{- end }}
 
 {{/*
+Name of the PVC mounted for log storage.
+*/}}
+{{- define "simple-logging.persistenceClaimName" -}}
+{{- if .Values.persistence.existingClaim }}
+{{- .Values.persistence.existingClaim }}
+{{- else }}
+{{- printf "%s-%s" (include "simple-logging.fullname" .) .Values.persistence.claimSuffix | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+
+{{/*
 Create a default fully qualified app name, truncated to 63 chars per DNS spec.
 If the release name already contains the chart name it is used as-is.
 */}}

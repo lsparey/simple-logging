@@ -62,6 +62,10 @@ config:
 # Persistent storage for log files.
 persistence:
   enabled: true
+  # Use an existing PVC instead of creating one when set.
+  existingClaim: ""
+  # Versioned to start with an empty store when upgrading from the legacy chart.
+  claimSuffix: logs-v3
   # storageClass: "" uses the cluster default. Set to a specific class if needed.
   storageClass: ""
   size: 20Gi
