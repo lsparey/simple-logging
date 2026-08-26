@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -168,6 +168,12 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 		}
 	}
 
+	type indexSummary struct {
+		fileCount        int
+		sizeBytes        int64
+		modifiedAtUnixMs int64
+	}
+	indexSummaries := make(map[string]*indexSummary)
 	indexRoot := filepath.Join(s.logsRoot, ".indexes")
 	err = filepath.WalkDir(indexRoot, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -191,20 +197,38 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 		}
 
 		size := info.Size()
-		files = append(files, &pb.LogFileInfo{
-			Namespace:        ".indexes",
-			Name:             filepath.ToSlash(relativePath),
-			SizeBytes:        size,
-			Kind:             "Index",
-			ModifiedAtUnixMs: info.ModTime().UnixMilli(),
-			Subject:          indexFileSubject(path, relativePath),
-		})
+		subject := indexFileGroup(relativePath)
+		summary := indexSummaries[subject]
+		if summary == nil {
+			summary = &indexSummary{}
+			indexSummaries[subject] = summary
+		}
+		summary.fileCount++
+		summary.sizeBytes += size
+		summary.modifiedAtUnixMs = max(summary.modifiedAtUnixMs, info.ModTime().UnixMilli())
 		totalSize += size
 		totalIndexFileCount++
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "read index files: %v", err)
+	}
+	for subject, summary := range indexSummaries {
+		fileLabel := fmt.Sprintf("%d files", summary.fileCount)
+		if summary.fileCount == 1 {
+			fileLabel = "1 file"
+		}
+		if subject == "Index metadata" {
+			fileLabel = "indexes.json"
+		}
+		files = append(files, &pb.LogFileInfo{
+			Namespace:        ".indexes",
+			Name:             fileLabel,
+			SizeBytes:        summary.sizeBytes,
+			Kind:             "Index",
+			ModifiedAtUnixMs: summary.modifiedAtUnixMs,
+			Subject:          subject,
+		})
 	}
 
 	sort.Slice(files, func(i, j int) bool {
@@ -222,9 +246,9 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 	}, nil
 }
 
-func indexFileSubject(path, relativePath string) string {
+func indexFileGroup(relativePath string) string {
 	if filepath.ToSlash(relativePath) == "indexes.json" {
-		return "Index manifest"
+		return "Index metadata"
 	}
 
 	parts := strings.Split(filepath.ToSlash(relativePath), "/")
@@ -237,17 +261,7 @@ func indexFileSubject(path, relativePath string) string {
 		return "Index data"
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		return string(keyBytes)
-	}
-	defer f.Close()
-
-	var entry indexes.Entry
-	if err := json.NewDecoder(f).Decode(&entry); err != nil || entry.Value == "" {
-		return string(keyBytes)
-	}
-	return string(keyBytes) + " = " + entry.Value
+	return string(keyBytes)
 }
 
 // encodeOffsetToken encodes a byte offset as a base64 8-byte big-endian token.

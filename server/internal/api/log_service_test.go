@@ -34,7 +34,7 @@ func (f *fakeChecker) IsJsonLogging(_, _ string) bool { return false }
 type noopDeploymentMapper struct{}
 
 func (noopDeploymentMapper) GetDeploymentName(_, _ string) (string, bool) { return "", false }
-func (noopDeploymentMapper) ListKnownDeployments(_ string) []string        { return nil }
+func (noopDeploymentMapper) ListKnownDeployments(_ string) []string       { return nil }
 
 func writeLogFile(t *testing.T, dir, namespace, pod string, lines []string) {
 	t.Helper()
@@ -136,6 +136,17 @@ func TestListLogFiles(t *testing.T) {
 	if err := os.WriteFile(indexPath, []byte(indexEntry), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
+	secondIndexDir := filepath.Join(dir, ".indexes", "keys", encodedKey, "values", "cd")
+	if err := os.MkdirAll(secondIndexDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(secondIndexDir, "company-2.jsonl"), []byte(indexEntry), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	manifest := []byte(`{"keys":["companyUuid"]}`)
+	if err := os.WriteFile(filepath.Join(dir, ".indexes", "indexes.json"), manifest, 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
@@ -143,8 +154,8 @@ func TestListLogFiles(t *testing.T) {
 		t.Fatalf("ListLogFiles: %v", err)
 	}
 
-	if len(resp.Files) != 3 {
-		t.Fatalf("expected 3 files, got %d", len(resp.Files))
+	if len(resp.Files) != 4 {
+		t.Fatalf("expected 4 summary rows, got %d", len(resp.Files))
 	}
 
 	var summedSize int64
@@ -159,13 +170,21 @@ func TestListLogFiles(t *testing.T) {
 	if byPath["monitoring/pod-b.log"] == nil {
 		t.Error("missing monitoring/pod-b.log")
 	}
-	indexFile := byPath[".indexes/keys/"+encodedKey+"/values/ab/company-1.jsonl"]
+	indexFile := byPath[".indexes/2 files"]
 	if indexFile == nil {
-		t.Error("missing index file")
+		t.Error("missing index summary")
 	} else if indexFile.Kind != "Index" {
-		t.Errorf("index file kind = %q, want Index", indexFile.Kind)
-	} else if indexFile.Subject != "companyUuid = company-1" {
-		t.Errorf("index file subject = %q, want %q", indexFile.Subject, "companyUuid = company-1")
+		t.Errorf("index summary kind = %q, want Index", indexFile.Kind)
+	} else if indexFile.Subject != "companyUuid" {
+		t.Errorf("index summary subject = %q, want %q", indexFile.Subject, "companyUuid")
+	} else if indexFile.SizeBytes != int64(len(indexEntry)*2) {
+		t.Errorf("index summary size = %d, want %d", indexFile.SizeBytes, len(indexEntry)*2)
+	}
+	metadataFile := byPath[".indexes/indexes.json"]
+	if metadataFile == nil {
+		t.Error("missing indexes.json metadata file")
+	} else if metadataFile.Subject != "Index metadata" {
+		t.Errorf("metadata subject = %q, want %q", metadataFile.Subject, "Index metadata")
 	}
 	if logFile := byPath["default/pod-a.log"]; logFile.Subject != "default / pod-a" {
 		t.Errorf("log file subject = %q, want %q", logFile.Subject, "default / pod-a")
@@ -181,8 +200,8 @@ func TestListLogFiles(t *testing.T) {
 	if resp.TotalLogFileCount != 2 {
 		t.Errorf("total log file count = %d, want 2", resp.TotalLogFileCount)
 	}
-	if resp.TotalIndexFileCount != 1 {
-		t.Errorf("total index file count = %d, want 1", resp.TotalIndexFileCount)
+	if resp.TotalIndexFileCount != 3 {
+		t.Errorf("total index file count = %d, want 3", resp.TotalIndexFileCount)
 	}
 }
 
@@ -405,12 +424,12 @@ func (f *fakeStreamLogsServer) Send(resp *pb.StreamLogsResponse) error {
 		return nil
 	}
 }
-func (f *fakeStreamLogsServer) Context() context.Context          { return f.ctx }
-func (f *fakeStreamLogsServer) SetHeader(metadata.MD) error       { return nil }
-func (f *fakeStreamLogsServer) SendHeader(metadata.MD) error      { return nil }
-func (f *fakeStreamLogsServer) SetTrailer(metadata.MD)            {}
-func (f *fakeStreamLogsServer) SendMsg(any) error                 { return nil }
-func (f *fakeStreamLogsServer) RecvMsg(any) error                 { return nil }
+func (f *fakeStreamLogsServer) Context() context.Context     { return f.ctx }
+func (f *fakeStreamLogsServer) SetHeader(metadata.MD) error  { return nil }
+func (f *fakeStreamLogsServer) SendHeader(metadata.MD) error { return nil }
+func (f *fakeStreamLogsServer) SetTrailer(metadata.MD)       {}
+func (f *fakeStreamLogsServer) SendMsg(any) error            { return nil }
+func (f *fakeStreamLogsServer) RecvMsg(any) error            { return nil }
 
 func TestStreamLogs_OnlyNewLines(t *testing.T) {
 	dir := t.TempDir()

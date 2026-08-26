@@ -73,7 +73,7 @@ export default function DataDashboard() {
             <TableRow>
               <TableCell>Type</TableCell>
               <TableCell>Subject</TableCell>
-              <TableCell>File</TableCell>
+              <TableCell>File(s)</TableCell>
               <TableCell align="right">Size</TableCell>
               <TableCell align="right">Last updated</TableCell>
             </TableRow>
@@ -92,7 +92,7 @@ export default function DataDashboard() {
                 </TableCell>
               </TableRow>
             ) : files.map((file) => (
-              <TableRow key={`${file.namespace}/${file.name}`} hover>
+              <TableRow key={`${file.namespace}/${file.subject}/${file.name}`} hover>
                 <TableCell>{file.kind}</TableCell>
                 <TableCell>{file.subject}</TableCell>
                 <TableCell sx={{ fontFamily: 'monospace' }}>{file.name}</TableCell>
@@ -105,7 +105,8 @@ export default function DataDashboard() {
       </TableContainer>
       {totalFileCount > files.length && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-          Showing the {files.length} largest files out of {totalFileCount.toLocaleString()}.
+          Showing {files.length} summary rows for {totalFileCount.toLocaleString()} persisted files.
+          The list is limited to the largest 50 summaries.
         </Typography>
       )}
     </Box>
