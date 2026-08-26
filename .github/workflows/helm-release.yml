@@ -3,10 +3,22 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Version to release (e.g. 1.2.3 — no v prefix)'
+      bump:
+        description: 'Version bump'
         required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_notes:
+        description: 'Release notes (optional; commit messages are used when blank)'
+        required: false
         type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -22,12 +34,53 @@ jobs:
           fetch-depth: 0  # chart-releaser needs full git history
           token: ${{ secrets.ADMIN_BYPASS_TOKEN }}  # Pass the admin token here so the git operations inherit the Admin bypass role
 
-      - name: Compute version aliases
+      - name: Compute next version
         id: ver
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
-          V="${{ inputs.version }}"
-          echo "version=$V" >> $GITHUB_OUTPUT
-          echo "major_minor=${V%.*}" >> $GITHUB_OUTPUT
+          current="$(sed -n 's/^version: *//p' deploy/helm/simple-logging/Chart.yaml)"
+          if [[ ! "$current" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Chart version is not valid SemVer: $current" >&2
+            exit 1
+          fi
+
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          patch="${BASH_REMATCH[3]}"
+
+          case "$BUMP" in
+            patch) ((patch += 1)) ;;
+            minor) ((minor += 1)); patch=0 ;;
+            major) ((major += 1)); minor=0; patch=0 ;;
+            *) echo "Unknown version bump: $BUMP" >&2; exit 1 ;;
+          esac
+
+          version="$major.$minor.$patch"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "major_minor=$major.$minor" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+        run: |
+          notes_file="deploy/helm/simple-logging/RELEASE_NOTES.md"
+          if [[ -n "$RELEASE_NOTES" ]]; then
+            printf '%s\n' "$RELEASE_NOTES" > "$notes_file"
+          else
+            previous_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
+            if [[ -n "$previous_tag" ]]; then
+              range="$previous_tag..HEAD"
+            else
+              range="HEAD"
+            fi
+
+            {
+              echo "## Changes"
+              echo
+              git log --no-merges --format='- %s (`%h`)' "$range"
+            } > "$notes_file"
+          fi
 
       - name: Update Chart.yaml
         run: |
@@ -88,3 +141,4 @@ jobs:
           charts_dir: deploy/helm
         env:
           CR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CR_RELEASE_NOTES_FILE: RELEASE_NOTES.md
