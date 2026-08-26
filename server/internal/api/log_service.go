@@ -252,7 +252,7 @@ func indexFileGroup(relativePath string) string {
 	}
 
 	parts := strings.Split(filepath.ToSlash(relativePath), "/")
-	if len(parts) < 5 || parts[0] != "keys" || parts[2] != "values" {
+	if len(parts) < 4 || parts[0] != "keys" || (parts[2] != "values" && parts[2] != "shards") {
 		return "Index data"
 	}
 

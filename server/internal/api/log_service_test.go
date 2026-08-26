@@ -143,7 +143,7 @@ func TestListLogFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(secondIndexDir, "company-2.jsonl"), []byte(indexEntry), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	manifest := []byte(`{"keys":["companyUuid"]}`)
+	manifest := []byte(`{"keys":["companyUuid"],"formatVersion":2}`)
 	if err := os.WriteFile(filepath.Join(dir, ".indexes", "indexes.json"), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -238,6 +238,14 @@ func TestListLogFiles_TruncatesToLargestFiles(t *testing.T) {
 		if file.Name == "pod-00.log" {
 			t.Errorf("expected smallest file pod-00.log to be truncated from results")
 		}
+	}
+}
+
+func TestIndexFileGroupRecognizesV2Shards(t *testing.T) {
+	encodedKey := base64.RawURLEncoding.EncodeToString([]byte("reqId"))
+	got := indexFileGroup(filepath.Join("keys", encodedKey, "shards", "af.idx"))
+	if got != "reqId" {
+		t.Fatalf("indexFileGroup = %q, want reqId", got)
 	}
 }
 

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -34,10 +35,28 @@ func NewFileWriter(logsRoot, namespace, pod string) (*FileWriter, error) {
 
 // Write appends line followed by a newline to the log file.
 func (w *FileWriter) Write(line string) error {
+	_, _, err := w.WriteWithLocation(line)
+	return err
+}
+
+// WriteWithLocation appends a line and returns its byte offset and length in
+// the canonical log file. Indexes store this compact location instead of a
+// second copy of the complete log line.
+func (w *FileWriter) WriteWithLocation(line string) (int64, uint32, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	_, err := fmt.Fprintln(w.f, line)
-	return err
+	offset, err := w.f.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, 0, err
+	}
+	written, err := fmt.Fprintln(w.f, line)
+	if err != nil {
+		return 0, 0, err
+	}
+	if written == 0 {
+		return 0, 0, io.ErrShortWrite
+	}
+	return offset, uint32(written - 1), nil
 }
 
 // HasContent reports whether the log file already contains data on disk.

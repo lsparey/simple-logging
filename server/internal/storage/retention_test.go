@@ -88,3 +88,25 @@ func TestRetentionManager_KeepsNonEmptyDirs(t *testing.T) {
 		t.Errorf("expected new log file to remain: %v", err)
 	}
 }
+
+func TestRetentionManager_CompactsIndexesAfterDeletingLogs(t *testing.T) {
+	dir := t.TempDir()
+	nsDir := filepath.Join(dir, "ns")
+	os.MkdirAll(nsDir, 0755)
+	oldPath := filepath.Join(nsDir, "old.log")
+	os.WriteFile(oldPath, []byte("old"), 0644)
+	past := time.Now().Add(-31 * 24 * time.Hour)
+	os.Chtimes(oldPath, past, past)
+
+	compactCalls := 0
+	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.SetIndexCompactor(func() error {
+		compactCalls++
+		return nil
+	})
+	rm.sweep()
+
+	if compactCalls != 1 {
+		t.Fatalf("index compactor called %d times, want 1", compactCalls)
+	}
+}

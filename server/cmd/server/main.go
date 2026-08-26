@@ -88,6 +88,7 @@ func main() {
 
 	// ── Phase 7: Retention Manager ─────────────────────────────────
 	retention := storage.NewRetentionManager(cfg.LogsRoot, cfg.RetentionDays, cfg.RetentionCheckInterval, log)
+	retention.SetIndexCompactor(indexManager.Compact)
 	go retention.Run(ctx)
 
 	// ── Phase 8/9: gRPC Service & gRPC-Web Server ───────────────────

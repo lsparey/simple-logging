@@ -12,10 +12,17 @@ import (
 // RetentionManager periodically deletes log files that have not been written to
 // within the configured retention window, and removes empty namespace directories.
 type RetentionManager struct {
-	logsRoot      string
-	retentionDays int
-	checkInterval time.Duration
-	log           *zap.Logger
+	logsRoot       string
+	retentionDays  int
+	checkInterval  time.Duration
+	log            *zap.Logger
+	compactIndexes func() error
+}
+
+// SetIndexCompactor registers the index cleanup run after stale log files are
+// removed. It is optional so retention remains usable without indexes.
+func (r *RetentionManager) SetIndexCompactor(compact func() error) {
+	r.compactIndexes = compact
 }
 
 // NewRetentionManager creates a RetentionManager.
@@ -126,6 +133,11 @@ func (r *RetentionManager) sweep() {
 			}
 			r.log.Info("removed empty namespace directory", zap.String("path", nsDir))
 			removed++
+		}
+	}
+	if deleted > 0 && r.compactIndexes != nil {
+		if err := r.compactIndexes(); err != nil {
+			r.log.Error("failed to compact indexes after retention", zap.Error(err))
 		}
 	}
 

@@ -69,6 +69,27 @@ func TestFileWriter_Appends(t *testing.T) {
 	}
 }
 
+func TestFileWriter_WriteWithLocation(t *testing.T) {
+	dir := t.TempDir()
+	w, err := NewFileWriter(dir, "ns", "pod")
+	if err != nil {
+		t.Fatalf("NewFileWriter: %v", err)
+	}
+	defer w.Close()
+
+	firstOffset, firstLength, err := w.WriteWithLocation("first")
+	if err != nil {
+		t.Fatalf("WriteWithLocation(first): %v", err)
+	}
+	secondOffset, secondLength, err := w.WriteWithLocation("second")
+	if err != nil {
+		t.Fatalf("WriteWithLocation(second): %v", err)
+	}
+	if firstOffset != 0 || firstLength != 5 || secondOffset != 6 || secondLength != 6 {
+		t.Fatalf("locations = (%d,%d), (%d,%d)", firstOffset, firstLength, secondOffset, secondLength)
+	}
+}
+
 func TestFileWriter_HasContent(t *testing.T) {
 	dir := t.TempDir()
 	w, err := NewFileWriter(dir, "ns", "pod")

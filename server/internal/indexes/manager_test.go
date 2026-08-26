@@ -25,6 +25,31 @@ func writePodLog(t *testing.T, root, namespace, pod string, lines []string) {
 	}
 }
 
+func appendAndObserve(t *testing.T, m *Manager, root, namespace, pod, line string) {
+	t.Helper()
+	dir := filepath.Join(root, namespace)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	f, err := os.OpenFile(filepath.Join(dir, pod+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	offset, err := f.Seek(0, 2)
+	if err != nil {
+		f.Close()
+		t.Fatalf("Seek: %v", err)
+	}
+	if _, err := fmt.Fprintln(f, line); err != nil {
+		f.Close()
+		t.Fatalf("write line: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	m.ObserveLineAt(namespace, pod, offset, uint32(len(line)), line)
+}
+
 func TestCreateBackfillsExistingLogs(t *testing.T) {
 	root := t.TempDir()
 	writePodLog(t, root, "default", "api", []string{
@@ -58,8 +83,8 @@ func TestObserveLineAppendsToExistingIndex(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	m.ObserveLine("default", "api", `2026-06-05T08:00:00Z [default/api/app] {"userUuid":"u-1","msg":"hello"}`)
-	m.ObserveLine("default", "api", `2026-06-05T08:00:01Z [default/api/app] {"userUuid":"u-2","msg":"skip"}`)
+	appendAndObserve(t, m, root, "default", "api", `2026-06-05T08:00:00Z [default/api/app] {"userUuid":"u-1","msg":"hello"}`)
+	appendAndObserve(t, m, root, "default", "api", `2026-06-05T08:00:01Z [default/api/app] {"userUuid":"u-2","msg":"skip"}`)
 
 	lines, _, _, err := m.GetLogs("userUuid", "u-1", 200, "", false)
 	if err != nil {
@@ -322,5 +347,135 @@ func TestCreateBackfillsLongJSONLines(t *testing.T) {
 	}
 	if len(values) != 1 || values[0].Value != longMessage || values[0].Count != 1 {
 		t.Fatalf("unexpected long values: %#v", values)
+	}
+}
+
+func TestV2IndexUsesShardsAndAvoidsDuplicatingLogLines(t *testing.T) {
+	root := t.TempDir()
+	message := strings.Repeat("x", 2048)
+	lines := make([]string, 200)
+	for i := range lines {
+		lines[i] = fmt.Sprintf(
+			`2026-06-05T08:00:%02dZ [default/api/app] {"reqId":"request-%04d","message":"%s"}`,
+			i%60, i, message,
+		)
+	}
+	writePodLog(t, root, "default", "api", lines)
+
+	m := NewManager(root)
+	if err := m.Create("reqId"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	var indexBytes int64
+	var shardFiles int
+	err := filepath.WalkDir(m.keyRoot("reqId"), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			info, infoErr := entry.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			indexBytes += info.Size()
+			if filepath.Ext(path) == ".idx" {
+				shardFiles++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir: %v", err)
+	}
+	logInfo, err := os.Stat(filepath.Join(root, "default", "api.log"))
+	if err != nil {
+		t.Fatalf("Stat log: %v", err)
+	}
+	if indexBytes >= logInfo.Size()/4 {
+		t.Fatalf("compact index size %d is not below 25%% of log size %d", indexBytes, logInfo.Size())
+	}
+	if shardFiles > shardCount {
+		t.Fatalf("created %d shard files, want at most %d", shardFiles, shardCount)
+	}
+}
+
+func TestNewManagerMigratesV1IndexesByRebuildingLogs(t *testing.T) {
+	root := t.TempDir()
+	line := `2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1","msg":"one"}`
+	writePodLog(t, root, "default", "api", []string{line})
+	oldValues := filepath.Join(root, indexDirName, "keys", encodePathPart("companyUuid"), "values", "aa")
+	if err := os.MkdirAll(oldValues, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(oldValues, "old.jsonl"), []byte(`{"line":"duplicated"}`+"\n"), 0644); err != nil {
+		t.Fatalf("write old index: %v", err)
+	}
+	manifestPath := filepath.Join(root, indexDirName, manifestName)
+	if err := os.WriteFile(manifestPath, []byte(`{"keys":["companyUuid"]}`), 0644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	m := NewManager(root)
+	lines, _, _, err := m.GetLogs("companyUuid", "co-1", 10, "", false)
+	if err != nil || len(lines) != 1 || lines[0] != line {
+		t.Fatalf("migrated GetLogs = %#v, err=%v", lines, err)
+	}
+	if _, err := os.Stat(filepath.Join(m.keyRoot("companyUuid"), "values")); !os.IsNotExist(err) {
+		t.Fatalf("legacy values directory still exists: %v", err)
+	}
+	manifestBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	if !strings.Contains(string(manifestBytes), `"formatVersion":2`) {
+		t.Fatalf("manifest was not upgraded: %s", manifestBytes)
+	}
+}
+
+func TestCompactRemovesReferencesToDeletedLogs(t *testing.T) {
+	root := t.TempDir()
+	line := `2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1"}`
+	writePodLog(t, root, "default", "api", []string{line})
+	m := NewManager(root)
+	if err := m.Create("companyUuid"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	shardPath := m.shardPath("companyUuid", "co-1")
+	if err := os.Remove(filepath.Join(root, "default", "api.log")); err != nil {
+		t.Fatalf("remove log: %v", err)
+	}
+	if err := m.Compact(); err != nil {
+		t.Fatalf("Compact: %v", err)
+	}
+	if _, err := os.Stat(shardPath); !os.IsNotExist(err) {
+		t.Fatalf("stale shard still exists: %v", err)
+	}
+	values, _, _, err := m.ListValues("companyUuid", 50, "")
+	if err != nil || len(values) != 0 {
+		t.Fatalf("ListValues after compact = %#v, err=%v", values, err)
+	}
+}
+
+func TestGetLogsIgnoresPartialTrailingIndexRecord(t *testing.T) {
+	root := t.TempDir()
+	line := `2026-06-05T08:00:00Z [default/api/app] {"companyUuid":"co-1"}`
+	writePodLog(t, root, "default", "api", []string{line})
+	m := NewManager(root)
+	if err := m.Create("companyUuid"); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	f, err := os.OpenFile(m.shardPath("companyUuid", "co-1"), os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("OpenFile: %v", err)
+	}
+	if _, err := f.Write([]byte{0, 0, 0, 64, 1, 2, 3}); err != nil {
+		t.Fatalf("append partial record: %v", err)
+	}
+	f.Close()
+
+	lines, _, _, err := m.GetLogs("companyUuid", "co-1", 10, "", false)
+	if err != nil || len(lines) != 1 || lines[0] != line {
+		t.Fatalf("GetLogs with partial record = %#v, err=%v", lines, err)
 	}
 }

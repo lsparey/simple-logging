@@ -696,11 +696,12 @@ func isJSONLine(line string) bool {
 }
 
 func (c *Collector) writeLogLine(writer *storage.FileWriter, namespace, pod, line string) error {
-	if err := writer.Write(line); err != nil {
+	offset, length, err := writer.WriteWithLocation(line)
+	if err != nil {
 		return err
 	}
 	if c.indexes != nil {
-		c.indexes.ObserveLine(namespace, pod, line)
+		c.indexes.ObserveLineAt(namespace, pod, offset, length, line)
 	}
 	return nil
 }
