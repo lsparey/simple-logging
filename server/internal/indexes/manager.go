@@ -2,6 +2,7 @@ package indexes
 
 import (
 	"bufio"
+	"container/heap"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -42,6 +43,65 @@ type ValueInfo struct {
 	Value       string
 	Count       int64
 	LastUpdated time.Time
+}
+
+type valueInfoHeap struct{ values []ValueInfo }
+
+func (h valueInfoHeap) Len() int           { return len(h.values) }
+func (h valueInfoHeap) Less(i, j int) bool { return valueInfoLess(h.values[j], h.values[i]) }
+func (h valueInfoHeap) Swap(i, j int)      { h.values[i], h.values[j] = h.values[j], h.values[i] }
+func (h *valueInfoHeap) Push(value any)    { h.values = append(h.values, value.(ValueInfo)) }
+func (h *valueInfoHeap) Pop() any {
+	old := h.values
+	value := old[len(old)-1]
+	h.values = old[:len(old)-1]
+	return value
+}
+
+func valueInfoLess(a, b ValueInfo) bool {
+	if a.LastUpdated.Equal(b.LastUpdated) {
+		return a.Value < b.Value
+	}
+	return a.LastUpdated.After(b.LastUpdated)
+}
+
+type sortableEntry struct {
+	entry    Entry
+	position int
+	time     time.Time
+	valid    bool
+}
+
+type entryPageHeap struct {
+	entries    []sortableEntry
+	keepNewest bool
+}
+
+func (h entryPageHeap) Len() int { return len(h.entries) }
+func (h entryPageHeap) Less(i, j int) bool {
+	less := sortableEntryLess(h.entries[i], h.entries[j])
+	if h.keepNewest {
+		return less
+	}
+	return !less
+}
+func (h entryPageHeap) Swap(i, j int)   { h.entries[i], h.entries[j] = h.entries[j], h.entries[i] }
+func (h *entryPageHeap) Push(value any) { h.entries = append(h.entries, value.(sortableEntry)) }
+func (h *entryPageHeap) Pop() any {
+	old := h.entries
+	value := old[len(old)-1]
+	h.entries = old[:len(old)-1]
+	return value
+}
+
+func sortableEntryLess(a, b sortableEntry) bool {
+	if a.valid != b.valid {
+		return a.valid
+	}
+	if a.valid && !a.time.Equal(b.time) {
+		return a.time.Before(b.time)
+	}
+	return a.position < b.position
 }
 
 type Manager struct {
@@ -164,37 +224,34 @@ func (m *Manager) GetLogs(key, value string, pageSize int, pageToken string, loa
 		return nil, "", "", os.ErrNotExist
 	}
 
-	entries, err := m.readValueEntriesLocked(key, value)
-	if err != nil {
-		return nil, "", "", err
-	}
-	sortEntriesByTimestamp(entries)
-
 	start := 0
-	if loadLastPage {
-		start = len(entries) - pageSize
-		if start < 0 {
-			start = 0
-		}
-	} else if pageToken != "" {
+	if !loadLastPage && pageToken != "" {
+		var err error
 		start, err = strconv.Atoi(pageToken)
-		if err != nil || start < 0 || start > len(entries) {
+		if err != nil || start < 0 {
 			return nil, "", "", errors.New("invalid page_token")
 		}
 	}
 
-	end := start + pageSize
-	if end > len(entries) {
-		end = len(entries)
+	entries, total, err := readEntriesPage(m.valuePath(key, value), start, pageSize, loadLastPage)
+	if err != nil {
+		return nil, "", "", err
+	}
+	if start > total {
+		return nil, "", "", errors.New("invalid page_token")
+	}
+	if loadLastPage {
+		start = total - len(entries)
 	}
 
-	lines := make([]string, 0, end-start)
-	for _, entry := range entries[start:end] {
+	lines := make([]string, 0, len(entries))
+	for _, entry := range entries {
 		lines = append(lines, entry.Line)
 	}
 
 	next := ""
-	if end < len(entries) {
+	end := start + len(entries)
+	if end < total {
 		next = strconv.Itoa(end)
 	}
 	prev := ""
@@ -250,7 +307,18 @@ func (m *Manager) ListValues(key string, pageSize int, pageToken string) ([]Valu
 		return nil, "", "", os.ErrNotExist
 	}
 
-	valueInfo := make(map[string]ValueInfo)
+	start := 0
+	if pageToken != "" {
+		var err error
+		start, err = strconv.Atoi(pageToken)
+		if err != nil || start < 0 {
+			return nil, "", "", errors.New("invalid page_token")
+		}
+	}
+	limit := start + pageSize
+	h := &valueInfoHeap{}
+	heap.Init(h)
+	valueCount := 0
 	valuesRoot := filepath.Join(m.keyRoot(key), "values")
 	if err := filepath.WalkDir(valuesRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -259,18 +327,17 @@ func (m *Manager) ListValues(key string, pageSize int, pageToken string) ([]Valu
 		if d.IsDir() || filepath.Ext(path) != ".jsonl" {
 			return nil
 		}
-		entries, err := readEntriesFile(path)
+		info, ok, err := summarizeEntriesFile(path)
 		if err != nil {
 			return err
 		}
-		for _, entry := range entries {
-			info := valueInfo[entry.Value]
-			info.Value = entry.Value
-			info.Count++
-			if timestamp, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil && timestamp.After(info.LastUpdated) {
-				info.LastUpdated = timestamp
-			}
-			valueInfo[entry.Value] = info
+		if !ok {
+			return nil
+		}
+		valueCount++
+		heap.Push(h, info)
+		if h.Len() > limit {
+			heap.Pop(h)
 		}
 		return nil
 	}); err != nil {
@@ -280,32 +347,19 @@ func (m *Manager) ListValues(key string, pageSize int, pageToken string) ([]Valu
 		return nil, "", "", err
 	}
 
-	values := make([]ValueInfo, 0, len(valueInfo))
-	for _, info := range valueInfo {
-		values = append(values, info)
+	if start > valueCount {
+		return nil, "", "", errors.New("invalid page_token")
 	}
-	sort.Slice(values, func(i, j int) bool {
-		if values[i].LastUpdated.Equal(values[j].LastUpdated) {
-			return values[i].Value < values[j].Value
-		}
-		return values[i].LastUpdated.After(values[j].LastUpdated)
-	})
-
-	start := 0
-	if pageToken != "" {
-		var err error
-		start, err = strconv.Atoi(pageToken)
-		if err != nil || start < 0 || start > len(values) {
-			return nil, "", "", errors.New("invalid page_token")
-		}
+	values := h.values
+	sort.Slice(values, func(i, j int) bool { return valueInfoLess(values[i], values[j]) })
+	if start > len(values) {
+		start = len(values)
 	}
-	end := start + pageSize
-	if end > len(values) {
-		end = len(values)
-	}
+	page := values[start:]
 
 	next := ""
-	if end < len(values) {
+	end := start + len(page)
+	if end < valueCount {
 		next = strconv.Itoa(end)
 	}
 	prev := ""
@@ -316,7 +370,7 @@ func (m *Manager) ListValues(key string, pageSize int, pageToken string) ([]Valu
 		}
 		prev = strconv.Itoa(prevStart)
 	}
-	return values[start:end], next, prev, nil
+	return page, next, prev, nil
 }
 
 func (m *Manager) load() error {
@@ -474,6 +528,93 @@ func readEntriesFile(path string) ([]Entry, error) {
 		entries = append(entries, entry)
 	}
 	return entries, nil
+}
+
+func readEntriesPage(path string, start, pageSize int, loadLastPage bool) ([]Entry, int, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, 0, nil
+		}
+		return nil, 0, err
+	}
+	defer f.Close()
+
+	limit := pageSize
+	if !loadLastPage {
+		limit += start
+	}
+	h := &entryPageHeap{keepNewest: loadLastPage}
+	heap.Init(h)
+	reader := bufio.NewReader(f)
+	total := 0
+	for {
+		line, readErr := readLine(reader)
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			return nil, 0, readErr
+		}
+		var entry Entry
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			continue
+		}
+		parsed, parseErr := time.Parse(time.RFC3339, entry.Timestamp)
+		heap.Push(h, sortableEntry{
+			entry: entry, position: total, time: parsed, valid: parseErr == nil,
+		})
+		total++
+		if h.Len() > limit {
+			heap.Pop(h)
+		}
+	}
+
+	selected := h.entries
+	sort.Slice(selected, func(i, j int) bool { return sortableEntryLess(selected[i], selected[j]) })
+	if !loadLastPage {
+		if start > len(selected) {
+			start = len(selected)
+		}
+		selected = selected[start:]
+	}
+	entries := make([]Entry, len(selected))
+	for i := range selected {
+		entries[i] = selected[i].entry
+	}
+	return entries, total, nil
+}
+
+func summarizeEntriesFile(path string) (ValueInfo, bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return ValueInfo{}, false, err
+	}
+	defer f.Close()
+
+	var info ValueInfo
+	reader := bufio.NewReader(f)
+	for {
+		line, readErr := readLine(reader)
+		if readErr != nil {
+			if errors.Is(readErr, io.EOF) {
+				break
+			}
+			return ValueInfo{}, false, readErr
+		}
+		var entry Entry
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			continue
+		}
+		if info.Count == 0 {
+			info.Value = entry.Value
+		}
+		info.Count++
+		if timestamp, parseErr := time.Parse(time.RFC3339, entry.Timestamp); parseErr == nil && timestamp.After(info.LastUpdated) {
+			info.LastUpdated = timestamp
+		}
+	}
+	return info, info.Count > 0, nil
 }
 
 func readLine(r *bufio.Reader) (string, error) {

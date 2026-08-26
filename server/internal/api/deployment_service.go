@@ -198,26 +198,37 @@ type logEntry struct {
 	line string
 }
 
-// logEntryHeap is a min-heap of logEntry, ordered by timestamp with insertion
-// order as a tiebreaker so that lines sharing an identical timestamp are always
-// returned in the order they were read from their log files.
-type logEntryHeap []logEntry
-
-func (h logEntryHeap) Len() int           { return len(h) }
-func (h logEntryHeap) Less(i, j int) bool {
-	if h[i].ts.Equal(h[j].ts) {
-		return h[i].idx < h[j].idx
-	}
-	return h[i].ts.Before(h[j].ts)
+// logEntryHeap retains one bounded edge of the result set. For newest pages,
+// the oldest entry is discarded when the page is full; for oldest pages, the
+// newest entry is discarded. Memory therefore remains O(page size).
+type logEntryHeap struct {
+	entries []logEntry
+	newest  bool
 }
-func (h logEntryHeap) Swap(i, j int)       { h[i], h[j] = h[j], h[i] }
-func (h *logEntryHeap) Push(x interface{}) { *h = append(*h, x.(logEntry)) }
+
+func (h logEntryHeap) Len() int { return len(h.entries) }
+func (h logEntryHeap) Less(i, j int) bool {
+	less := logEntryLess(h.entries[i], h.entries[j])
+	if h.newest {
+		return less
+	}
+	return !less
+}
+func (h logEntryHeap) Swap(i, j int)       { h.entries[i], h.entries[j] = h.entries[j], h.entries[i] }
+func (h *logEntryHeap) Push(x interface{}) { h.entries = append(h.entries, x.(logEntry)) }
 func (h *logEntryHeap) Pop() interface{} {
-	old := *h
+	old := h.entries
 	n := len(old)
 	x := old[n-1]
-	*h = old[:n-1]
+	h.entries = old[:n-1]
 	return x
+}
+
+func logEntryLess(a, b logEntry) bool {
+	if a.ts.Equal(b.ts) {
+		return a.idx < b.idx
+	}
+	return a.ts.Before(b.ts)
 }
 
 // encodeForwardNanosToken encodes a "lines after this timestamp" cursor.
@@ -260,7 +271,7 @@ func decodeNanosToken(token string) (nanosToken, error) {
 
 // GetDeploymentLogs returns a paginated, time-sorted page of log lines from
 // all pods belonging to the given deployment.
-func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentLogsRequest) (*pb.GetDeploymentLogsResponse, error) {
+func (s *LogService) GetDeploymentLogs(ctx context.Context, req *pb.GetDeploymentLogsRequest) (*pb.GetDeploymentLogsResponse, error) {
 	if req.Namespace == "" || req.Deployment == "" {
 		return nil, status.Error(codes.InvalidArgument, "namespace and deployment are required")
 	}
@@ -309,10 +320,12 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 	afterTime := time.Unix(0, afterNanos)
 	beforeTime := time.Unix(0, beforeNanos)
 
-	// Read all matching lines from every pod log file into the heap.
-	h := &logEntryHeap{}
+	// Scan every file but retain only the requested page. Previously every
+	// matching line was held in memory before truncating to pageSize.
+	h := &logEntryHeap{newest: reversed}
 	heap.Init(h)
 	var insertIdx int
+	var matchingCount int
 
 	for _, pod := range pods {
 		logPath := filepath.Join(s.logsRoot, req.Namespace, pod+".log")
@@ -326,6 +339,10 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 
 		scanner := bufio.NewScanner(f)
 		for scanner.Scan() {
+			if err := ctx.Err(); err != nil {
+				f.Close()
+				return nil, status.FromContextError(err).Err()
+			}
 			line := scanner.Text()
 			ts := parseLineTimestamp(line)
 
@@ -345,35 +362,27 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 			}
 			heap.Push(h, logEntry{ts: ts, idx: insertIdx, line: line})
 			insertIdx++
+			matchingCount++
+			if h.Len() > pageSize {
+				heap.Pop(h)
+			}
 		}
 		f.Close()
 	}
 
-	// Drain the heap into a sorted slice.
-	allSorted := make([]logEntry, 0, h.Len())
-	for h.Len() > 0 {
-		allSorted = append(allSorted, heap.Pop(h).(logEntry))
-	}
-	// allSorted is ascending by timestamp.
+	page := h.entries
+	sort.Slice(page, func(i, j int) bool { return logEntryLess(page[i], page[j]) })
+	hasMore := matchingCount > len(page)
 
-	resp := &pb.GetDeploymentLogsResponse{}
+	resp := &pb.GetDeploymentLogsResponse{Lines: make([]string, len(page))}
+	for i, entry := range page {
+		resp.Lines[i] = entry.line
+	}
 
 	if reversed {
-		// Take the last pageSize lines (most recent).
-		start := len(allSorted) - pageSize
-		if start < 0 {
-			start = 0
-		}
-		page := allSorted[start:]
-		lines := make([]string, len(page))
-		for i, e := range page {
-			lines[i] = e.line
-		}
-		resp.Lines = lines
-
 		// prev_page_token: if there are lines before this page, encode a "before
 		// first line of this page" backward cursor.
-		if start > 0 && len(page) > 0 {
+		if hasMore && len(page) > 0 {
 			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
 		}
 		// next_page_token: for a backward cursor, provide a forward cursor so
@@ -383,20 +392,8 @@ func (s *LogService) GetDeploymentLogs(_ context.Context, req *pb.GetDeploymentL
 		}
 		// For load_last_page there is no next page (we are already at the end).
 	} else {
-		// Take the first pageSize lines.
-		end := pageSize
-		if end > len(allSorted) {
-			end = len(allSorted)
-		}
-		page := allSorted[:end]
-		lines := make([]string, len(page))
-		for i, e := range page {
-			lines[i] = e.line
-		}
-		resp.Lines = lines
-
 		// next_page_token: there are more lines after this page.
-		if len(allSorted) > pageSize && len(page) > 0 {
+		if hasMore && len(page) > 0 {
 			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
 		}
 		// prev_page_token: only meaningful when we started mid-stream (afterNanos > 0).
