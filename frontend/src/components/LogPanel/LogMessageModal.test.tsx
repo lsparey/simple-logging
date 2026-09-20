@@ -50,4 +50,21 @@ describe('LogMessageModal', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('falls back to execCommand when navigator.clipboard is unavailable', async () => {
+    // Reproduces "Cannot read properties of undefined (reading 'writeText')",
+    // which happens when the app is served over plain HTTP (e.g. via an
+    // internal hostname/IP in a cluster) and navigator.clipboard is undefined.
+    Object.assign(navigator, { clipboard: undefined });
+    const execCommand = vi.fn().mockReturnValue(true);
+    Object.assign(document, { execCommand });
+
+    const line = 'a very long log line that would otherwise be clipped';
+    renderModal(line);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+    expect(await screen.findByRole('button', { name: 'Copied!' })).toBeInTheDocument();
+    expect(execCommand).toHaveBeenCalledWith('copy');
+  });
 });

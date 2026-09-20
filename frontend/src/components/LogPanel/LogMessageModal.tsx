@@ -9,6 +9,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import LogLine from './LogLine.js';
 import type { JsonFormat } from '../../store/logStore.js';
+import { copyToClipboard } from '../../utils/copyToClipboard.js';
 
 interface Props {
   open: boolean;
@@ -23,7 +24,8 @@ export default function LogMessageModal({ open, line, darkMode, jsonFormat, onCl
 
   async function handleCopy() {
     if (line === null) return;
-    await navigator.clipboard.writeText(line);
+    const succeeded = await copyToClipboard(line);
+    if (!succeeded) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
