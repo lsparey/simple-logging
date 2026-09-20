@@ -15,6 +15,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/lsparey/simple-logging/internal/indexes"
@@ -26,6 +28,13 @@ const (
 	jsonProbeLines = 10
 	// jsonRequiredMatches allows startup chatter before structured logs begin.
 	jsonRequiredMatches = 5
+
+	// apiStreamMinBackoff is the initial delay before reopening an API log
+	// stream that ended while the pod is still running.
+	apiStreamMinBackoff = time.Second
+	// apiStreamMaxBackoff caps the reconnect delay so a pod stuck in
+	// CrashLoopBackOff costs at most one log request per interval.
+	apiStreamMaxBackoff = 30 * time.Second
 )
 
 type jsonProbe struct {
@@ -71,7 +80,17 @@ type Collector struct {
 	// directly, bypassing the Kubernetes log API and eliminating containerd
 	// streaming overhead.
 	nodeLogsRoot string
-	log          *zap.Logger
+	// nodeName is the node this collector runs on. When set alongside
+	// nodeLogsRoot only pods scheduled on this node are tailed from the
+	// filesystem; pods on other nodes are streamed via the Kubernetes log API
+	// (hybrid mode). Empty means "tail every pod" for backwards compatibility.
+	nodeName string
+	log      *zap.Logger
+
+	// apiMinBackoff/apiMaxBackoff bound the reconnect delay for API streams.
+	// They are fields so tests can shorten them.
+	apiMinBackoff time.Duration
+	apiMaxBackoff time.Duration
 
 	mu      sync.Mutex
 	wg      sync.WaitGroup
@@ -88,27 +107,57 @@ type Collector struct {
 	indexes *indexes.Manager
 }
 
+// Option configures optional Collector behaviour.
+type Option func(*Collector)
+
+// WithNodeName tells the collector which node it is running on. Combined with
+// a non-empty nodeLogsRoot this enables hybrid mode: pods on this node are
+// tailed from the host filesystem and pods on other nodes are streamed via the
+// Kubernetes log API. An empty name leaves the behaviour unchanged.
+func WithNodeName(name string) Option {
+	return func(c *Collector) { c.nodeName = name }
+}
+
 // New creates a Collector that writes pod logs to files under logsRoot.
 // If nodeLogsRoot is non-empty (e.g. "/var/log/pods" mounted as a hostPath),
 // the collector tails log files directly from the node filesystem instead of
 // using the Kubernetes log-streaming API.
-func New(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger) *Collector {
-	return NewWithIndexes(cs, logsRoot, nodeLogsRoot, log, indexes.NewManager(logsRoot))
+func New(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger, opts ...Option) *Collector {
+	return NewWithIndexes(cs, logsRoot, nodeLogsRoot, log, indexes.NewManager(logsRoot), opts...)
 }
 
 // NewWithIndexes creates a Collector with a shared index manager.
-func NewWithIndexes(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger, indexManager *indexes.Manager) *Collector {
-	return &Collector{
+func NewWithIndexes(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger, indexManager *indexes.Manager, opts ...Option) *Collector {
+	c := &Collector{
 		cs:             cs,
 		logsRoot:       logsRoot,
 		nodeLogsRoot:   nodeLogsRoot,
 		log:            log,
+		apiMinBackoff:  apiStreamMinBackoff,
+		apiMaxBackoff:  apiStreamMaxBackoff,
 		streams:        make(map[podKey]*activeStream),
 		deploymentPods: make(map[string]map[string]struct{}),
 		podDeployment:  make(map[string]string),
 		jsonLogging:    make(map[podKey]bool),
 		indexes:        indexManager,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+// usesFileTail reports whether pod's logs are read from the node filesystem
+// rather than the Kubernetes log API. File tailing requires nodeLogsRoot and,
+// when this collector knows its own node, that the pod is scheduled on it.
+func (c *Collector) usesFileTail(pod *corev1.Pod) bool {
+	if c.nodeLogsRoot == "" {
+		return false
+	}
+	if c.nodeName == "" {
+		return true
+	}
+	return pod.Spec.NodeName == c.nodeName
 }
 
 // OnAdd is called by the PodWatcher when a pod starts or transitions to Running.
@@ -303,10 +352,17 @@ func (c *Collector) trackDeployment(pod *corev1.Pod) {
 // either runFileTail (node-local file) or runAPIStream (Kubernetes log API).
 func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bool) {
 	containerName := defaultContainer(pod)
+	fileTail := c.usesFileTail(pod)
+	source := "api"
+	if fileTail {
+		source = "file"
+	}
 	log := c.log.With(
 		zap.String("namespace", pod.Namespace),
 		zap.String("pod", pod.Name),
 		zap.String("container", containerName),
+		zap.String("node", pod.Spec.NodeName),
+		zap.String("source", source),
 	)
 
 	writer, err := storage.NewFileWriter(c.logsRoot, pod.Namespace, pod.Name)
@@ -329,7 +385,7 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 		}
 	}
 
-	if c.nodeLogsRoot != "" {
+	if fileTail {
 		c.runFileTail(ctx, pod, containerName, writer, log)
 	} else {
 		c.runAPIStream(ctx, pod, containerName, writer, log)
@@ -618,64 +674,133 @@ func parseCRILogLine(line string) (content string, isPartial bool) {
 	return rest[i+1:], flag == "P"
 }
 
-// runAPIStream streams pod logs via the Kubernetes log API. Used when
-// nodeLogsRoot is not configured (e.g. multi-node clusters or non-hostPath setups).
+// runAPIStream streams pod logs via the Kubernetes log API. Used for pods
+// whose log files are not reachable on the local filesystem: every pod in
+// "api" mode, or pods scheduled on other nodes in hybrid mode.
+//
+// A follow stream ends whenever the container exits, kubelet restarts, or the
+// connection through kube-apiserver is dropped. Remote nodes make the last two
+// far more likely, so the stream is reopened with exponential backoff until
+// the pod reaches a terminal phase, disappears, or ctx is cancelled. Each
+// reconnect resumes from the timestamp of the last line received so history
+// is not replayed (at most one second may be duplicated, because the API only
+// accepts whole-second SinceTime values).
 func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.FileWriter, log *zap.Logger) {
+	// If we already have a log file for this pod, skip replaying the full
+	// historical log. The stored file already contains the history.
+	var since *metav1.Time
+	if writer.HasContent() {
+		t := metav1.NewTime(time.Now().Add(-time.Second))
+		since = &t
+	}
+
+	var probe jsonProbe
+	jsonDecided := false
+	backoff := c.apiMinBackoff
+
+	for {
+		lastLine, err := c.streamAPIOnce(ctx, pod, containerName, writer, log, since, &probe, &jsonDecided)
+		if ctx.Err() != nil {
+			return // cancelled — not an error
+		}
+		if !lastLine.IsZero() {
+			t := metav1.NewTime(lastLine)
+			since = &t
+			backoff = c.apiMinBackoff // progress was made, start the backoff over
+		}
+
+		if err == nil {
+			// Clean EOF: the container exited. Stop if the pod is gone for
+			// good; otherwise kubelet may be about to restart the container.
+			if c.podFinished(ctx, pod) {
+				log.Info("log stream ended, pod finished")
+				return
+			}
+			if ctx.Err() != nil {
+				return // cancelled during the lookup
+			}
+		} else {
+			log.Warn("log stream interrupted", zap.Error(err))
+		}
+
+		log.Info("reconnecting log stream", zap.Duration("backoff", backoff))
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, c.apiMaxBackoff)
+	}
+}
+
+// streamAPIOnce opens a single follow stream and copies lines to writer until
+// it ends. It returns the wall-clock time of the last line written (zero if
+// none) and a non-nil error if the stream failed to open or ended abnormally.
+func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.FileWriter, log *zap.Logger, since *metav1.Time, probe *jsonProbe, jsonDecided *bool) (time.Time, error) {
 	logOpts := &corev1.PodLogOptions{
 		Container: containerName,
 		Follow:    true,
-	}
-	// If we already have a log file for this pod, skip replaying the full
-	// historical log. The stored file already contains the history.
-	if writer.HasContent() {
-		sinceSeconds := int64(1)
-		logOpts.SinceSeconds = &sinceSeconds
+		SinceTime: since,
 	}
 	req := c.cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, logOpts)
 
 	stream, err := req.Stream(ctx)
 	if err != nil {
-		if ctx.Err() != nil {
-			return // context was cancelled — not an error
-		}
-		log.Error("failed to open log stream", zap.Error(err))
-		return
+		return time.Time{}, fmt.Errorf("open log stream: %w", err)
 	}
 	defer stream.Close()
 
 	log.Info("log stream started")
 
+	var lastLine time.Time
 	scanner := bufio.NewScanner(stream)
-	var probe jsonProbe
-	jsonDecided := false
-
 	for scanner.Scan() {
 		rawLine := scanner.Text()
 
 		// Probe the first jsonProbeLines non-empty lines to detect JSON logging.
-		if !jsonDecided {
+		if !*jsonDecided {
 			if decided, isJSON := probe.observe(rawLine); decided {
-				jsonDecided = true
+				*jsonDecided = true
 				c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
 			}
 		}
 
+		now := time.Now().UTC()
 		line := fmt.Sprintf("%s [%s/%s/%s] %s",
-			time.Now().UTC().Format(time.RFC3339),
+			now.Format(time.RFC3339),
 			pod.Namespace, pod.Name, containerName,
 			rawLine,
 		)
 		if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, line); werr != nil {
-			log.Error("failed to write log line", zap.Error(werr))
-			return
+			return lastLine, fmt.Errorf("write log line: %w", werr)
 		}
+		lastLine = now
 	}
 
-	if serr := scanner.Err(); serr != nil && ctx.Err() == nil {
-		log.Error("log stream ended with error", zap.Error(serr))
-	} else {
-		log.Info("log stream ended")
+	if serr := scanner.Err(); serr != nil {
+		return lastLine, serr
 	}
+	log.Debug("log stream ended")
+	return lastLine, nil
+}
+
+// podFinished reports whether the pod has reached a terminal phase or no
+// longer exists, in which case its log stream should not be reopened. Any
+// other lookup error is treated as "still running" so a transient API blip
+// does not silently abandon a live pod.
+func (c *Collector) podFinished(ctx context.Context, pod *corev1.Pod) bool {
+	current, err := c.cs.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return apierrors.IsNotFound(err)
+	}
+	if current.UID != pod.UID {
+		return true // a different pod now owns this name; its own OnAdd will stream it
+	}
+	switch current.Status.Phase {
+	case corev1.PodSucceeded, corev1.PodFailed:
+		return true
+	}
+	return false
 }
 
 // defaultContainer returns the name of the first (default) container in the pod.

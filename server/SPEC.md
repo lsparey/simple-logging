@@ -59,7 +59,7 @@
 
 | Component | Responsibility |
 |-----------|---------------|
-| **Log Collector** | Watches the Kubernetes API for pod events (add/delete), spawns a goroutine per pod to stream logs via `follow=true`, writes lines to the pod's log file. |
+| **Log Collector** | Watches the Kubernetes API for pod events (add/delete) and spawns a goroutine per pod. Pods on the local node are tailed from the hostPath-mounted CRI log directory; pods on other nodes (or all pods in `api` mode) are streamed via `follow=true`. Lines are written to the pod's log file. |
 | **Pod Watcher** | Uses a Kubernetes `Informer` (or `Watch`) to detect new pods and signal the Log Collector. |
 | **Retention Manager** | Periodically (e.g. daily) scans the log directory and deletes files not written to in the last 30 days. |
 | **gRPC-Web API Server** | Serves the gRPC service over HTTP/1.1 (with gRPC-Web framing) so browser clients can connect directly. |
@@ -73,6 +73,9 @@
 - **Pod discovery**: A shared `Informer` on `v1/Pod` across all namespaces provides add/delete events.
 - **Log streaming**: `client-go` `CoreV1().Pods(namespace).GetLogs(podName, &PodLogOptions{Follow: true})` for the default container only.
 - **Resumed streaming**: If the app restarts, streaming resumes from the current live position (not from the beginning of the file) to avoid duplicate entries.
+- **Collection modes**: `NODE_LOGS_ROOT` switches a pod from API streaming to tailing its CRI log file under the hostPath mount. When `NODE_NAME` is also set (Downward API `spec.nodeName`) only pods with `spec.nodeName == NODE_NAME` are tailed and every other pod is streamed via the API — *hybrid* mode, which lets a single replica cover a multi-node cluster while confining kubelet/apiserver load to remote pods.
+- **Stream resilience**: an API follow stream ends whenever the container exits, kubelet restarts, or the apiserver connection drops. The collector reopens it with exponential backoff (1s → 30s), resuming from `sinceTime` of the last received line (whole-second precision, so at most one second may repeat). Streams are not reopened once the pod is `Succeeded`/`Failed`, has been deleted, or has been replaced by a pod of the same name with a different UID.
+- **Informer memory**: `managedFields` is stripped from pod objects before they enter the informer cache, since the cache holds every pod in the cluster.
 
 ---
 
@@ -203,6 +206,8 @@ All configuration is via environment variables:
 | `RETENTION_DAYS` | `30` | Number of days to retain log files after last write. |
 | `RETENTION_CHECK_INTERVAL` | `24h` | How often the retention manager runs. |
 | `LOG_LEVEL` | `info` | Application log level (`debug`, `info`, `warn`, `error`). |
+| `NODE_LOGS_ROOT` | *(unset)* | Host path of the CRI pod log directory (e.g. `/var/log/pods`). Unset = `api` mode; set = tail from the filesystem. |
+| `NODE_NAME` | *(unset)* | Name of the node this replica runs on (Downward API). With `NODE_LOGS_ROOT` this enables `hybrid` mode: local pods are tailed, remote pods streamed via the API. |
 
 ---
 
@@ -210,7 +215,7 @@ All configuration is via environment variables:
 
 ### Kubernetes Resources
 
-- **Deployment** — single replica running the `simple-logging` container.
+- **Deployment** — single replica running the `simple-logging` container. In `hybrid`/`fileTail` modes it mounts `/var/log/pods` (and, for Docker runtimes, `/var/lib/docker/containers`) read-only as `hostPath` volumes; `hybrid` additionally injects `NODE_NAME` from `spec.nodeName`.
 - **ServiceAccount** — bound to a `ClusterRole` granting read access to pods and pod logs.
 - **ClusterRole / ClusterRoleBinding** — grants `get`, `list`, `watch` on `pods` and `get` on `pods/log`.
 - **PersistentVolumeClaim** — mounted at `LOGS_ROOT`; size to be determined based on expected log volume and retention period.

@@ -34,6 +34,11 @@ func NewPodWatcher(cs kubernetes.Interface, handler PodEventHandler, resyncPerio
 		cs,
 		resyncPeriod,
 		// Watch all namespaces (no namespace filter).
+		//
+		// The cache holds every pod in the cluster, so trim fields we never
+		// read before they are stored. managedFields is routinely the single
+		// largest part of a pod object and grows with cluster size.
+		informers.WithTransform(stripUnusedPodFields),
 	)
 
 	podInformer := factory.Core().V1().Pods().Informer()
@@ -110,6 +115,16 @@ func (w *PodWatcher) WaitForCacheSync(ctx context.Context) error {
 		return fmt.Errorf("pod informer cache sync timed out or context cancelled")
 	}
 	return nil
+}
+
+// stripUnusedPodFields is an informer TransformFunc that drops server-side
+// bookkeeping the collector never reads, reducing the memory held per pod.
+// Non-pod objects (e.g. DeletedFinalStateUnknown tombstones) pass through.
+func stripUnusedPodFields(obj interface{}) (interface{}, error) {
+	if pod, ok := obj.(*corev1.Pod); ok {
+		pod.ManagedFields = nil
+	}
+	return obj, nil
 }
 
 // toPod safely casts an interface{} to *corev1.Pod.

@@ -36,6 +36,38 @@ type Config struct {
 	// typically /var/log/pods when mounted as a hostPath volume.
 	// When set, the collector tails files directly (no Kubernetes log API).
 	NodeLogsRoot string
+
+	// NodeName is the name of the Kubernetes node this instance is scheduled
+	// on, normally injected via the Downward API (spec.nodeName). When set
+	// together with NodeLogsRoot the collector runs in hybrid mode: pods on
+	// this node are tailed from the host filesystem and pods on every other
+	// node are streamed through the Kubernetes log API, so a single replica
+	// can cover a multi-node cluster.
+	NodeName string
+}
+
+// Collection modes reported by Config.CollectionMode.
+const (
+	// ModeAPI streams every pod through the Kubernetes log API.
+	ModeAPI = "api"
+	// ModeFileTail tails every pod from the node filesystem (single node only).
+	ModeFileTail = "fileTail"
+	// ModeHybrid tails local pods from the filesystem and streams remote pods
+	// through the Kubernetes log API.
+	ModeHybrid = "hybrid"
+)
+
+// CollectionMode reports how pod logs are collected, derived from
+// NodeLogsRoot and NodeName.
+func (c *Config) CollectionMode() string {
+	switch {
+	case c.NodeLogsRoot == "":
+		return ModeAPI
+	case c.NodeName == "":
+		return ModeFileTail
+	default:
+		return ModeHybrid
+	}
 }
 
 // Load reads configuration from environment variables, applying defaults where
@@ -88,6 +120,10 @@ func Load() (*Config, error) {
 
 	if raw := os.Getenv("NODE_LOGS_ROOT"); raw != "" {
 		cfg.NodeLogsRoot = raw
+	}
+
+	if raw := os.Getenv("NODE_NAME"); raw != "" {
+		cfg.NodeName = raw
 	}
 
 	if err := cfg.validate(); err != nil {

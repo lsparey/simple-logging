@@ -11,6 +11,7 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 - **Live log streaming** — real-time log tailing from all pods across all namespaces via a gRPC-Web API
 - **Persisted log storage** — logs are written to a PersistentVolumeClaim (one file per pod) and retained for 30 days
 - **Automatic pod discovery** — new pods are detected and streamed as soon as they start
+- **Multi-node from a single replica** — pods on the local node are tailed straight from disk; pods on other nodes are streamed via the Kubernetes API, so no DaemonSet is needed
 - **Single helm install** — deploy the full stack with one `helm install` command
 - **Very low resource requirements** — requests only 150m CPU / 160Mi memory
 
@@ -52,9 +53,9 @@ Once the pod is running, open `http://logs.example.com` in your browser to view 
 | `ingress.enabled` | `false` | Expose the UI via an Ingress |
 | `ingress.host` | `""` | Hostname for the Ingress rule |
 | `ingress.className` | `""` | Ingress controller class (e.g. `traefik`, `nginx`) |
-| `config.logCollectionMode` | `fileTail` | Log collection mode: `fileTail` or `api` (see above) |
-| `config.nodeLogsRoot` | `/var/log/pods` | Host path for CRI pod logs (fileTail mode only) |
-| `config.dockerLogsRoot` | `/var/lib/docker/containers` | Host path for Docker log content (fileTail + Docker only) |
+| `config.logCollectionMode` | `hybrid` | Log collection mode: `hybrid`, `fileTail` or `api` (see below) |
+| `config.nodeLogsRoot` | `/var/log/pods` | Host path for CRI pod logs (hybrid and fileTail modes) |
+| `config.dockerLogsRoot` | `/var/lib/docker/containers` | Host path for Docker log content (hybrid/fileTail + Docker only) |
 | `config.retentionDays` | `30` | Days to keep log files after last write |
 | `persistence.size` | `20Gi` | PVC size for log storage |
 | `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
@@ -76,15 +77,23 @@ helm install simple-logging simple-logging/simple-logging \
 
 ## Log collection modes
 
-simple-logging supports two ways to collect pod logs, controlled by `config.logCollectionMode` in the Helm values.
+simple-logging supports three ways to collect pod logs, controlled by `config.logCollectionMode` in the Helm values. All three run as a single Deployment replica — there is never more than one copy of the service.
 
-### `fileTail` (default)
+### `hybrid` (default)
+
+The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and learns which node it is scheduled on via the Downward API. Pods on that node are tailed directly from the filesystem using `inotify`; pods on every other node are streamed through the Kubernetes log API. Remote streams are reopened automatically with backoff if the connection drops or the container restarts, resuming from the last line received.
+
+**Recommended for:** multi-node clusters. Only pods on remote nodes cost a kube-apiserver/kubelet connection, so scheduling simple-logging on your busiest node keeps API load to a minimum. On a single-node cluster this is identical to `fileTail`.
+
+Uses the same `config.nodeLogsRoot` / `config.dockerLogsRoot` values as `fileTail`.
+
+### `fileTail`
 
 The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and tails log files directly on the node filesystem using filesystem events (`inotify`). No persistent HTTP connections are opened to kube-apiserver, kubelet, or containerd.
 
 **Recommended for:** single-node clusters, k3s, Docker Desktop, or any setup where the simple-logging pod always runs on the same node as the pods it monitors.
 
-**Not suitable for:** multi-node clusters — simple-logging is a single Deployment replica and cannot see the log files of pods scheduled on other nodes.
+**Not suitable for:** multi-node clusters — pods scheduled on other nodes are not collected. Use `hybrid` instead.
 
 To use this mode you must also set:
 
@@ -93,13 +102,20 @@ To use this mode you must also set:
 | `config.nodeLogsRoot` | `/var/log/pods` | Host path where the runtime writes pod log symlinks |
 | `config.dockerLogsRoot` | `/var/lib/docker/containers` | Only needed when the runtime is Docker; leave empty for containerd |
 
+```bash
+helm install simple-logging simple-logging/simple-logging \
+  --namespace simple-logging \
+  --create-namespace \
+  --set config.logCollectionMode=fileTail
+```
+
 ### `api`
 
-The collector opens one persistent HTTP streaming connection per pod via the Kubernetes log API (`client-go` `GetLogs` with `follow=true`). A shared Informer watches for pod add/delete events so new pods are picked up automatically.
+The collector opens one persistent HTTP streaming connection per pod via the Kubernetes log API (`client-go` `GetLogs` with `follow=true`). A shared Informer watches for pod add/delete events so new pods are picked up automatically, and dropped streams are reopened with backoff.
 
-**Recommended for:** multi-node clusters where simple-logging cannot access host filesystems of other nodes.
+**Recommended for:** clusters where `hostPath` volumes are not permitted by security policy, so neither `hybrid` nor `fileTail` can mount the node's log directory.
 
-**Trade-off:** on busy clusters with many pods this can cause elevated CPU usage in kubelet and containerd due to the number of open log-streaming connections.
+**Trade-off:** on busy clusters with many pods this can cause elevated CPU usage in kubelet and containerd due to the number of open log-streaming connections. `hybrid` avoids this for every pod on the local node.
 
 ```bash
 helm install simple-logging simple-logging/simple-logging \

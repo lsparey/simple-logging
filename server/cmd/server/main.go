@@ -44,6 +44,9 @@ func main() {
 		zap.Int("grpc_web_port", cfg.GRPCWebPort),
 		zap.Int("retention_days", cfg.RetentionDays),
 		zap.Duration("retention_check_interval", cfg.RetentionCheckInterval),
+		zap.String("collection_mode", cfg.CollectionMode()),
+		zap.String("node_logs_root", cfg.NodeLogsRoot),
+		zap.String("node_name", cfg.NodeName),
 	)
 
 	if cfg.PPROFPort > 0 {
@@ -67,7 +70,8 @@ func main() {
 
 	// ── Phase 5/6: Log Collector, Indexes & FileWriter ───────────────────────
 	indexManager := indexes.NewManager(cfg.LogsRoot)
-	coll := collector.NewWithIndexes(cs, cfg.LogsRoot, cfg.NodeLogsRoot, log, indexManager)
+	coll := collector.NewWithIndexes(cs, cfg.LogsRoot, cfg.NodeLogsRoot, log, indexManager,
+		collector.WithNodeName(cfg.NodeName))
 
 	watcher, err := k8s.NewPodWatcher(cs, k8s.PodEventHandler{
 		OnAdd:    coll.OnAdd,

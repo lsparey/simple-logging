@@ -122,3 +122,46 @@ func TestLoad_LogsRootCreated(t *testing.T) {
 		t.Errorf("expected directory %q to exist: %v", newDir, err)
 	}
 }
+
+func TestCollectionMode(t *testing.T) {
+	cases := []struct {
+		name         string
+		nodeLogsRoot string
+		nodeName     string
+		want         string
+	}{
+		{"api when no node logs root", "", "", ModeAPI},
+		{"api ignores node name without node logs root", "", "node-a", ModeAPI},
+		{"fileTail when node logs root only", "/var/log/pods", "", ModeFileTail},
+		{"hybrid when node logs root and node name", "/var/log/pods", "node-a", ModeHybrid},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{NodeLogsRoot: tc.nodeLogsRoot, NodeName: tc.nodeName}
+			if got := cfg.CollectionMode(); got != tc.want {
+				t.Errorf("CollectionMode: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoad_NodeNameFromEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("GRPC_WEB_PORT", "")
+	t.Setenv("RETENTION_DAYS", "")
+	t.Setenv("RETENTION_CHECK_INTERVAL", "")
+	t.Setenv("NODE_LOGS_ROOT", "/var/log/pods")
+	t.Setenv("NODE_NAME", "worker-1")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.NodeName != "worker-1" {
+		t.Errorf("NodeName: got %q, want worker-1", cfg.NodeName)
+	}
+	if got := cfg.CollectionMode(); got != ModeHybrid {
+		t.Errorf("CollectionMode: got %q, want %q", got, ModeHybrid)
+	}
+}

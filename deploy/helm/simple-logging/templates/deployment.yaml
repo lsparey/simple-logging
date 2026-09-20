@@ -1,3 +1,9 @@
+{{- $mode := .Values.config.logCollectionMode }}
+{{- if not (has $mode (list "hybrid" "fileTail" "api")) }}
+{{- fail (printf "config.logCollectionMode must be one of hybrid, fileTail or api (got %q)" $mode) }}
+{{- end }}
+{{- /* hybrid and fileTail both read pod logs from the node filesystem. */}}
+{{- $hostLogs := or (eq $mode "hybrid") (eq $mode "fileTail") }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -48,9 +54,17 @@ spec:
               value: {{ .Values.config.retentionCheckInterval | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
-            {{- if eq .Values.config.logCollectionMode "fileTail" }}
+            {{- if $hostLogs }}
             - name: NODE_LOGS_ROOT
               value: {{ .Values.config.nodeLogsRoot | quote }}
+            {{- end }}
+            {{- if eq $mode "hybrid" }}
+            # Tells the collector whose node's log files are mounted, so pods on
+            # other nodes fall back to the Kubernetes log API.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
@@ -58,7 +72,7 @@ spec:
           volumeMounts:
             - name: logs
               mountPath: {{ .Values.config.logsRoot }}
-            {{- if eq .Values.config.logCollectionMode "fileTail" }}
+            {{- if $hostLogs }}
             - name: node-logs
               mountPath: {{ .Values.config.nodeLogsRoot }}
               readOnly: true
@@ -82,7 +96,7 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- if eq .Values.config.logCollectionMode "fileTail" }}
+        {{- if $hostLogs }}
         - name: node-logs
           hostPath:
             path: {{ .Values.config.nodeLogsRoot }}

@@ -33,27 +33,34 @@ config:
   logLevel: info
   # logCollectionMode controls how pod logs are collected.
   #
+  #   hybrid (default) — pods scheduled on the same node as simple-logging
+  #     are tailed directly from the node filesystem via a hostPath volume;
+  #     pods on every other node are streamed through the Kubernetes log
+  #     API. A single replica covers a multi-node cluster while limiting
+  #     API/kubelet load to the remote pods only. On a single-node cluster
+  #     this behaves exactly like fileTail. Requires nodeLogsRoot.
+  #
   #   fileTail — tail log files directly from the node filesystem via a
   #     hostPath volume. Bypasses the Kubernetes log API entirely (no
   #     persistent connections through kube-apiserver/kubelet/containerd).
-  #     Recommended for single-node clusters. Requires nodeLogsRoot to be
-  #     set to the host path where the runtime writes pod log files.
+  #     Single-node clusters only: pods on other nodes are not collected.
+  #     Requires nodeLogsRoot to be set to the host path where the runtime
+  #     writes pod log files.
   #
   #   api — stream logs via the Kubernetes log API (one persistent HTTP
-  #     connection per pod). Works on any cluster topology, including
-  #     multi-node, without any host filesystem access. Required when
-  #     simple-logging is deployed as a single Deployment on a multi-node
-  #     cluster. Can cause elevated containerd/kubelet CPU on busy clusters.
+  #     connection per pod). Works on any cluster topology without any host
+  #     filesystem access. Can cause elevated containerd/kubelet CPU on busy
+  #     clusters; prefer hybrid unless hostPath volumes are not permitted.
   #
-  logCollectionMode: fileTail
+  logCollectionMode: hybrid
 
   # Path where the runtime writes pod log files on the host node.
-  # Only used when logCollectionMode is "fileTail".
+  # Only used when logCollectionMode is "hybrid" or "fileTail".
   # Standard value for containerd and Docker: /var/log/pods
   nodeLogsRoot: /var/log/pods
 
   # Path where Docker writes the actual log file content on the host.
-  # Only needed when logCollectionMode is "fileTail" AND the runtime is
+  # Only needed when logCollectionMode is "hybrid" or "fileTail" AND the runtime is
   # Docker (e.g. Docker Desktop) — /var/log/pods entries are symlinks into
   # this directory, so it must also be mounted for the symlinks to resolve.
   # Leave empty for containerd clusters.
