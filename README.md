@@ -138,3 +138,7 @@ helm uninstall simple-logging --namespace simple-logging
 ```
 
 > **Note:** Uninstalling does not delete the PVC. To remove persisted logs, delete the PVC manually: `kubectl delete pvc -n simple-logging -l app.kubernetes.io/instance=simple-logging`
+
+## License
+
+[MIT](LICENSE)
