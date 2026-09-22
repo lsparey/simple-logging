@@ -31,6 +31,9 @@ config:
   retentionDays: 30
   retentionCheckInterval: "24h"
   logLevel: info
+  # Enables plain JSON REST endpoints at /debug/* for testing purposes.
+  # Leave disabled unless you need to exercise the API without a gRPC-Web client.
+  restDebug: false
   # logCollectionMode controls how pod logs are collected.
   #
   #   hybrid (default) — pods scheduled on the same node as simple-logging
@@ -94,6 +97,19 @@ resources:
 # Pod-level security context.
 # The combined image uses nginx:alpine which starts as root to bind port 80.
 podSecurityContext: {}
+
+# Scheduling controls, all empty/disabled by default.
+nodeSelector: {}
+affinity: {}
+tolerations: []
+priorityClassName: ""
+
+# Extra annotations to apply to the pod template.
+podAnnotations: {}
+
+# Extra volumes and mounts, e.g. for mounting a custom cert or config file.
+extraVolumes: []
+extraVolumeMounts: []
 
 serviceAccount:
   # Set to false to use an existing service account.
