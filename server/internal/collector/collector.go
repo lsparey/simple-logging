@@ -425,6 +425,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 	seekToEnd := writer.HasContent()
 
 	var partial strings.Builder
+	var partialTS time.Time
 	var probe jsonProbe
 	jsonDecided := false
 
@@ -541,8 +542,11 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 			}
 
 			// Parse CRI/Docker-JSON format and reassemble partial lines.
-			content, isPartial := parseCRILogLine(strings.TrimRight(rawLine, "\n"))
+			lineTS, content, isPartial := parseCRILogLine(strings.TrimRight(rawLine, "\n"))
 			if isPartial {
+				if partial.Len() == 0 {
+					partialTS = lineTS
+				}
 				partial.WriteString(content)
 				continue
 			}
@@ -551,6 +555,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 				partial.WriteString(content)
 				logContent = partial.String()
 				partial.Reset()
+				lineTS = partialTS
 			}
 
 			// Probe the first jsonProbeLines non-empty lines to detect JSON logging.
@@ -562,7 +567,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 			}
 
 			line := fmt.Sprintf("%s [%s/%s/%s] %s",
-				time.Now().UTC().Format(time.RFC3339),
+				lineTS.Format(time.RFC3339Nano),
 				pod.Namespace, pod.Name, containerName,
 				logContent,
 			)
@@ -637,41 +642,51 @@ func waitForLogFile(ctx context.Context, path string, watcher *fsnotify.Watcher)
 //
 //	{"log":"<content>\n","stream":"stdout","time":"<RFC3339Nano>"}
 //
-// Returns the log content and whether it is a partial line. For Docker JSON,
-// partial lines are those whose "log" value does not end with a newline.
-// Falls back to returning the raw line unchanged if the format is not recognised.
-func parseCRILogLine(line string) (content string, isPartial bool) {
+// Returns the line's source timestamp, the log content, and whether it is a
+// partial line. For Docker JSON, partial lines are those whose "log" value
+// does not end with a newline. Falls back to the current wall-clock time and
+// the raw line unchanged if the format or its timestamp is not recognised.
+func parseCRILogLine(line string) (ts time.Time, content string, isPartial bool) {
 	// Docker JSON format — line starts with '{'.
 	if len(line) > 0 && line[0] == '{' {
 		var entry struct {
-			Log string `json:"log"`
+			Log  string `json:"log"`
+			Time string `json:"time"`
 		}
 		if err := json.Unmarshal([]byte(line), &entry); err == nil {
 			partial := !strings.HasSuffix(entry.Log, "\n")
-			return strings.TrimSuffix(entry.Log, "\n"), partial
+			ts, err := time.Parse(time.RFC3339Nano, entry.Time)
+			if err != nil {
+				ts = time.Now().UTC()
+			}
+			return ts, strings.TrimSuffix(entry.Log, "\n"), partial
 		}
 	}
 
 	// CRI format: <timestamp> <stream> <flag> <content>
-	// Skip past timestamp token.
 	i := strings.Index(line, " ")
 	if i < 0 {
-		return line, false
+		return time.Now().UTC(), line, false
 	}
+	tsToken := line[:i]
 	rest := line[i+1:]
 	// Skip past stream token (stdout/stderr).
 	i = strings.Index(rest, " ")
 	if i < 0 {
-		return line, false
+		return time.Now().UTC(), line, false
 	}
 	rest = rest[i+1:]
 	// Read flag token.
 	i = strings.Index(rest, " ")
 	if i < 0 {
-		return line, false
+		return time.Now().UTC(), line, false
 	}
 	flag := rest[:i]
-	return rest[i+1:], flag == "P"
+	ts, err := time.Parse(time.RFC3339Nano, tsToken)
+	if err != nil {
+		ts = time.Now().UTC()
+	}
+	return ts, rest[i+1:], flag == "P"
 }
 
 // runAPIStream streams pod logs via the Kubernetes log API. Used for pods
@@ -738,9 +753,10 @@ func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, container
 // none) and a non-nil error if the stream failed to open or ended abnormally.
 func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.FileWriter, log *zap.Logger, since *metav1.Time, probe *jsonProbe, jsonDecided *bool) (time.Time, error) {
 	logOpts := &corev1.PodLogOptions{
-		Container: containerName,
-		Follow:    true,
-		SinceTime: since,
+		Container:  containerName,
+		Follow:     true,
+		SinceTime:  since,
+		Timestamps: true,
 	}
 	req := c.cs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, logOpts)
 
@@ -757,24 +773,35 @@ func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containe
 	for scanner.Scan() {
 		rawLine := scanner.Text()
 
+		// Timestamps: true prefixes each line with "<RFC3339Nano> ". Split it
+		// off so the source timestamp is used instead of receipt wall-clock
+		// time, falling back to now if a line is ever missing the prefix.
+		lineTS := time.Now().UTC()
+		content := rawLine
+		if idx := strings.IndexByte(rawLine, ' '); idx > 0 {
+			if t, err := time.Parse(time.RFC3339Nano, rawLine[:idx]); err == nil {
+				lineTS = t
+				content = rawLine[idx+1:]
+			}
+		}
+
 		// Probe the first jsonProbeLines non-empty lines to detect JSON logging.
 		if !*jsonDecided {
-			if decided, isJSON := probe.observe(rawLine); decided {
+			if decided, isJSON := probe.observe(content); decided {
 				*jsonDecided = true
 				c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
 			}
 		}
 
-		now := time.Now().UTC()
 		line := fmt.Sprintf("%s [%s/%s/%s] %s",
-			now.Format(time.RFC3339),
+			lineTS.Format(time.RFC3339Nano),
 			pod.Namespace, pod.Name, containerName,
-			rawLine,
+			content,
 		)
 		if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, line); werr != nil {
 			return lastLine, fmt.Errorf("write log line: %w", werr)
 		}
-		lastLine = now
+		lastLine = lineTS
 	}
 
 	if serr := scanner.Err(); serr != nil {

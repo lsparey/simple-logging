@@ -10,7 +10,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"go.uber.org/zap"
 )
@@ -104,6 +106,94 @@ func TestCollector_MultiplePods_Independent(t *testing.T) {
 	}
 	if !coll.IsActive("default", "pod-b") {
 		t.Error("pod-b should still be active")
+	}
+}
+
+func TestParseCRILogLine(t *testing.T) {
+	wantTS := time.Date(2026, 1, 1, 0, 0, 0, 123000000, time.UTC)
+
+	cases := []struct {
+		name        string
+		line        string
+		wantTS      time.Time
+		wantContent string
+		wantPartial bool
+	}{
+		{
+			name:        "CRI full line",
+			line:        "2026-01-01T00:00:00.123000000Z stdout F hello world",
+			wantTS:      wantTS,
+			wantContent: "hello world",
+			wantPartial: false,
+		},
+		{
+			name:        "CRI partial line",
+			line:        "2026-01-01T00:00:00.123000000Z stdout P hello wo",
+			wantTS:      wantTS,
+			wantContent: "hello wo",
+			wantPartial: true,
+		},
+		{
+			name:        "Docker JSON line",
+			line:        `{"log":"hello world\n","stream":"stdout","time":"2026-01-01T00:00:00.123000000Z"}`,
+			wantTS:      wantTS,
+			wantContent: "hello world",
+			wantPartial: false,
+		},
+		{
+			name:        "Docker JSON partial line",
+			line:        `{"log":"hello wo","stream":"stdout","time":"2026-01-01T00:00:00.123000000Z"}`,
+			wantTS:      wantTS,
+			wantContent: "hello wo",
+			wantPartial: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, content, isPartial := parseCRILogLine(tc.line)
+			if !ts.Equal(tc.wantTS) {
+				t.Errorf("timestamp: got %v, want %v", ts, tc.wantTS)
+			}
+			if content != tc.wantContent {
+				t.Errorf("content: got %q, want %q", content, tc.wantContent)
+			}
+			if isPartial != tc.wantPartial {
+				t.Errorf("isPartial: got %v, want %v", isPartial, tc.wantPartial)
+			}
+		})
+	}
+}
+
+func TestParseCRILogLine_FallsBackToNowOnUnrecognisedFormat(t *testing.T) {
+	before := time.Now().UTC()
+	ts, content, isPartial := parseCRILogLine("nospacesatall")
+	after := time.Now().UTC()
+
+	if ts.Before(before) || ts.After(after) {
+		t.Errorf("expected fallback timestamp to be roughly now, got %v (window %v..%v)", ts, before, after)
+	}
+	if content != "nospacesatall" {
+		t.Errorf("expected the raw line to be returned unchanged, got %q", content)
+	}
+	if isPartial {
+		t.Error("unrecognised lines should not be marked partial")
+	}
+}
+
+func TestParseCRILogLine_FallsBackToNowOnUnparseableTimestamp(t *testing.T) {
+	before := time.Now().UTC()
+	ts, content, isPartial := parseCRILogLine("not-a-timestamp stdout F hello world")
+	after := time.Now().UTC()
+
+	if ts.Before(before) || ts.After(after) {
+		t.Errorf("expected fallback timestamp to be roughly now, got %v (window %v..%v)", ts, before, after)
+	}
+	if content != "hello world" {
+		t.Errorf("expected content to still be extracted, got %q", content)
+	}
+	if isPartial {
+		t.Error("expected the F flag to be recognised as non-partial")
 	}
 }
 
@@ -292,6 +382,14 @@ func TestCollector_Hybrid_LocalPodTailsFile(t *testing.T) {
 	if n := countLines(t, logsRoot, "default", "local-pod", "fake logs"); n != 0 {
 		t.Errorf("local pod must not be streamed via the API, found %d API lines", n)
 	}
+
+	data, err := os.ReadFile(filepath.Join(logsRoot, "default", "local-pod.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "2026-01-01T00:00:00Z") {
+		t.Errorf("expected stored line to use the CRI source timestamp, got: %s", data)
+	}
 }
 
 func TestAPIStream_ReconnectsWhilePodRunning(t *testing.T) {
@@ -333,6 +431,38 @@ func TestAPIStream_StopsWhenPodFinished(t *testing.T) {
 				t.Errorf("expected exactly one stream for a finished pod, got %d lines", n)
 			}
 		})
+	}
+}
+
+func TestAPIStream_UsesSourceTimestamp(t *testing.T) {
+	logsRoot := t.TempDir()
+	cs := fake.NewSimpleClientset()
+	cs.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if action.GetSubresource() != "log" {
+			return false, nil, nil
+		}
+		return true, &runtime.Unknown{Raw: []byte("2020-01-01T00:00:00.000000000Z hello from api\n")}, nil
+	})
+
+	coll := New(cs, logsRoot, "", zap.NewNop())
+	coll.apiMinBackoff, coll.apiMaxBackoff = 10*time.Millisecond, 10*time.Millisecond
+	t.Cleanup(coll.Close)
+
+	pod := makePod("default", "ts-pod")
+	coll.OnAdd(pod)
+
+	if !waitFor(t, 5*time.Second, func() bool {
+		return countLines(t, logsRoot, "default", "ts-pod", "hello from api") >= 1
+	}) {
+		t.Fatal("expected the API stream's log line to be collected")
+	}
+
+	data, err := os.ReadFile(filepath.Join(logsRoot, "default", "ts-pod.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "2020-01-01T00:00:00Z") {
+		t.Errorf("expected stored line to use the API's source timestamp, got: %s", data)
 	}
 }
 
