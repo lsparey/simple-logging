@@ -25,7 +25,7 @@ type DiskGuard struct {
 	checkInterval    time.Duration
 	log              *zap.Logger
 
-	// usedPercent is diskUsedPercent by default; overridable in tests.
+	// usedPercent is DiskUsedPercent by default; overridable in tests.
 	usedPercent func(path string) (int, error)
 }
 
@@ -37,7 +37,7 @@ func NewDiskGuard(logsRoot string, highWaterPercent, lowWaterPercent int, checkI
 		lowWaterPercent:  lowWaterPercent,
 		checkInterval:    checkInterval,
 		log:              log,
-		usedPercent:      diskUsedPercent,
+		usedPercent:      DiskUsedPercent,
 	}
 }
 
@@ -201,10 +201,10 @@ func cleanupEmptyDirsAbove(segmentPath string, log *zap.Logger) {
 	removeIfEmpty(nsDir, log)
 }
 
-// diskUsedPercent reports the percentage of logsRoot's filesystem currently
+// DiskUsedPercent reports the percentage of logsRoot's filesystem currently
 // in use, using the same available-space accounting as `df` (i.e. blocks
 // reserved for privileged processes count as used).
-func diskUsedPercent(path string) (int, error) {
+func DiskUsedPercent(path string) (int, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, err

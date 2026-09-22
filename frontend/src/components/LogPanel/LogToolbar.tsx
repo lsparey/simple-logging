@@ -4,6 +4,9 @@ import TextField from '@mui/material/TextField';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Switch from '@mui/material/Switch';
 import Chip from '@mui/material/Chip';
+import FormControl from '@mui/material/FormControl';
+import Select, { type SelectChangeEvent } from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import { useLogStore, makeFormatKey } from '../../store/logStore.js';
 import JsonFormatModal from './JsonFormatModal.js';
 import LogHistogram from './LogHistogram.js';
@@ -19,7 +22,17 @@ interface Props {
 }
 
 export default function LogToolbar({ namespace, pod, deployment, liveEnabled, onLiveToggle }: Props) {
-  const { searchText, setSearchText, jsonLogging, jsonFormats, setJsonFormat, lines } = useLogStore();
+  const {
+    searchText,
+    setSearchText,
+    jsonLogging,
+    jsonFormats,
+    setJsonFormat,
+    lines,
+    selectedPodContainers,
+    selectedContainer,
+    setSelectedContainer,
+  } = useLogStore();
   const [modalOpen, setModalOpen] = useState(false);
 
   const formatKey = makeFormatKey(namespace, pod, deployment);
@@ -80,6 +93,22 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
           label="Live"
           sx={{ ml: 0.5 }}
         />
+
+        {pod && selectedPodContainers.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <Select
+              value={selectedContainer ?? ''}
+              displayEmpty
+              onChange={(e: SelectChangeEvent) => setSelectedContainer(e.target.value || null)}
+              inputProps={{ 'aria-label': 'Filter by container' }}
+            >
+              <MenuItem value="">All containers</MenuItem>
+              {selectedPodContainers.map((container) => (
+                <MenuItem key={container} value={container}>{container}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
 
         <LogHistogram />
 
