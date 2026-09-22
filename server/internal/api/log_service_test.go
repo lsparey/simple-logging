@@ -165,7 +165,7 @@ func TestListLogFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(secondIndexDir, "company-2.jsonl"), []byte(indexEntry), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	manifest := []byte(`{"keys":["companyUuid"],"formatVersion":2}`)
+	manifest := []byte(`{"keys":["companyUuid"],"formatVersion":3}`)
 	if err := os.WriteFile(filepath.Join(dir, ".indexes", "indexes.json"), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
