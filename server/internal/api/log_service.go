@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
-	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lsparey/simple-logging/internal/indexes"
+	"github.com/lsparey/simple-logging/internal/storage"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -90,27 +91,19 @@ func (s *LogService) ListNamespaces(_ context.Context, _ *pb.ListNamespacesReque
 	return &pb.ListNamespacesResponse{Namespaces: namespaces}, nil
 }
 
-// ListPods returns metadata for every pod with a log file in the given namespace.
+// ListPods returns metadata for every pod with a log directory in the given namespace.
 func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.ListPodsResponse, error) {
 	if req.Namespace == "" {
 		return nil, status.Error(codes.InvalidArgument, "namespace is required")
 	}
 
-	nsDir := filepath.Join(s.logsRoot, req.Namespace)
-	entries, err := os.ReadDir(nsDir)
+	podNames, err := storage.ListPodDirs(s.logsRoot, req.Namespace)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return &pb.ListPodsResponse{}, nil
-		}
 		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
 	}
 
-	var pods []*pb.PodInfo
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".log" {
-			continue
-		}
-		podName := strings.TrimSuffix(e.Name(), ".log")
+	pods := make([]*pb.PodInfo, 0, len(podNames))
+	for _, podName := range podNames {
 		pods = append(pods, &pb.PodInfo{
 			Name:        podName,
 			Namespace:   req.Namespace,
@@ -122,50 +115,89 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 	return &pb.ListPodsResponse{Pods: pods}, nil
 }
 
-// ListLogFiles returns metadata for the largest persisted pod log and index
-// files, up to maxListedLogFiles, along with totals across all of them.
+// ListLogFiles returns metadata summarising the largest persisted pod log
+// segments and index files, up to maxListedLogFiles, along with totals across
+// all of them. Log segments are grouped by (namespace, pod, container),
+// since a container's history is now many daily files rather than one.
 func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) (*pb.ListLogFilesResponse, error) {
 	namespaceEntries, err := os.ReadDir(s.logsRoot)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "read logs root: %v", err)
 	}
 
-	var files []*pb.LogFileInfo
+	type logSummary struct {
+		namespace, pod, container string
+		fileCount                 int
+		sizeBytes                 int64
+		modifiedAtUnixMs          int64
+	}
+	logSummaries := make(map[string]*logSummary)
 	var totalSize int64
 	var totalLogFileCount, totalIndexFileCount int32
+
 	for _, namespaceEntry := range namespaceEntries {
 		if !namespaceEntry.IsDir() || strings.HasPrefix(namespaceEntry.Name(), ".") {
 			continue
 		}
-
 		namespace := namespaceEntry.Name()
-		entries, err := os.ReadDir(filepath.Join(s.logsRoot, namespace))
+
+		pods, err := storage.ListPodDirs(s.logsRoot, namespace)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "read namespace dir %q: %v", namespace, err)
 		}
-
-		for _, entry := range entries {
-			if entry.IsDir() || filepath.Ext(entry.Name()) != ".log" {
-				continue
-			}
-
-			info, err := entry.Info()
+		for _, pod := range pods {
+			containers, err := storage.ListContainers(s.logsRoot, namespace, pod)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "stat log file %q: %v", entry.Name(), err)
+				return nil, status.Errorf(codes.Internal, "read pod dir %q: %v", pod, err)
 			}
-
-			size := info.Size()
-			files = append(files, &pb.LogFileInfo{
-				Namespace:        namespace,
-				Name:             entry.Name(),
-				SizeBytes:        size,
-				Kind:             "Log",
-				ModifiedAtUnixMs: info.ModTime().UnixMilli(),
-				Subject:          namespace + " / " + strings.TrimSuffix(entry.Name(), ".log"),
-			})
-			totalSize += size
-			totalLogFileCount++
+			for _, container := range containers {
+				containerDir := storage.ContainerDir(s.logsRoot, namespace, pod, container)
+				entries, err := os.ReadDir(containerDir)
+				if err != nil {
+					return nil, status.Errorf(codes.Internal, "read container dir %q: %v", containerDir, err)
+				}
+				for _, entry := range entries {
+					if entry.IsDir() {
+						continue
+					}
+					if _, err := storage.SegmentDate(entry.Name()); err != nil {
+						continue
+					}
+					info, err := entry.Info()
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "stat log segment %q: %v", entry.Name(), err)
+					}
+					key := namespace + "/" + pod + "/" + container
+					summary := logSummaries[key]
+					if summary == nil {
+						summary = &logSummary{namespace: namespace, pod: pod, container: container}
+						logSummaries[key] = summary
+					}
+					size := info.Size()
+					summary.fileCount++
+					summary.sizeBytes += size
+					summary.modifiedAtUnixMs = max(summary.modifiedAtUnixMs, info.ModTime().UnixMilli())
+					totalSize += size
+					totalLogFileCount++
+				}
+			}
 		}
+	}
+
+	var files []*pb.LogFileInfo
+	for _, summary := range logSummaries {
+		fileLabel := fmt.Sprintf("%d files", summary.fileCount)
+		if summary.fileCount == 1 {
+			fileLabel = "1 file"
+		}
+		files = append(files, &pb.LogFileInfo{
+			Namespace:        summary.namespace,
+			Name:             fileLabel,
+			SizeBytes:        summary.sizeBytes,
+			Kind:             "Log",
+			ModifiedAtUnixMs: summary.modifiedAtUnixMs,
+			Subject:          fmt.Sprintf("%s / %s (%s)", summary.namespace, summary.pod, summary.container),
+		})
 	}
 
 	type indexSummary struct {
@@ -264,29 +296,187 @@ func indexFileGroup(relativePath string) string {
 	return string(keyBytes)
 }
 
-// encodeOffsetToken encodes a byte offset as a base64 8-byte big-endian token.
-func encodeOffsetToken(offset int64) string {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(offset))
+// ── Segmented log reading ────────────────────────────────────────────────────
+
+// logChunk is one container's log segment file for a pod.
+type logChunk struct {
+	container string
+	segment   string // "YYYY-MM-DD"
+	path      string
+}
+
+// podChunks returns every segment file for every container of a pod, ordered
+// by segment date then container name. A pod has only ever had one collected
+// container in practice (multi-container collection is a later phase), so
+// this ordering is exactly chronological in the case that matters today; with
+// multiple containers it is a day-granularity approximation, refined once
+// per-container merging lands.
+func podChunks(logsRoot, namespace, pod string) ([]logChunk, error) {
+	containers, err := storage.ListContainers(logsRoot, namespace, pod)
+	if err != nil {
+		return nil, err
+	}
+	var chunks []logChunk
+	for _, container := range containers {
+		segments, err := storage.ListSegments(logsRoot, namespace, pod, container)
+		if err != nil {
+			return nil, err
+		}
+		for _, segment := range segments {
+			chunks = append(chunks, logChunk{
+				container: container,
+				segment:   segment,
+				path:      filepath.Join(storage.ContainerDir(logsRoot, namespace, pod, container), segment+".log"),
+			})
+		}
+	}
+	sort.Slice(chunks, func(i, j int) bool {
+		if chunks[i].segment != chunks[j].segment {
+			return chunks[i].segment < chunks[j].segment
+		}
+		return chunks[i].container < chunks[j].container
+	})
+	return chunks, nil
+}
+
+func findChunkIndex(chunks []logChunk, container, segment string) int {
+	for i, c := range chunks {
+		if c.container == container && c.segment == segment {
+			return i
+		}
+	}
+	return -1
+}
+
+// latestSegmentPath returns the path of the newest segment for a container,
+// or "" if it has none.
+func latestSegmentPath(logsRoot, namespace, pod, container string) (string, error) {
+	segments, err := storage.ListSegments(logsRoot, namespace, pod, container)
+	if err != nil {
+		return "", err
+	}
+	if len(segments) == 0 {
+		return "", nil
+	}
+	return filepath.Join(storage.ContainerDir(logsRoot, namespace, pod, container), segments[len(segments)-1]+".log"), nil
+}
+
+// logsPageToken is a GetLogs pagination cursor: which segment and byte offset
+// within it a page starts or ends at. Segment identity (rather than a raw
+// index into the current chunk list) keeps a token valid across new segments
+// appearing or old ones being deleted by retention between calls.
+type logsPageToken struct {
+	Container string `json:"c"`
+	Segment   string `json:"s"`
+	Offset    int64  `json:"o"`
+}
+
+func encodeLogsPageToken(t logsPageToken) string {
+	b, _ := json.Marshal(t) //nolint:errcheck // logsPageToken always marshals
 	return base64.StdEncoding.EncodeToString(b)
 }
 
-// decodeOffsetToken decodes a base64 8-byte big-endian token back to a byte offset.
-func decodeOffsetToken(token string) (int64, error) {
-	b, err := base64.StdEncoding.DecodeString(token)
-	if err != nil || len(b) != 8 {
-		return 0, status.Error(codes.InvalidArgument, "invalid page_token")
+func decodeLogsPageToken(token string) (logsPageToken, error) {
+	raw, err := base64.StdEncoding.DecodeString(token)
+	if err != nil {
+		return logsPageToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
 	}
-	return int64(binary.BigEndian.Uint64(b)), nil
+	var t logsPageToken
+	if err := json.Unmarshal(raw, &t); err != nil {
+		return logsPageToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+	}
+	return t, nil
 }
 
-// findPageStartBefore scans backward through f from endOffset to find the byte
-// offset where reading forward would yield exactly n lines ending at endOffset.
-// Returns 0 if there are fewer than n lines before endOffset (meaning start
-// from the beginning of the file).
-func findPageStartBefore(f *os.File, endOffset int64, n int) (int64, error) {
-	if n <= 0 || endOffset <= 0 {
-		return 0, nil
+// chunkReader reads lines sequentially across a pod's log chunks, advancing
+// to the next chunk transparently at each segment's EOF.
+type chunkReader struct {
+	chunks []logChunk
+	idx    int
+	offset int64
+	f      *os.File
+	cr     *countingReader
+	br     *bufio.Reader
+}
+
+func openChunkReader(chunks []logChunk, idx int, offset int64) (*chunkReader, error) {
+	r := &chunkReader{chunks: chunks}
+	if err := r.openAt(idx, offset); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *chunkReader) openAt(idx int, offset int64) error {
+	f, err := os.Open(r.chunks[idx].path)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		f.Close()
+		return err
+	}
+	r.idx = idx
+	r.offset = offset
+	r.f = f
+	r.cr = &countingReader{r: f}
+	r.br = bufio.NewReader(r.cr)
+	return nil
+}
+
+func (r *chunkReader) close() {
+	if r.f != nil {
+		r.f.Close()
+	}
+}
+
+// position returns the (chunk index, byte offset) immediately after the last
+// line returned by readLine.
+func (r *chunkReader) position() (int, int64) {
+	return r.idx, r.offset + r.cr.total - int64(r.br.Buffered())
+}
+
+// readLine returns the next line across chunk boundaries. ok is false once
+// every chunk has been exhausted.
+func (r *chunkReader) readLine() (line string, ok bool, err error) {
+	for {
+		raw, readErr := r.br.ReadString('\n')
+		if len(raw) > 0 {
+			return strings.TrimRight(raw, "\r\n"), true, nil
+		}
+		if readErr == nil {
+			continue
+		}
+		if readErr != io.EOF {
+			return "", false, readErr
+		}
+		r.f.Close()
+		next := r.idx + 1
+		if next >= len(r.chunks) {
+			return "", false, nil
+		}
+		if err := r.openAt(next, 0); err != nil {
+			return "", false, err
+		}
+	}
+}
+
+// hasMoreAfterCurrent reports whether there is at least one more byte to read,
+// either later in the current chunk or in a subsequent one.
+func (r *chunkReader) hasMoreAfterCurrent() bool {
+	if _, err := r.br.Peek(1); err == nil {
+		return true
+	}
+	return r.idx+1 < len(r.chunks)
+}
+
+// scanBackwardInFile scans backward from endOffset in f, looking for the byte
+// offset that is exactly need lines before it. It returns how many lines were
+// actually found (equal to need on success); if the file has fewer than need
+// lines before endOffset, found < need and offset is 0.
+func scanBackwardInFile(f *os.File, endOffset int64, need int) (offset int64, found int, err error) {
+	if need <= 0 || endOffset <= 0 {
+		return 0, 0, nil
 	}
 
 	const bufSize = 32 * 1024
@@ -308,24 +498,59 @@ func findPageStartBefore(f *os.File, endOffset int64, n int) (int64, error) {
 		bufLen := int(pos - readStart)
 		buf := make([]byte, bufLen)
 		if _, err := f.ReadAt(buf, readStart); err != nil {
-			return 0, status.Errorf(codes.Internal, "scan log file: %v", err)
+			return 0, 0, err
 		}
 		for i := bufLen - 1; i >= 0; i-- {
 			if buf[i] == '\n' {
 				count++
-				if count == n {
-					return readStart + int64(i) + 1, nil
+				if count == need {
+					return readStart + int64(i) + 1, need, nil
 				}
 			}
 		}
 		pos = readStart
 	}
-	return 0, nil // fewer than n lines total
+	if count < 0 {
+		count = 0
+	}
+	return 0, count, nil
+}
+
+// findChunkPageStartBefore finds the (chunk index, offset) that is exactly n
+// lines before (chunkIdx, offset), scanning backward across chunk boundaries.
+// It returns (0, 0) — the start of the first chunk — if chunks has fewer than
+// n lines before that position.
+func findChunkPageStartBefore(chunks []logChunk, chunkIdx int, offset int64, n int) (int, int64, error) {
+	remaining := n
+	for i := chunkIdx; i >= 0; i-- {
+		end := offset
+		if i != chunkIdx {
+			info, err := os.Stat(chunks[i].path)
+			if err != nil {
+				continue // segment vanished (retention race) — skip it
+			}
+			end = info.Size()
+		}
+		f, err := os.Open(chunks[i].path)
+		if err != nil {
+			continue
+		}
+		start, found, serr := scanBackwardInFile(f, end, remaining)
+		f.Close()
+		if serr != nil {
+			return 0, 0, serr
+		}
+		remaining -= found
+		if remaining <= 0 {
+			return i, start, nil
+		}
+	}
+	return 0, 0, nil
 }
 
 // GetLogs returns a paginated, optionally time-filtered page of log lines for
-// a specific pod. Pagination is cursor-based: the cursor is a base64-encoded
-// 8-byte big-endian byte offset into the log file.
+// a specific pod, across all of its stored log segments. Pagination is
+// cursor-based: the cursor identifies a segment and a byte offset within it.
 func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.GetLogsResponse, error) {
 	if req.Namespace == "" || req.Pod == "" {
 		return nil, status.Error(codes.InvalidArgument, "namespace and pod are required")
@@ -339,46 +564,44 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 		pageSize = maxPageSize
 	}
 
-	logPath := filepath.Join(s.logsRoot, req.Namespace, req.Pod+".log")
-	f, err := os.Open(logPath)
+	chunks, err := podChunks(s.logsRoot, req.Namespace, req.Pod)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, "no logs found for pod %s/%s", req.Namespace, req.Pod)
-		}
-		return nil, status.Errorf(codes.Internal, "open log file: %v", err)
+		return nil, status.Errorf(codes.Internal, "list log segments: %v", err)
 	}
-	defer f.Close()
-
-	fileSize, err := f.Seek(0, io.SeekEnd)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "stat log file: %v", err)
+	if len(chunks) == 0 {
+		return nil, status.Errorf(codes.NotFound, "no logs found for pod %s/%s", req.Namespace, req.Pod)
 	}
 
-	// Decode the byte-offset cursor from the page token, or compute the start
-	// offset for load_last_page.
+	var startChunk int
 	var startOffset int64
 	switch {
 	case req.LoadLastPage:
-		startOffset, err = findPageStartBefore(f, fileSize, pageSize)
+		lastIdx := len(chunks) - 1
+		info, statErr := os.Stat(chunks[lastIdx].path)
+		if statErr != nil {
+			return nil, status.Errorf(codes.Internal, "stat log segment: %v", statErr)
+		}
+		startChunk, startOffset, err = findChunkPageStartBefore(chunks, lastIdx, info.Size(), pageSize)
 		if err != nil {
-			return nil, err
+			return nil, status.Errorf(codes.Internal, "scan log segments: %v", err)
 		}
 	case req.PageToken != "":
-		startOffset, err = decodeOffsetToken(req.PageToken)
-		if err != nil {
-			return nil, err
+		tok, terr := decodeLogsPageToken(req.PageToken)
+		if terr != nil {
+			return nil, terr
 		}
+		idx := findChunkIndex(chunks, tok.Container, tok.Segment)
+		if idx < 0 {
+			return nil, status.Error(codes.InvalidArgument, "invalid page_token")
+		}
+		startChunk, startOffset = idx, tok.Offset
 	}
 
-	if _, err := f.Seek(startOffset, io.SeekStart); err != nil {
-		return nil, status.Errorf(codes.Internal, "seek log file: %v", err)
+	reader, err := openChunkReader(chunks, startChunk, startOffset)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "open log segment: %v", err)
 	}
-
-	// Wrap the file in a counting reader. After each ReadString call, we can
-	// calculate the exact file position after the consumed line as:
-	//   startOffset + cr.total - int64(br.Buffered())
-	cr := &countingReader{r: f}
-	br := bufio.NewReader(cr)
+	defer reader.close()
 
 	var startTime, endTime time.Time
 	if req.StartTime != 0 {
@@ -389,39 +612,43 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 	}
 
 	var lines []string
-	var lastConsumedOffset int64 = startOffset
-
+	lastChunk, lastOffset := startChunk, startOffset
 	for len(lines) < pageSize {
-		line, readErr := br.ReadString('\n')
-		if len(line) > 0 {
-			// Compute the file offset immediately after this line.
-			lastConsumedOffset = startOffset + cr.total - int64(br.Buffered())
-			trimmed := strings.TrimRight(line, "\r\n")
-			if matchesTimeRange(trimmed, startTime, endTime) {
-				lines = append(lines, trimmed)
-			}
-		}
+		line, ok, readErr := reader.readLine()
 		if readErr != nil {
-			break // io.EOF or unexpected error — stop reading
+			return nil, status.Errorf(codes.Internal, "read log segment: %v", readErr)
+		}
+		if !ok {
+			break
+		}
+		lastChunk, lastOffset = reader.position()
+		if matchesTimeRange(line, startTime, endTime) {
+			lines = append(lines, line)
 		}
 	}
 
 	resp := &pb.GetLogsResponse{Lines: lines}
 
 	// Only set a next-page token if the page is full AND there is more data.
-	if len(lines) == pageSize {
-		if _, peekErr := br.Peek(1); peekErr == nil {
-			resp.NextPageToken = encodeOffsetToken(lastConsumedOffset)
-		}
+	if len(lines) == pageSize && reader.hasMoreAfterCurrent() {
+		resp.NextPageToken = encodeLogsPageToken(logsPageToken{
+			Container: chunks[lastChunk].container,
+			Segment:   chunks[lastChunk].segment,
+			Offset:    lastOffset,
+		})
 	}
 
 	// Set a prev-page token when there are lines before the current page start.
-	if startOffset > 0 {
-		prevStart, scanErr := findPageStartBefore(f, startOffset, pageSize)
-		if scanErr != nil {
-			return nil, scanErr
+	if startChunk > 0 || startOffset > 0 {
+		prevChunk, prevOffset, perr := findChunkPageStartBefore(chunks, startChunk, startOffset, pageSize)
+		if perr != nil {
+			return nil, status.Errorf(codes.Internal, "scan log segments: %v", perr)
 		}
-		resp.PrevPageToken = encodeOffsetToken(prevStart)
+		resp.PrevPageToken = encodeLogsPageToken(logsPageToken{
+			Container: chunks[prevChunk].container,
+			Segment:   chunks[prevChunk].segment,
+			Offset:    prevOffset,
+		})
 	}
 
 	return resp, nil
@@ -463,54 +690,91 @@ func (cr *countingReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// StreamLogs tails a pod's log file and streams new lines as they arrive.
-// It seeks to EOF on open so that only lines written after the call begins are
-// delivered. The stream runs until the client cancels the context.
+// tailLatestSegment tails a pod's most recent log segment, delivering each
+// new line to onLine, until ctx is cancelled or onLine returns an error. It
+// switches to a newer segment automatically when one appears (a UTC day
+// rollover while the tail is open).
+//
+// A pod is assumed to have exactly one actively-collected container (multi-
+// container collection is a later phase); the container followed is whichever
+// sorts last among those with any stored logs.
+func tailLatestSegment(ctx context.Context, logsRoot, namespace, pod string, onLine func(string) error) error {
+	chunks, err := podChunks(logsRoot, namespace, pod)
+	if err != nil {
+		return err
+	}
+	if len(chunks) == 0 {
+		return os.ErrNotExist
+	}
+
+	container := chunks[len(chunks)-1].container
+	currentPath := chunks[len(chunks)-1].path
+
+	var f *os.File
+	defer func() {
+		if f != nil {
+			f.Close()
+		}
+	}()
+
+	f, err = os.Open(currentPath)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Seek(0, io.SeekEnd); err != nil {
+		return err
+	}
+
+	br := bufio.NewReader(f)
+	for {
+		line, readErr := br.ReadString('\n')
+		if len(line) > 0 {
+			if err := onLine(strings.TrimRight(line, "\r\n")); err != nil {
+				return err
+			}
+		}
+		if readErr == nil {
+			continue
+		}
+		if readErr != io.EOF {
+			return readErr
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(250 * time.Millisecond):
+		}
+
+		if next, nerr := latestSegmentPath(logsRoot, namespace, pod, container); nerr == nil && next != "" && next != currentPath {
+			f.Close()
+			f, err = os.Open(next)
+			if err != nil {
+				return err
+			}
+			currentPath = next
+		}
+		br.Reset(f)
+	}
+}
+
+// StreamLogs tails a pod's most recent log segment and streams new lines as
+// they arrive, switching segments across a UTC day rollover. It starts from
+// the current end of the segment so only lines written after the call begins
+// are delivered. The stream runs until the client cancels the context.
 func (s *LogService) StreamLogs(req *pb.StreamLogsRequest, stream pb.LogService_StreamLogsServer) error {
 	if req.Namespace == "" || req.Pod == "" {
 		return status.Error(codes.InvalidArgument, "namespace and pod are required")
 	}
 
-	logPath := filepath.Join(s.logsRoot, req.Namespace, req.Pod+".log")
-	f, err := os.Open(logPath)
+	err := tailLatestSegment(stream.Context(), s.logsRoot, req.Namespace, req.Pod, func(line string) error {
+		return stream.Send(&pb.StreamLogsResponse{Line: line})
+	})
 	if err != nil {
 		if os.IsNotExist(err) {
 			return status.Errorf(codes.NotFound, "no logs found for pod %s/%s", req.Namespace, req.Pod)
 		}
-		return status.Errorf(codes.Internal, "open log file: %v", err)
+		return status.Errorf(codes.Internal, "read log segment: %v", err)
 	}
-	defer f.Close()
-
-	// Start from the current end of file so we only send new content.
-	if _, err := f.Seek(0, io.SeekEnd); err != nil {
-		return status.Errorf(codes.Internal, "seek log file: %v", err)
-	}
-
-	br := bufio.NewReader(f)
-	ctx := stream.Context()
-
-	for {
-		line, readErr := br.ReadString('\n')
-		if len(line) > 0 {
-			trimmed := strings.TrimRight(line, "\r\n")
-			if sendErr := stream.Send(&pb.StreamLogsResponse{Line: trimmed}); sendErr != nil {
-				return sendErr
-			}
-		}
-		if readErr == nil {
-			// There may be more data immediately; loop without sleeping.
-			continue
-		}
-		if readErr != io.EOF {
-			return status.Errorf(codes.Internal, "read log file: %v", readErr)
-		}
-		// Reached EOF — wait briefly for new data or client cancellation.
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-time.After(250 * time.Millisecond):
-			// Reset the reader so the next ReadString picks up new bytes.
-			br.Reset(f)
-		}
-	}
+	return nil
 }

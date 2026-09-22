@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -18,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
+	"github.com/lsparey/simple-logging/internal/storage"
 )
 
 // deploymentPodsForNamespace returns all pod names on disk that belong to the
@@ -25,22 +24,13 @@ import (
 // observed, and falls back to a heuristic for historical pods the current
 // process has not seen (e.g. from a previous run).
 func (s *LogService) deploymentPodsForNamespace(namespace, deployment string) ([]string, error) {
-	nsDir := filepath.Join(s.logsRoot, namespace)
-	entries, err := os.ReadDir(nsDir)
+	podNames, err := storage.ListPodDirs(s.logsRoot, namespace)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
 	}
 
 	seen := make(map[string]struct{})
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".log" {
-			continue
-		}
-		podName := strings.TrimSuffix(e.Name(), ".log")
-
+	for _, podName := range podNames {
 		// Try the mapper first (exact, from live pod observation).
 		if dep, ok := s.deployments.GetDeploymentName(namespace, podName); ok {
 			if dep == deployment {
@@ -106,24 +96,15 @@ func (s *LogService) ListDeployments(_ context.Context, req *pb.ListDeploymentsR
 		return nil, status.Error(codes.InvalidArgument, "namespace is required")
 	}
 
-	nsDir := filepath.Join(s.logsRoot, req.Namespace)
-	entries, err := os.ReadDir(nsDir)
+	podNames, err := storage.ListPodDirs(s.logsRoot, req.Namespace)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return &pb.ListDeploymentsResponse{}, nil
-		}
 		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
 	}
 
-	// Collect deployment names by inspecting each pod log file.
+	// Collect deployment names by inspecting each pod.
 	deploymentActive := make(map[string]bool)
 	deploymentJson := make(map[string]bool)
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".log" {
-			continue
-		}
-		podName := strings.TrimSuffix(e.Name(), ".log")
-
+	for _, podName := range podNames {
 		var depName string
 		if d, ok := s.deployments.GetDeploymentName(req.Namespace, podName); ok {
 			depName = d
@@ -328,46 +309,51 @@ func (s *LogService) GetDeploymentLogs(ctx context.Context, req *pb.GetDeploymen
 	var matchingCount int
 
 	for _, pod := range pods {
-		logPath := filepath.Join(s.logsRoot, req.Namespace, pod+".log")
-		f, err := os.Open(logPath)
+		chunks, err := podChunks(s.logsRoot, req.Namespace, pod)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			return nil, status.Errorf(codes.Internal, "open log file: %v", err)
+			return nil, status.Errorf(codes.Internal, "list log segments: %v", err)
 		}
+		for _, chunk := range chunks {
+			f, err := os.Open(chunk.path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return nil, status.Errorf(codes.Internal, "open log segment: %v", err)
+			}
 
-		scanner := bufio.NewScanner(f)
-		for scanner.Scan() {
-			if err := ctx.Err(); err != nil {
-				f.Close()
-				return nil, status.FromContextError(err).Err()
-			}
-			line := scanner.Text()
-			ts := parseLineTimestamp(line)
+			scanner := bufio.NewScanner(f)
+			for scanner.Scan() {
+				if err := ctx.Err(); err != nil {
+					f.Close()
+					return nil, status.FromContextError(err).Err()
+				}
+				line := scanner.Text()
+				ts := parseLineTimestamp(line)
 
-			if !startTime.IsZero() && ts.Before(startTime) {
-				continue
+				if !startTime.IsZero() && ts.Before(startTime) {
+					continue
+				}
+				if !endTime.IsZero() && ts.After(endTime) {
+					continue
+				}
+				// Forward cursor: skip lines at or before afterTime.
+				if afterNanos > 0 && !ts.After(afterTime) {
+					continue
+				}
+				// Backward cursor: skip lines at or after beforeTime.
+				if beforeNanos > 0 && !ts.Before(beforeTime) {
+					continue
+				}
+				heap.Push(h, logEntry{ts: ts, idx: insertIdx, line: line})
+				insertIdx++
+				matchingCount++
+				if h.Len() > pageSize {
+					heap.Pop(h)
+				}
 			}
-			if !endTime.IsZero() && ts.After(endTime) {
-				continue
-			}
-			// Forward cursor: skip lines at or before afterTime.
-			if afterNanos > 0 && !ts.After(afterTime) {
-				continue
-			}
-			// Backward cursor: skip lines at or after beforeTime.
-			if beforeNanos > 0 && !ts.Before(beforeTime) {
-				continue
-			}
-			heap.Push(h, logEntry{ts: ts, idx: insertIdx, line: line})
-			insertIdx++
-			matchingCount++
-			if h.Len() > pageSize {
-				heap.Pop(h)
-			}
+			f.Close()
 		}
-		f.Close()
 	}
 
 	page := h.entries
@@ -457,7 +443,7 @@ func (s *LogService) StreamDeploymentLogs(req *pb.StreamDeploymentLogsRequest, s
 		wg.Add(1)
 		go func(podName string) {
 			defer wg.Done()
-			tailPodToChannel(ctx, filepath.Join(s.logsRoot, req.Namespace, podName+".log"), lineCh)
+			tailPodToChannel(ctx, s.logsRoot, req.Namespace, podName, lineCh)
 		}(pod)
 	}
 
@@ -482,41 +468,15 @@ func (s *LogService) StreamDeploymentLogs(req *pb.StreamDeploymentLogsRequest, s
 	}
 }
 
-// tailPodToChannel seeks to EOF on the log file and sends new lines to ch
-// until ctx is cancelled.
-func tailPodToChannel(ctx context.Context, logPath string, ch chan<- string) {
-	f, err := os.Open(logPath)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-
-	if _, err := f.Seek(0, io.SeekEnd); err != nil {
-		return
-	}
-
-	br := bufio.NewReader(f)
-	for {
-		line, readErr := br.ReadString('\n')
-		if len(line) > 0 {
-			trimmed := strings.TrimRight(line, "\r\n")
-			select {
-			case ch <- trimmed:
-			case <-ctx.Done():
-				return
-			}
-		}
-		if readErr == nil {
-			continue
-		}
-		if readErr != io.EOF {
-			return
-		}
+// tailPodToChannel tails a pod's most recent log segment and sends new lines
+// to ch until ctx is cancelled, switching segments across a UTC day rollover.
+func tailPodToChannel(ctx context.Context, logsRoot, namespace, pod string, ch chan<- string) {
+	_ = tailLatestSegment(ctx, logsRoot, namespace, pod, func(line string) error {
 		select {
+		case ch <- line:
+			return nil
 		case <-ctx.Done():
-			return
-		case <-time.After(250 * time.Millisecond):
-			br.Reset(f)
+			return ctx.Err()
 		}
-	}
+	})
 }
