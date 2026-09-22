@@ -39,8 +39,8 @@ func TestSegmentWriter_Write(t *testing.T) {
 	defer w.Close()
 
 	ts := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
-	if err := w.Write(ts, "hello world"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if ok := w.Write(ts, "hello world"); !ok {
+		t.Fatalf("Write: write failed")
 	}
 
 	content, err := os.ReadFile(filepath.Join(dir, "ns", "pod", "app", "2026-05-20.log"))
@@ -63,11 +63,11 @@ func TestSegmentWriter_RollsOverAtUTCDayBoundary(t *testing.T) {
 	day1 := time.Date(2026, 5, 20, 23, 59, 59, 0, time.UTC)
 	day2 := time.Date(2026, 5, 21, 0, 0, 1, 0, time.UTC)
 
-	if err := w.Write(day1, "last line of day 1"); err != nil {
-		t.Fatalf("Write day1: %v", err)
+	if ok := w.Write(day1, "last line of day 1"); !ok {
+		t.Fatalf("Write day1: write failed")
 	}
-	if err := w.Write(day2, "first line of day 2"); err != nil {
-		t.Fatalf("Write day2: %v", err)
+	if ok := w.Write(day2, "first line of day 2"); !ok {
+		t.Fatalf("Write day2: write failed")
 	}
 
 	content1, err := os.ReadFile(filepath.Join(dir, "ns", "pod", "app", "2026-05-20.log"))
@@ -106,16 +106,16 @@ func TestSegmentWriter_OutOfOrderTimestampReturnsToEarlierSegment(t *testing.T) 
 	day1 := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
 	day2 := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
 
-	if err := w.Write(day1, "day1 first"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if ok := w.Write(day1, "day1 first"); !ok {
+		t.Fatalf("Write: write failed")
 	}
-	if err := w.Write(day2, "day2 only"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if ok := w.Write(day2, "day2 only"); !ok {
+		t.Fatalf("Write: write failed")
 	}
 	// A late-arriving line for day1 (e.g. reconnect replay) should append to
 	// day1's segment rather than staying stuck on day2's.
-	if err := w.Write(day1, "day1 second"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if ok := w.Write(day1, "day1 second"); !ok {
+		t.Fatalf("Write: write failed")
 	}
 
 	content, err := os.ReadFile(filepath.Join(dir, "ns", "pod", "app", "2026-05-20.log"))
@@ -136,13 +136,13 @@ func TestSegmentWriter_WriteWithLocation(t *testing.T) {
 	defer w.Close()
 
 	ts := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
-	seg1, off1, len1, err := w.WriteWithLocation(ts, "first")
-	if err != nil {
-		t.Fatalf("WriteWithLocation(first): %v", err)
+	seg1, off1, len1, ok := w.WriteWithLocation(ts, "first")
+	if !ok {
+		t.Fatalf("WriteWithLocation(first): write failed")
 	}
-	seg2, off2, len2, err := w.WriteWithLocation(ts, "second")
-	if err != nil {
-		t.Fatalf("WriteWithLocation(second): %v", err)
+	seg2, off2, len2, ok := w.WriteWithLocation(ts, "second")
+	if !ok {
+		t.Fatalf("WriteWithLocation(second): write failed")
 	}
 	if seg1 != "2026-05-20" || seg2 != "2026-05-20" {
 		t.Fatalf("segments = (%q, %q), want both 2026-05-20", seg1, seg2)
@@ -163,8 +163,8 @@ func TestSegmentWriter_HasContent(t *testing.T) {
 	if w.HasContent() {
 		t.Error("expected HasContent false for a brand new container")
 	}
-	if err := w.Write(time.Now().UTC(), "data"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if ok := w.Write(time.Now().UTC(), "data"); !ok {
+		t.Fatalf("Write: write failed")
 	}
 	if !w.HasContent() {
 		t.Error("expected HasContent true after writing data")
@@ -177,8 +177,8 @@ func TestSegmentWriter_HasContent_TrueOnReopenWithExistingSegments(t *testing.T)
 	if err != nil {
 		t.Fatalf("NewSegmentWriter: %v", err)
 	}
-	if err := w1.Write(time.Now().UTC(), "data"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if ok := w1.Write(time.Now().UTC(), "data"); !ok {
+		t.Fatalf("Write: write failed")
 	}
 	if err := w1.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
@@ -209,8 +209,8 @@ func TestSegmentWriter_ConcurrentWrites(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
-			if err := w.Write(ts, "concurrent"); err != nil {
-				t.Errorf("Write: %v", err)
+			if ok := w.Write(ts, "concurrent"); !ok {
+				t.Errorf("Write: write failed")
 			}
 		}()
 	}
@@ -241,8 +241,8 @@ func TestSegmentWriter_SequentialWritesPreserveOrder(t *testing.T) {
 	const n = 10
 	for i := 0; i < n; i++ {
 		line := fmt.Sprintf("%s startup message %d", ts.Format(time.RFC3339), i)
-		if err := w.Write(ts, line); err != nil {
-			t.Fatalf("Write(%d): %v", i, err)
+		if ok := w.Write(ts, line); !ok {
+			t.Fatalf("Write(%d): write failed", i)
 		}
 	}
 
@@ -259,5 +259,64 @@ func TestSegmentWriter_SequentialWritesPreserveOrder(t *testing.T) {
 		if line != want {
 			t.Errorf("line[%d]: got %q, want %q", i, line, want)
 		}
+	}
+}
+
+// TestSegmentWriter_BacksOffAfterWriteFailure verifies that a failed write is
+// dropped rather than retried on every subsequent call, and that the writer
+// recovers automatically once the backoff window elapses.
+func TestSegmentWriter_BacksOffAfterWriteFailure(t *testing.T) {
+	origMin, origMax := minWriteBackoff, maxWriteBackoff
+	minWriteBackoff = 20 * time.Millisecond
+	maxWriteBackoff = 20 * time.Millisecond
+	t.Cleanup(func() { minWriteBackoff, maxWriteBackoff = origMin, origMax })
+
+	dir := t.TempDir()
+	w, err := NewSegmentWriter(dir, "ns", "pod", "app")
+	if err != nil {
+		t.Fatalf("NewSegmentWriter: %v", err)
+	}
+	defer w.Close()
+
+	day1 := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
+	if ok := w.Write(day1, "day1 line"); !ok {
+		t.Fatal("expected first write to succeed")
+	}
+
+	// Block day2's segment path with a directory in its place, so opening it
+	// as a file fails regardless of the test process's privileges (unlike a
+	// permission-based block, which root would bypass).
+	containerDir := ContainerDir(dir, "ns", "pod", "app")
+	blockedPath := filepath.Join(containerDir, "2026-05-21.log")
+	if err := os.Mkdir(blockedPath, 0755); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+
+	day2 := time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC)
+	if ok := w.Write(day2, "should fail"); ok {
+		t.Fatal("expected write to fail while the segment path is blocked")
+	}
+
+	// Unblock immediately — the very next write should still fail because it
+	// fast-fails during the backoff window rather than retrying every call.
+	if err := os.Remove(blockedPath); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if ok := w.Write(day2, "still backing off"); ok {
+		t.Fatal("expected write to still fail immediately during the backoff window")
+	}
+
+	time.Sleep(40 * time.Millisecond) // let the (shrunk) backoff elapse
+
+	if ok := w.Write(day2, "recovered"); !ok {
+		t.Fatal("expected write to succeed once the backoff elapsed and the path was clear")
+	}
+
+	content, err := os.ReadFile(blockedPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(content) != "recovered\n" {
+		t.Errorf("segment content = %q, want only the recovered line (dropped writes must not be retried)", content)
 	}
 }

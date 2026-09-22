@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -105,6 +106,10 @@ type Collector struct {
 	jsonLogging map[podKey]bool
 
 	indexes *indexes.Manager
+
+	// droppedLines counts log lines dropped because a write to storage
+	// failed. See writeLogLine.
+	droppedLines atomic.Int64
 }
 
 // Option configures optional Collector behaviour.
@@ -386,8 +391,8 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 	if isRestart && writer.HasContent() {
 		now := time.Now().UTC()
 		sep := fmt.Sprintf("--- pod restarted at %s ---", now.Format(time.RFC3339))
-		if werr := writer.Write(now, sep); werr != nil {
-			log.Warn("failed to write restart separator", zap.Error(werr))
+		if ok := writer.Write(now, sep); !ok {
+			log.Warn("failed to write restart separator, dropped")
 		}
 	}
 
@@ -526,8 +531,8 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 					restartCount++
 					now := time.Now().UTC()
 					sep := fmt.Sprintf("--- container restarted at %s ---", now.Format(time.RFC3339))
-					if werr := writer.Write(now, sep); werr != nil {
-						log.Warn("failed to write restart separator", zap.Error(werr))
+					if ok := writer.Write(now, sep); !ok {
+						log.Warn("failed to write restart separator, dropped")
 					}
 					partial.Reset()
 					restarted = true
@@ -577,11 +582,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 				pod.Namespace, pod.Name, containerName,
 				logContent,
 			)
-			if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line); werr != nil {
-				log.Error("failed to write log line", zap.Error(werr))
-				_ = f.Close()
-				return
-			}
+			c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line)
 		}
 
 		if !restarted {
@@ -804,9 +805,7 @@ func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containe
 			pod.Namespace, pod.Name, containerName,
 			content,
 		)
-		if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line); werr != nil {
-			return lastLine, fmt.Errorf("write log line: %w", werr)
-		}
+		c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line)
 		lastLine = lineTS
 	}
 
@@ -853,13 +852,24 @@ func isJSONLine(line string) bool {
 	return json.Valid([]byte(trimmed))
 }
 
-func (c *Collector) writeLogLine(writer *storage.SegmentWriter, namespace, pod, container string, lineTS time.Time, line string) error {
-	segment, offset, length, err := writer.WriteWithLocation(lineTS, line)
-	if err != nil {
-		return err
+// writeLogLine writes line to storage. Write failures are transient (see
+// storage.SegmentWriter): the line is dropped and counted rather than ending
+// the caller's stream, so a temporarily full or read-only volume doesn't stop
+// collection of pods whose writers aren't affected, or block reading from the
+// source once the volume recovers.
+func (c *Collector) writeLogLine(writer *storage.SegmentWriter, namespace, pod, container string, lineTS time.Time, line string) {
+	segment, offset, length, ok := writer.WriteWithLocation(lineTS, line)
+	if !ok {
+		c.droppedLines.Add(1)
+		return
 	}
 	if c.indexes != nil {
 		c.indexes.ObserveLineAt(namespace, pod, container, segment, offset, length, line)
 	}
-	return nil
+}
+
+// DroppedLines returns the number of log lines dropped so far because a
+// write to storage failed (e.g. a full or temporarily read-only volume).
+func (c *Collector) DroppedLines() int64 {
+	return c.droppedLines.Load()
 }

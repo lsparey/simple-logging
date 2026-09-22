@@ -507,3 +507,73 @@ func TestAPIStream_StopsWhenPodReplaced(t *testing.T) {
 		t.Errorf("expected the stale stream to stop after the pod was replaced, got %d lines", n)
 	}
 }
+
+// TestCollector_WriteFailureDropsLinesButKeepsStreaming verifies that a
+// failed write (e.g. a temporarily full or read-only volume) is dropped and
+// counted rather than ending the stream goroutine, and that the writer
+// recovers automatically once the underlying problem clears.
+func TestCollector_WriteFailureDropsLinesButKeepsStreaming(t *testing.T) {
+	logsRoot := t.TempDir()
+	nodeLogs := t.TempDir()
+
+	pod := makePod("default", "blocked-pod")
+	pod.Spec.NodeName = "node-a"
+	containerDir := filepath.Join(nodeLogs, "default_blocked-pod_uid-1", "app")
+	if err := os.MkdirAll(containerDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Block today's segment path with a directory in its place, so the
+	// collector's first write fails regardless of the test process's
+	// privileges (unlike a permission-based block, which root would bypass).
+	today := time.Now().UTC().Format("2006-01-02")
+	segmentDir := filepath.Join(logsRoot, "default", "blocked-pod", "app")
+	if err := os.MkdirAll(segmentDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	blockedPath := filepath.Join(segmentDir, today+".log")
+	if err := os.Mkdir(blockedPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	criLine := fmt.Sprintf("%sZ stdout F should be dropped\n", time.Now().UTC().Format("2006-01-02T15:04:05.000000000"))
+	if err := os.WriteFile(filepath.Join(containerDir, "0.log"), []byte(criLine), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop(), WithNodeName("node-a"))
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	if !waitFor(t, 5*time.Second, func() bool {
+		return coll.DroppedLines() >= 1
+	}) {
+		t.Fatal("expected the failed write to be counted as dropped")
+	}
+	if !coll.IsActive("default", "blocked-pod") {
+		t.Error("expected the stream to remain active after a write failure")
+	}
+
+	// Clear the block and give the writer's backoff (>= 1s) time to elapse,
+	// then verify a subsequent line gets through.
+	if err := os.Remove(blockedPath); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1200 * time.Millisecond)
+
+	criLine2 := fmt.Sprintf("%sZ stdout F should succeed\n", time.Now().UTC().Format("2006-01-02T15:04:05.000000000"))
+	f, err := os.OpenFile(filepath.Join(containerDir, "0.log"), os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(criLine2); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if !waitFor(t, 5*time.Second, func() bool {
+		return countLines(t, logsRoot, "default", "blocked-pod", "should succeed") >= 1
+	}) {
+		t.Fatal("expected the line to be written once the writer recovered")
+	}
+}

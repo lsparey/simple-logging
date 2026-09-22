@@ -34,6 +34,12 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.LogLevel != "info" {
 		t.Errorf("LogLevel: got %q, want info", cfg.LogLevel)
 	}
+	if cfg.DiskHighWaterPercent != 90 {
+		t.Errorf("DiskHighWaterPercent: got %d, want 90", cfg.DiskHighWaterPercent)
+	}
+	if cfg.DiskLowWaterPercent != 80 {
+		t.Errorf("DiskLowWaterPercent: got %d, want 80", cfg.DiskLowWaterPercent)
+	}
 }
 
 func TestLoad_EnvOverrides(t *testing.T) {
@@ -173,6 +179,55 @@ func TestLoad_MigrateLegacyDisabled(t *testing.T) {
 				t.Errorf("expected MigrateLegacy=false for MIGRATE_LEGACY=%q", v)
 			}
 		})
+	}
+}
+
+func TestLoad_DiskWaterMarkOverrides(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("DISK_HIGH_WATER_PERCENT", "95")
+	t.Setenv("DISK_LOW_WATER_PERCENT", "70")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DiskHighWaterPercent != 95 {
+		t.Errorf("DiskHighWaterPercent: got %d, want 95", cfg.DiskHighWaterPercent)
+	}
+	if cfg.DiskLowWaterPercent != 70 {
+		t.Errorf("DiskLowWaterPercent: got %d, want 70", cfg.DiskLowWaterPercent)
+	}
+}
+
+func TestLoad_InvalidDiskWaterMarkPercent(t *testing.T) {
+	dir := t.TempDir()
+	for _, env := range []string{"DISK_HIGH_WATER_PERCENT", "DISK_LOW_WATER_PERCENT"} {
+		for _, v := range []string{"0", "101", "-1", "abc"} {
+			t.Run(env+"="+v, func(t *testing.T) {
+				t.Setenv("LOGS_ROOT", dir)
+				t.Setenv(env, v)
+				if _, err := Load(); err == nil {
+					t.Errorf("expected error for %s=%q", env, v)
+				}
+			})
+		}
+	}
+}
+
+func TestLoad_DiskLowWaterMarkMustBeBelowHigh(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("DISK_HIGH_WATER_PERCENT", "80")
+	t.Setenv("DISK_LOW_WATER_PERCENT", "80")
+
+	if _, err := Load(); err == nil {
+		t.Error("expected error when DISK_LOW_WATER_PERCENT equals DISK_HIGH_WATER_PERCENT")
+	}
+
+	t.Setenv("DISK_LOW_WATER_PERCENT", "85")
+	if _, err := Load(); err == nil {
+		t.Error("expected error when DISK_LOW_WATER_PERCENT exceeds DISK_HIGH_WATER_PERCENT")
 	}
 }
 

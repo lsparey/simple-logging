@@ -56,7 +56,8 @@ Once the pod is running, open `http://logs.example.com` in your browser to view 
 | `config.logCollectionMode` | `hybrid` | Log collection mode: `hybrid`, `fileTail` or `api` (see below) |
 | `config.nodeLogsRoot` | `/var/log/pods` | Host path for CRI pod logs (hybrid and fileTail modes) |
 | `config.dockerLogsRoot` | `/var/lib/docker/containers` | Host path for Docker log content (hybrid/fileTail + Docker only) |
-| `config.retentionDays` | `30` | Days to keep log files after last write |
+| `config.retentionDays` | `30` | Days of log history to keep (see [Retention](#retention)) |
+| `config.diskHighWaterPercent` / `config.diskLowWaterPercent` | `90` / `80` | PVC-full safety net: at/above the high mark, oldest segments are deleted until usage is back below the low mark |
 | `persistence.size` | `20Gi` | PVC size for log storage |
 | `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
 | `persistence.existingClaim` | `""` | Existing PVC to mount instead of creating one |
@@ -136,6 +137,8 @@ helm install simple-logging simple-logging/simple-logging \
 `config.retentionDays` (default 30) controls how long log lines are kept. Logs are stored as one file per container per UTC day; retention deletes any day's file once it is strictly older than `retentionDays`, independent of whether the pod is still logging. Worst-case overshoot is under 24 hours (a day's file isn't deleted until the day itself has fully expired), which is the normal reading of "retain for `retentionDays`".
 
 Upgrading from a v0.11 install migrates existing `<namespace>/<pod>.log` files into this layout automatically on first startup (see [Upgrading](#upgrading)); set `MIGRATE_LEGACY=false` to opt out and leave legacy files in place, in which case they're swept by their file modification time instead (matching the old, less precise behaviour) rather than participating in the day-based cutoff.
+
+As a safety net for when retention alone doesn't keep up (e.g. a burst of unusually verbose logging), a background check deletes the globally oldest segments — across every namespace and pod — whenever PVC usage reaches `config.diskHighWaterPercent` (default 90), continuing until usage is back below `config.diskLowWaterPercent` (default 80). This should rarely trigger; `retentionDays` is the primary control.
 
 ## Upgrading
 

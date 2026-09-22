@@ -9,11 +9,25 @@ import (
 	"time"
 )
 
+// minWriteBackoff and maxWriteBackoff bound how long a SegmentWriter waits
+// before retrying after a write failure (e.g. a temporarily full or
+// read-only volume). They are vars, not consts, so tests can shrink them.
+var (
+	minWriteBackoff = time.Second
+	maxWriteBackoff = 30 * time.Second
+)
+
 // SegmentWriter appends log lines for one pod's container to daily segment
 // files under <logsRoot>/<namespace>/<pod>/<container>/<date>.log. It rolls
 // over to a new file whenever a written line's own timestamp crosses a UTC
 // day boundary, so retention can delete a whole day's history as a single
 // file removal instead of rewriting a shared file.
+//
+// Write failures are treated as transient: rather than propagating an error
+// that would end the caller's stream goroutine, a failed write is dropped and
+// the writer backs off (doubling from minWriteBackoff up to maxWriteBackoff)
+// before it will attempt another write, so a persistently failing volume is
+// not hammered once per log line.
 type SegmentWriter struct {
 	mu sync.Mutex
 
@@ -24,6 +38,9 @@ type SegmentWriter struct {
 	segmentDate string // "YYYY-MM-DD" of the currently open segment, "" if none open yet
 
 	hadExistingContent bool
+
+	unhealthyUntil time.Time
+	writeBackoff   time.Duration
 }
 
 // NewSegmentWriter opens a writer for namespace/pod/container. It does not
@@ -50,39 +67,72 @@ func NewSegmentWriter(logsRoot, namespace, pod, container string) (*SegmentWrite
 	return w, nil
 }
 
-// Write appends line, stamped with lineTS, to the appropriate segment.
-func (w *SegmentWriter) Write(lineTS time.Time, line string) error {
-	_, _, _, err := w.WriteWithLocation(lineTS, line)
-	return err
+// Write appends line, stamped with lineTS, to the appropriate segment. It
+// reports whether the write succeeded; a false return means the line was
+// dropped (write failure, or still within the post-failure backoff window).
+func (w *SegmentWriter) Write(lineTS time.Time, line string) bool {
+	_, _, _, ok := w.WriteWithLocation(lineTS, line)
+	return ok
 }
 
 // WriteWithLocation appends line to the segment for lineTS's UTC date,
 // rolling over from any previously open segment first. It returns the
 // segment's date ("YYYY-MM-DD") and the line's byte offset and length within
-// that segment file, which indexes store instead of a second copy of the line.
-func (w *SegmentWriter) WriteWithLocation(lineTS time.Time, line string) (segment string, offset int64, length uint32, err error) {
+// that segment file, which indexes store instead of a second copy of the
+// line, plus whether the write succeeded.
+//
+// A failed write drops the line and starts (or extends) a backoff window:
+// calls made before the window elapses fail fast without touching the
+// filesystem, so a persistently failing volume costs at most one real
+// attempt per backoff period rather than one per line.
+func (w *SegmentWriter) WriteWithLocation(lineTS time.Time, line string) (segment string, offset int64, length uint32, ok bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	now := time.Now()
+	if now.Before(w.unhealthyUntil) {
+		return "", 0, 0, false
+	}
 
 	date := lineTS.UTC().Format(segmentDateForm)
 	if w.f == nil || date != w.segmentDate {
 		if err := w.rollToLocked(date); err != nil {
-			return "", 0, 0, err
+			w.markUnhealthyLocked(now)
+			return "", 0, 0, false
 		}
 	}
 
 	off, err := w.f.Seek(0, io.SeekEnd)
+	var written int
+	if err == nil {
+		written, err = fmt.Fprintln(w.f, line)
+		if err == nil && written == 0 {
+			err = io.ErrShortWrite
+		}
+	}
 	if err != nil {
-		return "", 0, 0, err
+		// Force a reopen on the next attempt — the fd may be in a bad state.
+		_ = w.f.Close()
+		w.f = nil
+		w.markUnhealthyLocked(now)
+		return "", 0, 0, false
 	}
-	written, err := fmt.Fprintln(w.f, line)
-	if err != nil {
-		return "", 0, 0, err
+
+	w.writeBackoff = 0
+	return w.segmentDate, off, uint32(written - 1), true
+}
+
+// markUnhealthyLocked starts or extends the write backoff window. mu must be
+// held by the caller.
+func (w *SegmentWriter) markUnhealthyLocked(now time.Time) {
+	if w.writeBackoff < minWriteBackoff {
+		w.writeBackoff = minWriteBackoff
 	}
-	if written == 0 {
-		return "", 0, 0, io.ErrShortWrite
+	w.unhealthyUntil = now.Add(w.writeBackoff)
+	w.writeBackoff *= 2
+	if w.writeBackoff > maxWriteBackoff {
+		w.writeBackoff = maxWriteBackoff
 	}
-	return w.segmentDate, off, uint32(written - 1), nil
 }
 
 // rollToLocked closes the currently open segment (if any) and opens the
@@ -90,8 +140,14 @@ func (w *SegmentWriter) WriteWithLocation(lineTS time.Time, line string) (segmen
 // be held by the caller.
 func (w *SegmentWriter) rollToLocked(date string) error {
 	if w.f != nil {
-		if err := w.f.Close(); err != nil {
-			return fmt.Errorf("close previous segment: %w", err)
+		// Clear w.f before checking the close error: if opening the new
+		// segment below then fails, w.f must not be left pointing at this
+		// now-closed handle, or the next attempt would double-close it and
+		// fail every time regardless of whether the real problem cleared.
+		closeErr := w.f.Close()
+		w.f = nil
+		if closeErr != nil {
+			return fmt.Errorf("close previous segment: %w", closeErr)
 		}
 	}
 
