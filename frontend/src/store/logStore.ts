@@ -13,7 +13,14 @@ interface LogStore {
   // Pod selection
   selectedNamespace: string | null;
   selectedPod: string | null;
-  setSelectedPod: (namespace: string, pod: string, jsonLogging?: boolean) => void;
+  setSelectedPod: (namespace: string, pod: string, jsonLogging?: boolean, containers?: string[]) => void;
+
+  // Containers collected for the selected pod (empty/single-entry for every
+  // pod today; multi-container collection is a later phase). selectedContainer
+  // is null when showing all containers merged.
+  selectedPodContainers: string[];
+  selectedContainer: string | null;
+  setSelectedContainer: (container: string | null) => void;
 
   // Deployment selection (mutually exclusive with pod selection)
   selectedDeployment: string | null;
@@ -91,13 +98,15 @@ export const useLogStore = create<LogStore>((set) => ({
   selectionKey: 0,
   jsonLogging: false,
 
-  setSelectedPod: (namespace, pod, jsonLogging = false) =>
+  setSelectedPod: (namespace, pod, jsonLogging = false, containers = []) =>
     set((s) => ({
       selectedNamespace: namespace,
       selectedPod: pod,
       selectedDeployment: null,
       selectedIndexKey: null,
       selectedIndexValue: '',
+      selectedPodContainers: containers,
+      selectedContainer: null,
       jsonLogging,
       mode: 'loading',
       lines: [],
@@ -110,11 +119,17 @@ export const useLogStore = create<LogStore>((set) => ({
       selectionKey: s.selectionKey + 1,
     })),
 
+  selectedPodContainers: [],
+  selectedContainer: null,
+  setSelectedContainer: (container) => set({ selectedContainer: container }),
+
   selectedDeployment: null,
   setSelectedDeployment: (namespace, deployment, jsonLogging = false) =>
     set((s) => ({
       selectedNamespace: namespace,
       selectedPod: null,
+      selectedPodContainers: [],
+      selectedContainer: null,
       selectedDeployment: deployment,
       selectedIndexKey: null,
       selectedIndexValue: '',
@@ -137,6 +152,8 @@ export const useLogStore = create<LogStore>((set) => ({
     set((s) => ({
       selectedNamespace: null,
       selectedPod: null,
+      selectedPodContainers: [],
+      selectedContainer: null,
       selectedDeployment: null,
       selectedIndexKey: '',
       selectedIndexValue: '',
@@ -165,6 +182,8 @@ export const useLogStore = create<LogStore>((set) => ({
     set((s) => ({
       selectedNamespace: null,
       selectedPod: null,
+      selectedPodContainers: [],
+      selectedContainer: null,
       selectedDeployment: null,
       selectedIndexKey: key,
       selectedIndexValue: '',
@@ -261,13 +280,29 @@ export function makeIndexFormatKey(indexKey: string): string {
   return `index:${indexKey}`;
 }
 
-/** Derived: lines filtered by current searchText */
+/** Extracts the container name from a line's "[ns/pod/container]" tag, or null. */
+export function lineContainer(line: string): string | null {
+  const start = line.indexOf('[');
+  const end = line.indexOf(']', start);
+  if (start < 0 || end < 0) return null;
+  const parts = line.slice(start + 1, end).split('/');
+  return parts.length === 3 ? parts[2] : null;
+}
+
+/** Derived: lines filtered by current searchText and selectedContainer */
 export function useFilteredLines(): string[] {
   const lines = useLogStore((s) => s.lines);
   const searchText = useLogStore((s) => s.searchText);
+  const selectedContainer = useLogStore((s) => s.selectedContainer);
   return useMemo(() => {
-    if (!searchText) return lines;
-    const lower = searchText.toLowerCase();
-    return lines.filter((l) => l.toLowerCase().includes(lower));
-  }, [lines, searchText]);
+    let result = lines;
+    if (selectedContainer) {
+      result = result.filter((l) => lineContainer(l) === selectedContainer);
+    }
+    if (searchText) {
+      const lower = searchText.toLowerCase();
+      result = result.filter((l) => l.toLowerCase().includes(lower));
+    }
+    return result;
+  }, [lines, searchText, selectedContainer]);
 }
