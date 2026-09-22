@@ -2,6 +2,8 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { PodInfo } from '../../gen/simplelog/v1/log_service_pb.js';
@@ -28,7 +30,7 @@ export default function PodNode({ pod, onSelect }: Props) {
         dense
         selected={selected}
         onClick={() => {
-          setSelectedPod(pod.namespace, pod.name, pod.jsonLogging);
+          setSelectedPod(pod.namespace, pod.name, pod.jsonLogging, pod.containers);
           navigate(`/pod/${encodeURIComponent(pod.namespace)}/${encodeURIComponent(pod.name)}`);
           onSelect?.();
         }}
@@ -48,6 +50,16 @@ export default function PodNode({ pod, onSelect }: Props) {
           primary={pod.name}
           slotProps={{ primary: { variant: 'body2' } }}
         />
+        {pod.containers && pod.containers.length > 1 && (
+          <Tooltip title={pod.containers.join(', ')}>
+            <Chip
+              label={pod.containers.length}
+              size="small"
+              variant="outlined"
+              sx={{ height: 18, fontSize: '0.6875rem', ml: 1, flexShrink: 0 }}
+            />
+          </Tooltip>
+        )}
       </ListItemButton>
     </ListItem>
   );

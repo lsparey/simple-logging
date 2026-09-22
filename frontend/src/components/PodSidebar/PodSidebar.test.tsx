@@ -169,6 +169,26 @@ describe('NamespaceNode', () => {
     });
   });
 
+  it('shows a container-count badge only for pods with more than one container', async () => {
+    mockUsePodList.mockReturnValue({
+      pods: [
+        { name: 'single-container-pod', namespace: 'default', active: true, containers: ['app'] },
+        { name: 'multi-container-pod', namespace: 'default', active: true, containers: ['app', 'sidecar'] },
+      ],
+      loading: false,
+      error: null,
+    });
+    render(<NamespaceNode namespace="default" viewMode="pods" />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText('default'));
+
+    await waitFor(() => {
+      expect(screen.getByText('single-container-pod')).toBeInTheDocument();
+      expect(screen.getByText('multi-container-pod')).toBeInTheDocument();
+    });
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.queryByText('1')).not.toBeInTheDocument();
+  });
+
   it('collapses back after a second click', async () => {
     mockUseDeploymentList.mockReturnValue({
       deployments: [{ name: 'web-app', namespace: 'default', active: true }],
