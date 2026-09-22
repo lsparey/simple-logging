@@ -23,6 +23,12 @@ import (
 // version is set at image build time with -ldflags. Local builds use "dev".
 var version = "dev"
 
+// diskGuardCheckInterval is how often the disk guard checks LOGS_ROOT usage.
+// Unlike retention (which defaults to once a day), a full disk is a fast-
+// moving problem, so this isn't tied to RetentionCheckInterval or exposed as
+// its own setting.
+const diskGuardCheckInterval = time.Minute
+
 func main() {
 	// Bootstrap a temporary logger for startup errors before the real one is ready.
 	tmpLog, _ := zap.NewProduction()
@@ -47,6 +53,8 @@ func main() {
 		zap.String("collection_mode", cfg.CollectionMode()),
 		zap.String("node_logs_root", cfg.NodeLogsRoot),
 		zap.String("node_name", cfg.NodeName),
+		zap.Int("disk_high_water_percent", cfg.DiskHighWaterPercent),
+		zap.Int("disk_low_water_percent", cfg.DiskLowWaterPercent),
 	)
 
 	if cfg.PPROFPort > 0 {
@@ -108,6 +116,12 @@ func main() {
 	retention := storage.NewRetentionManager(cfg.LogsRoot, cfg.RetentionDays, cfg.RetentionCheckInterval, log)
 	retention.SetIndexCompactor(indexManager.Compact)
 	go retention.Run(ctx)
+
+	// Disk guard: a safety net for when retention alone doesn't keep LOGS_ROOT
+	// usage down, checked far more often than retention runs since a full
+	// disk can happen much faster than a day.
+	diskGuard := storage.NewDiskGuard(cfg.LogsRoot, cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent, diskGuardCheckInterval, log)
+	go diskGuard.Run(ctx)
 
 	// ── Phase 8/9: gRPC Service & gRPC-Web Server ───────────────────
 	svc := api.NewLogServiceWithIndexes(cfg.LogsRoot, coll, coll, coll, indexManager)

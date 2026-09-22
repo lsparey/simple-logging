@@ -50,6 +50,16 @@ type Config struct {
 	// node are streamed through the Kubernetes log API, so a single replica
 	// can cover a multi-node cluster.
 	NodeName string
+
+	// DiskHighWaterPercent is the LOGS_ROOT usage percentage at or above which
+	// the disk guard starts deleting the globally oldest log segments. This is
+	// a safety net for when retention alone doesn't keep up; it should rarely
+	// trigger in normal operation.
+	DiskHighWaterPercent int
+
+	// DiskLowWaterPercent is the LOGS_ROOT usage percentage the disk guard
+	// deletes segments down to once triggered by DiskHighWaterPercent.
+	DiskLowWaterPercent int
 }
 
 // Collection modes reported by Config.CollectionMode.
@@ -86,6 +96,8 @@ func Load() (*Config, error) {
 		RetentionCheckInterval: 24 * time.Hour,
 		LogLevel:               getEnv("LOG_LEVEL", "info"),
 		MigrateLegacy:          true,
+		DiskHighWaterPercent:   90,
+		DiskLowWaterPercent:    80,
 	}
 
 	if raw := os.Getenv("GRPC_WEB_PORT"); raw != "" {
@@ -134,6 +146,27 @@ func Load() (*Config, error) {
 
 	if raw := os.Getenv("NODE_NAME"); raw != "" {
 		cfg.NodeName = raw
+	}
+
+	if raw := os.Getenv("DISK_HIGH_WATER_PERCENT"); raw != "" {
+		percent, err := strconv.Atoi(raw)
+		if err != nil || percent < 1 || percent > 100 {
+			return nil, fmt.Errorf("invalid DISK_HIGH_WATER_PERCENT %q: must be an integer between 1 and 100", raw)
+		}
+		cfg.DiskHighWaterPercent = percent
+	}
+
+	if raw := os.Getenv("DISK_LOW_WATER_PERCENT"); raw != "" {
+		percent, err := strconv.Atoi(raw)
+		if err != nil || percent < 1 || percent > 100 {
+			return nil, fmt.Errorf("invalid DISK_LOW_WATER_PERCENT %q: must be an integer between 1 and 100", raw)
+		}
+		cfg.DiskLowWaterPercent = percent
+	}
+
+	if cfg.DiskLowWaterPercent >= cfg.DiskHighWaterPercent {
+		return nil, fmt.Errorf("DISK_LOW_WATER_PERCENT (%d) must be lower than DISK_HIGH_WATER_PERCENT (%d)",
+			cfg.DiskLowWaterPercent, cfg.DiskHighWaterPercent)
 	}
 
 	if err := cfg.validate(); err != nil {

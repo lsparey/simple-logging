@@ -30,6 +30,12 @@ config:
   grpcWebPort: 8080
   retentionDays: 30
   retentionCheckInterval: "24h"
+  # Safety net for when retention alone doesn't keep PVC usage down: at or
+  # above diskHighWaterPercent, the oldest log segments (across every
+  # namespace/pod) are deleted until usage drops back below
+  # diskLowWaterPercent. Should rarely trigger in normal operation.
+  diskHighWaterPercent: 90
+  diskLowWaterPercent: 80
   logLevel: info
   # Enables plain JSON REST endpoints at /debug/* for testing purposes.
   # Leave disabled unless you need to exercise the API without a gRPC-Web client.
