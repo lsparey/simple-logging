@@ -2,6 +2,7 @@ package indexes
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,33 +10,61 @@ import (
 	"time"
 )
 
+// lineContainerAndSegment extracts the container name from a test fixture
+// line's "[ns/pod/container]" tag (defaulting to "app") and the segment date
+// from its leading RFC3339 timestamp (defaulting to a fixed sentinel day for
+// fixtures that don't carry one).
+func lineContainerAndSegment(line string) (container, segment string) {
+	container = "app"
+	if start, end := strings.IndexByte(line, '['), strings.IndexByte(line, ']'); start >= 0 && end > start {
+		if parts := strings.Split(line[start+1:end], "/"); len(parts) == 3 && parts[2] != "" {
+			container = parts[2]
+		}
+	}
+	segment = "1970-01-01"
+	if idx := strings.IndexByte(line, ' '); idx > 0 {
+		if parsed, err := time.Parse(time.RFC3339, line[:idx]); err == nil {
+			segment = parsed.UTC().Format("2006-01-02")
+		}
+	}
+	return container, segment
+}
+
+// writePodLog writes lines into the segmented layout
+// <root>/<namespace>/<pod>/<container>/<segment>.log, deriving container and
+// segment from each line the same way the real collector's output looks.
 func writePodLog(t *testing.T, root, namespace, pod string, lines []string) {
 	t.Helper()
-	dir := filepath.Join(root, namespace)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	f, err := os.Create(filepath.Join(dir, pod+".log"))
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	defer f.Close()
 	for _, line := range lines {
-		fmt.Fprintln(f, line)
+		container, segment := lineContainerAndSegment(line)
+		dir := filepath.Join(root, namespace, pod, container)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		f, err := os.OpenFile(filepath.Join(dir, segment+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			t.Fatalf("OpenFile: %v", err)
+		}
+		if _, err := fmt.Fprintln(f, line); err != nil {
+			f.Close()
+			t.Fatalf("write line: %v", err)
+		}
+		f.Close()
 	}
 }
 
 func appendAndObserve(t *testing.T, m *Manager, root, namespace, pod, line string) {
 	t.Helper()
-	dir := filepath.Join(root, namespace)
+	container, segment := lineContainerAndSegment(line)
+	dir := filepath.Join(root, namespace, pod, container)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	f, err := os.OpenFile(filepath.Join(dir, pod+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(filepath.Join(dir, segment+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		t.Fatalf("OpenFile: %v", err)
 	}
-	offset, err := f.Seek(0, 2)
+	offset, err := f.Seek(0, io.SeekEnd)
 	if err != nil {
 		f.Close()
 		t.Fatalf("Seek: %v", err)
@@ -47,7 +76,7 @@ func appendAndObserve(t *testing.T, m *Manager, root, namespace, pod, line strin
 	if err := f.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	m.ObserveLineAt(namespace, pod, offset, uint32(len(line)), line)
+	m.ObserveLineAt(namespace, pod, container, segment, offset, uint32(len(line)), line)
 }
 
 func TestCreateBackfillsExistingLogs(t *testing.T) {
@@ -388,7 +417,7 @@ func TestV2IndexUsesShardsAndAvoidsDuplicatingLogLines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WalkDir: %v", err)
 	}
-	logInfo, err := os.Stat(filepath.Join(root, "default", "api.log"))
+	logInfo, err := os.Stat(filepath.Join(root, "default", "api", "app", "2026-06-05.log"))
 	if err != nil {
 		t.Fatalf("Stat log: %v", err)
 	}
@@ -428,7 +457,7 @@ func TestNewManagerMigratesV1IndexesByRebuildingLogs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read manifest: %v", err)
 	}
-	if !strings.Contains(string(manifestBytes), `"formatVersion":2`) {
+	if !strings.Contains(string(manifestBytes), `"formatVersion":3`) {
 		t.Fatalf("manifest was not upgraded: %s", manifestBytes)
 	}
 }
@@ -442,7 +471,7 @@ func TestCompactRemovesReferencesToDeletedLogs(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	shardPath := m.shardPath("companyUuid", "co-1")
-	if err := os.Remove(filepath.Join(root, "default", "api.log")); err != nil {
+	if err := os.Remove(filepath.Join(root, "default", "api", "app", "2026-06-05.log")); err != nil {
 		t.Fatalf("remove log: %v", err)
 	}
 	if err := m.Compact(); err != nil {
