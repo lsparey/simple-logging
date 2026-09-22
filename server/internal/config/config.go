@@ -25,7 +25,7 @@ type Config struct {
 	LogLevel string
 
 	// RESTDebugEnabled enables plain JSON REST endpoints at /debug/* for
-	// testing purposes. Defaults to true; set REST_DEBUG=false to disable.
+	// testing purposes. Defaults to false; set REST_DEBUG=true to enable.
 	RESTDebugEnabled bool
 
 	// PPROFPort is the port for the Go pprof HTTP server (localhost only).
@@ -79,7 +79,6 @@ func Load() (*Config, error) {
 		RetentionDays:          30,
 		RetentionCheckInterval: 24 * time.Hour,
 		LogLevel:               getEnv("LOG_LEVEL", "info"),
-		RESTDebugEnabled:       true, // enabled by default; set REST_DEBUG=false to disable
 	}
 
 	if raw := os.Getenv("GRPC_WEB_PORT"); raw != "" {
@@ -106,8 +105,8 @@ func Load() (*Config, error) {
 		cfg.RetentionCheckInterval = d
 	}
 
-	if raw := os.Getenv("REST_DEBUG"); raw == "false" || raw == "0" {
-		cfg.RESTDebugEnabled = false
+	if raw := os.Getenv("REST_DEBUG"); raw == "true" || raw == "1" {
+		cfg.RESTDebugEnabled = true
 	}
 
 	if raw := os.Getenv("PPROF_PORT"); raw != "" {

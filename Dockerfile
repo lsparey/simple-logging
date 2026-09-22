@@ -1,13 +1,16 @@
+ARG VERSION=dev
+
 FROM node:22-alpine AS frontend-build
+ARG VERSION
 WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ .
-RUN npm run build
+RUN npm pkg set version="${VERSION#v}" && npm run build
 
 # Build backend
 FROM golang:1.26-alpine AS backend-build
-ARG VERSION=dev
+ARG VERSION
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
 RUN go mod download

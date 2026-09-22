@@ -9,7 +9,7 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 ## Features
 
 - **Live log streaming** — real-time log tailing from all pods across all namespaces via a gRPC-Web API
-- **Persisted log storage** — logs are written to a PersistentVolumeClaim (one file per pod) and retained for 30 days
+- **Persisted log storage** — logs are written to a PersistentVolumeClaim (one file per pod) and deleted once a pod's file has been idle for 30 days (see [retention](#retention) below)
 - **Automatic pod discovery** — new pods are detected and streamed as soon as they start
 - **Multi-node from a single replica** — pods on the local node are tailed straight from disk; pods on other nodes are streamed via the Kubernetes API, so no DaemonSet is needed
 - **Single helm install** — deploy the full stack with one `helm install` command
@@ -61,6 +61,13 @@ Once the pod is running, open `http://logs.example.com` in your browser to view 
 | `persistence.storageClass` | `""` | StorageClass name (empty = cluster default) |
 | `persistence.existingClaim` | `""` | Existing PVC to mount instead of creating one |
 | `persistence.claimSuffix` | `logs-v3` | Suffix for the chart-created PVC |
+| `config.restDebug` | `false` | Enable plain JSON REST endpoints at `/debug/*` for testing |
+| `nodeSelector` | `{}` | Pin the pod to specific nodes |
+| `affinity` | `{}` | Node/pod affinity rules |
+| `tolerations` | `[]` | Tolerations for tainted nodes |
+| `priorityClassName` | `""` | Pod priority class |
+| `podAnnotations` | `{}` | Extra annotations on the pod template |
+| `extraVolumes` / `extraVolumeMounts` | `[]` | Extra volumes and mounts, e.g. for a custom cert |
 
 ### Full example with custom values
 
@@ -83,7 +90,7 @@ simple-logging supports three ways to collect pod logs, controlled by `config.lo
 
 The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and learns which node it is scheduled on via the Downward API. Pods on that node are tailed directly from the filesystem using `inotify`; pods on every other node are streamed through the Kubernetes log API. Remote streams are reopened automatically with backoff if the connection drops or the container restarts, resuming from the last line received.
 
-**Recommended for:** multi-node clusters. Only pods on remote nodes cost a kube-apiserver/kubelet connection, so scheduling simple-logging on your busiest node keeps API load to a minimum. On a single-node cluster this is identical to `fileTail`.
+**Recommended for:** multi-node clusters. Only pods on remote nodes cost a kube-apiserver/kubelet connection, so scheduling simple-logging on your busiest node keeps API load to a minimum. Pin it there with `nodeSelector` or `affinity` (see [Key values](#key-values)) — otherwise the scheduler may place it anywhere. On a single-node cluster this is identical to `fileTail`.
 
 Uses the same `config.nodeLogsRoot` / `config.dockerLogsRoot` values as `fileTail`.
 
@@ -124,12 +131,28 @@ helm install simple-logging simple-logging/simple-logging \
   --set config.logCollectionMode=api
 ```
 
+## Retention
+
+`config.retentionDays` (default 30) controls how long log files are kept. Today this is based on file **mtime**, not log line timestamps: a pod's whole log file is deleted once it has gone `retentionDays` without a new line being written to it, not once its oldest line turns `retentionDays` old. In practice this means:
+
+- A pod that logs continuously keeps its full history for as long as it keeps logging, even past `retentionDays`.
+- A pod that stops logging (deleted, scaled down) has its file deleted `retentionDays` after its last line, which is usually what you want but is not a hard per-line cutoff.
+
+A hard, per-line retention cutoff (independent of write activity) is planned but not yet implemented.
+
 ## Upgrading
 
 ```bash
 helm repo update
 helm upgrade simple-logging simple-logging/simple-logging --namespace simple-logging
 ```
+
+## Image tags
+
+Two independent tag series are published to [`lsparey/simple-logging`](https://hub.docker.com/r/lsparey/simple-logging):
+
+- **Releases** (`X.Y.Z`, `X.Y`) — built from a tagged release commit and matched by the Helm chart's `appVersion`. This is what `helm install`/`helm upgrade` use by default; prefer these for anything other than local testing.
+- **`latest` and `sha-<commit>`** — built from every push to `main`, ahead of the next tagged release. Useful for trying out unreleased fixes, not recommended for production.
 
 ## Uninstalling
 
