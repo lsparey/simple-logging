@@ -15,6 +15,9 @@ interface LogFilesState {
   totalSizeBytes: bigint;
   totalLogFileCount: number;
   totalIndexFileCount: number;
+  diskUsedPercent: number;
+  diskHighWaterPercent: number;
+  diskLowWaterPercent: number;
   loading: boolean;
   error: string | null;
   refresh: () => void;
@@ -25,6 +28,9 @@ export function useLogFiles(): LogFilesState {
   const [totalSizeBytes, setTotalSizeBytes] = useState(0n);
   const [totalLogFileCount, setTotalLogFileCount] = useState(0);
   const [totalIndexFileCount, setTotalIndexFileCount] = useState(0);
+  const [diskUsedPercent, setDiskUsedPercent] = useState(0);
+  const [diskHighWaterPercent, setDiskHighWaterPercent] = useState(0);
+  const [diskLowWaterPercent, setDiskLowWaterPercent] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -39,6 +45,9 @@ export function useLogFiles(): LogFilesState {
         setTotalSizeBytes(response.totalSizeBytes);
         setTotalLogFileCount(response.totalLogFileCount);
         setTotalIndexFileCount(response.totalIndexFileCount);
+        setDiskUsedPercent(response.diskUsedPercent);
+        setDiskHighWaterPercent(response.diskHighWaterPercent);
+        setDiskLowWaterPercent(response.diskLowWaterPercent);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -59,5 +68,16 @@ export function useLogFiles(): LogFilesState {
     setRefreshKey((key) => key + 1);
   }, []);
 
-  return { files, totalSizeBytes, totalLogFileCount, totalIndexFileCount, loading, error, refresh };
+  return {
+    files,
+    totalSizeBytes,
+    totalLogFileCount,
+    totalIndexFileCount,
+    diskUsedPercent,
+    diskHighWaterPercent,
+    diskLowWaterPercent,
+    loading,
+    error,
+    refresh,
+  };
 }

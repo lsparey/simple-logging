@@ -2,6 +2,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -16,9 +17,32 @@ import { useLogFiles } from '../../hooks/useLogFiles.js';
 import { formatBytes } from '../../utils/formatBytes.js';
 import { formatDateTime } from '../../utils/formatDateTime.js';
 
+// Below the low water mark there's plenty of headroom (success); between the
+// low and high water marks the disk guard hasn't kicked in yet but is close
+// (warning); at or above the high water mark it's actively deleting the
+// oldest segments (error). Mirrors the semantics of config.diskLowWaterPercent
+// / config.diskHighWaterPercent.
+function diskUsageColor(usedPercent: number, highWaterPercent: number, lowWaterPercent: number) {
+  if (usedPercent >= highWaterPercent) return 'error';
+  if (usedPercent >= lowWaterPercent) return 'warning';
+  return 'success';
+}
+
 export default function DataDashboard() {
-  const { files, totalSizeBytes, totalLogFileCount, totalIndexFileCount, loading, error, refresh } = useLogFiles();
+  const {
+    files,
+    totalSizeBytes,
+    totalLogFileCount,
+    totalIndexFileCount,
+    diskUsedPercent,
+    diskHighWaterPercent,
+    diskLowWaterPercent,
+    loading,
+    error,
+    refresh,
+  } = useLogFiles();
   const totalFileCount = totalLogFileCount + totalIndexFileCount;
+  const diskColor = diskUsageColor(diskUsedPercent, diskHighWaterPercent, diskLowWaterPercent);
 
   return (
     <Box sx={{ p: 3, overflow: 'auto', height: '100%' }}>
@@ -53,6 +77,22 @@ export default function DataDashboard() {
           <Typography variant="body2" color="text.secondary">Index files</Typography>
           <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>
             {totalIndexFileCount}
+          </Typography>
+        </Paper>
+        <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Typography variant="body2" color="text.secondary">Disk usage</Typography>
+          <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2, color: `${diskColor}.main` }}>
+            {diskUsedPercent}%
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={Math.min(diskUsedPercent, 100)}
+            color={diskColor}
+            sx={{ mt: 1.5, mb: 1, height: 6, borderRadius: 3 }}
+            aria-label="Disk usage"
+          />
+          <Typography variant="caption" color="text.secondary">
+            Disk guard deletes oldest segments at {diskHighWaterPercent}%, down to {diskLowWaterPercent}%
           </Typography>
         </Paper>
       </Box>
