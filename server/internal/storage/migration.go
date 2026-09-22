@@ -83,9 +83,9 @@ func migrateLegacyPodFile(logsRoot, namespace, pod, legacyPath string, log *zap.
 		rawLine, readErr := reader.ReadString('\n')
 		line := strings.TrimRight(rawLine, "\r\n")
 		if line != "" {
-			if werr := w.Write(parseLegacyTimestamp(line), line); werr != nil {
+			if ok := w.Write(parseLegacyTimestamp(line), line); !ok {
 				_ = w.Close()
-				return fmt.Errorf("write migrated line: %w", werr)
+				return fmt.Errorf("write migrated line: write failed")
 			}
 			lineCount++
 		}
