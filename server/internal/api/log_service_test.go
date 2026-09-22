@@ -36,20 +36,42 @@ type noopDeploymentMapper struct{}
 func (noopDeploymentMapper) GetDeploymentName(_, _ string) (string, bool) { return "", false }
 func (noopDeploymentMapper) ListKnownDeployments(_ string) []string       { return nil }
 
+// writeLogFile writes lines into the segmented layout
+// <dir>/<namespace>/<pod>/<container>/<segment>.log, deriving each line's
+// container from its "[ns/pod/container]" tag (defaulting to "app" for
+// fixtures that don't carry one, e.g. content-only ListPods/ListLogFiles
+// tests) and its segment from its leading RFC3339 timestamp (defaulting to a
+// fixed sentinel day when absent). A 3-day fixture with real per-day
+// timestamps therefore lands in three real segment files, exactly like
+// production output.
 func writeLogFile(t *testing.T, dir, namespace, pod string, lines []string) {
 	t.Helper()
-	nsDir := filepath.Join(dir, namespace)
-	if err := os.MkdirAll(nsDir, 0755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	path := filepath.Join(nsDir, pod+".log")
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	defer f.Close()
-	for _, l := range lines {
-		fmt.Fprintln(f, l)
+	for _, line := range lines {
+		container := "app"
+		if start, end := strings.IndexByte(line, '['), strings.IndexByte(line, ']'); start >= 0 && end > start {
+			if parts := strings.Split(line[start+1:end], "/"); len(parts) == 3 && parts[2] != "" {
+				container = parts[2]
+			}
+		}
+		segment := "1970-01-01"
+		if idx := strings.IndexByte(line, ' '); idx > 0 {
+			if ts, err := time.Parse(time.RFC3339, line[:idx]); err == nil {
+				segment = ts.UTC().Format("2006-01-02")
+			}
+		}
+		containerDir := filepath.Join(dir, namespace, pod, container)
+		if err := os.MkdirAll(containerDir, 0755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		f, err := os.OpenFile(filepath.Join(containerDir, segment+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			t.Fatalf("OpenFile: %v", err)
+		}
+		if _, err := fmt.Fprintln(f, line); err != nil {
+			f.Close()
+			t.Fatalf("write line: %v", err)
+		}
+		f.Close()
 	}
 }
 
@@ -143,7 +165,7 @@ func TestListLogFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(secondIndexDir, "company-2.jsonl"), []byte(indexEntry), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	manifest := []byte(`{"keys":["companyUuid"],"formatVersion":2}`)
+	manifest := []byte(`{"keys":["companyUuid"],"formatVersion":3}`)
 	if err := os.WriteFile(filepath.Join(dir, ".indexes", "indexes.json"), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -158,19 +180,28 @@ func TestListLogFiles(t *testing.T) {
 		t.Fatalf("expected 4 summary rows, got %d", len(resp.Files))
 	}
 
+	// Log segments are grouped by (namespace, pod, container), so Subject —
+	// not Name, which is now just a "N files" count — uniquely identifies a row.
 	var summedSize int64
-	byPath := make(map[string]*pb.LogFileInfo)
+	byLogSubject := make(map[string]*pb.LogFileInfo)
+	byIndexRow := make(map[string]*pb.LogFileInfo)
 	for _, file := range resp.Files {
-		byPath[file.Namespace+"/"+file.Name] = file
 		summedSize += file.SizeBytes
+		if file.Kind == "Log" {
+			byLogSubject[file.Subject] = file
+		} else {
+			byIndexRow[file.Namespace+"/"+file.Name] = file
+		}
 	}
-	if byPath["default/pod-a.log"] == nil {
-		t.Error("missing default/pod-a.log")
+	if logFile := byLogSubject["default / pod-a (app)"]; logFile == nil {
+		t.Error("missing default / pod-a (app) log summary")
+	} else if logFile.Name != "1 file" {
+		t.Errorf("log summary name = %q, want %q", logFile.Name, "1 file")
 	}
-	if byPath["monitoring/pod-b.log"] == nil {
-		t.Error("missing monitoring/pod-b.log")
+	if byLogSubject["monitoring / pod-b (app)"] == nil {
+		t.Error("missing monitoring / pod-b (app) log summary")
 	}
-	indexFile := byPath[".indexes/2 files"]
+	indexFile := byIndexRow[".indexes/2 files"]
 	if indexFile == nil {
 		t.Error("missing index summary")
 	} else if indexFile.Kind != "Index" {
@@ -180,18 +211,15 @@ func TestListLogFiles(t *testing.T) {
 	} else if indexFile.SizeBytes != int64(len(indexEntry)*2) {
 		t.Errorf("index summary size = %d, want %d", indexFile.SizeBytes, len(indexEntry)*2)
 	}
-	metadataFile := byPath[".indexes/indexes.json"]
+	metadataFile := byIndexRow[".indexes/indexes.json"]
 	if metadataFile == nil {
 		t.Error("missing indexes.json metadata file")
 	} else if metadataFile.Subject != "Index metadata" {
 		t.Errorf("metadata subject = %q, want %q", metadataFile.Subject, "Index metadata")
 	}
-	if logFile := byPath["default/pod-a.log"]; logFile.Subject != "default / pod-a" {
-		t.Errorf("log file subject = %q, want %q", logFile.Subject, "default / pod-a")
-	}
-	for path, file := range byPath {
+	for _, file := range resp.Files {
 		if file.ModifiedAtUnixMs <= 0 {
-			t.Errorf("%s has invalid modified time %d", path, file.ModifiedAtUnixMs)
+			t.Errorf("%s/%s has invalid modified time %d", file.Namespace, file.Name, file.ModifiedAtUnixMs)
 		}
 	}
 	if resp.TotalSizeBytes != summedSize {
@@ -235,8 +263,8 @@ func TestListLogFiles_TruncatesToLargestFiles(t *testing.T) {
 	}
 	// The smallest file (pod-00, 1 line) should have been dropped in favor of larger ones.
 	for _, file := range resp.Files {
-		if file.Name == "pod-00.log" {
-			t.Errorf("expected smallest file pod-00.log to be truncated from results")
+		if file.Subject == "default / pod-00 (app)" {
+			t.Errorf("expected smallest pod pod-00 to be truncated from results")
 		}
 	}
 }
@@ -446,7 +474,7 @@ func TestStreamLogs_OnlyNewLines(t *testing.T) {
 		"2026-05-20T10:00:00Z [default/mypod/app] existing line",
 	})
 
-	logPath := filepath.Join(dir, "default", "mypod.log")
+	logPath := filepath.Join(dir, "default", "mypod", "app", "2026-05-20.log")
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	ctx, cancel := context.WithCancel(context.Background())
@@ -554,8 +582,13 @@ func TestGetLogs_SameTimestampPreservesOrder(t *testing.T) {
 // lines sharing an identical RFC3339 timestamp is streamed in file-write order.
 func TestStreamLogs_SameTimestampPreservesOrder(t *testing.T) {
 	dir := t.TempDir()
-	logPath := filepath.Join(dir, "default", "pod.log")
-	writeLogFile(t, dir, "default", "pod", nil)
+	logPath := filepath.Join(dir, "default", "pod", "app", "2026-05-20.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if _, err := os.Create(logPath); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
 	ctx, cancel := context.WithCancel(context.Background())

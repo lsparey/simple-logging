@@ -20,14 +20,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lsparey/simple-logging/internal/storage"
 )
 
 const (
 	indexDirName       = ".indexes"
 	manifestName       = "indexes.json"
-	indexFormatVersion = 2
+	indexFormatVersion = 3
 	shardCount         = 256
-	shardMagic         = "SLI2"
+	shardMagic         = "SLI3"
 )
 
 var validIndexKey = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.-]{0,127}$`)
@@ -41,6 +43,8 @@ type Entry struct {
 	Timestamp string `json:"ts"`
 	Namespace string `json:"namespace"`
 	Pod       string `json:"pod"`
+	Container string `json:"-"`
+	Segment   string `json:"-"`
 	Value     string `json:"value"`
 	Line      string `json:"line"`
 	Offset    int64  `json:"-"`
@@ -52,6 +56,8 @@ type reference struct {
 	ValidTime bool
 	Namespace string
 	Pod       string
+	Container string
+	Segment   string
 	Value     string
 	Offset    int64
 	Length    uint32
@@ -288,8 +294,9 @@ func (m *Manager) Compact() error {
 	return nil
 }
 
-// ObserveLineAt indexes a line already written to its canonical pod log.
-func (m *Manager) ObserveLineAt(namespace, pod string, offset int64, length uint32, line string) {
+// ObserveLineAt indexes a line already written to the given segment of
+// namespace/pod/container's canonical log.
+func (m *Manager) ObserveLineAt(namespace, pod, container, segment string, offset int64, length uint32, line string) {
 	<-m.ready
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -305,6 +312,8 @@ func (m *Manager) ObserveLineAt(namespace, pod string, offset int64, length uint
 				ValidTime: timestampErr == nil,
 				Namespace: namespace,
 				Pod:       pod,
+				Container: container,
+				Segment:   segment,
 				Value:     value,
 				Offset:    offset,
 				Length:    length,
@@ -550,25 +559,34 @@ func (m *Manager) rebuildLocked(key string) error {
 		if !ns.IsDir() || strings.HasPrefix(ns.Name(), ".") {
 			continue
 		}
-		nsDir := filepath.Join(m.logsRoot, ns.Name())
-		pods, err := os.ReadDir(nsDir)
+		namespace := ns.Name()
+		pods, err := storage.ListPodDirs(m.logsRoot, namespace)
 		if err != nil {
 			return err
 		}
-		for _, podFile := range pods {
-			if podFile.IsDir() || filepath.Ext(podFile.Name()) != ".log" {
-				continue
-			}
-			pod := strings.TrimSuffix(podFile.Name(), ".log")
-			if err := m.backfillFileLocked(key, ns.Name(), pod, filepath.Join(nsDir, podFile.Name())); err != nil {
+		for _, pod := range pods {
+			containers, err := storage.ListContainers(m.logsRoot, namespace, pod)
+			if err != nil {
 				return err
+			}
+			for _, container := range containers {
+				segments, err := storage.ListSegments(m.logsRoot, namespace, pod, container)
+				if err != nil {
+					return err
+				}
+				for _, segment := range segments {
+					path := filepath.Join(m.logsRoot, namespace, pod, container, segment+".log")
+					if err := m.backfillFileLocked(key, namespace, pod, container, segment, path); err != nil {
+						return err
+					}
+				}
 			}
 		}
 	}
 	return nil
 }
 
-func (m *Manager) backfillFileLocked(key, namespace, pod, path string) error {
+func (m *Manager) backfillFileLocked(key, namespace, pod, container, segment, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -594,6 +612,8 @@ func (m *Manager) backfillFileLocked(key, namespace, pod, path string) error {
 				ValidTime: timestampErr == nil,
 				Namespace: namespace,
 				Pod:       pod,
+				Container: container,
+				Segment:   segment,
 				Value:     value,
 				Offset:    offset,
 				Length:    uint32(len(line)),
@@ -639,8 +659,10 @@ func encodeReference(ref reference, includeMagic bool) ([]byte, error) {
 	}
 	namespace := []byte(ref.Namespace)
 	pod := []byte(ref.Pod)
+	container := []byte(ref.Container)
+	segment := []byte(ref.Segment)
 	value := []byte(ref.Value)
-	bodyLength := 33 + len(namespace) + len(pod) + len(value)
+	bodyLength := 41 + len(namespace) + len(pod) + len(container) + len(segment) + len(value)
 	if bodyLength > int(^uint32(0)) {
 		return nil, errors.New("index reference is too large")
 	}
@@ -655,9 +677,13 @@ func encodeReference(ref reference, includeMagic bool) ([]byte, error) {
 	_ = binary.Write(&record, binary.BigEndian, ref.Length)
 	_ = binary.Write(&record, binary.BigEndian, uint32(len(namespace)))
 	_ = binary.Write(&record, binary.BigEndian, uint32(len(pod)))
+	_ = binary.Write(&record, binary.BigEndian, uint32(len(container)))
+	_ = binary.Write(&record, binary.BigEndian, uint32(len(segment)))
 	_ = binary.Write(&record, binary.BigEndian, uint32(len(value)))
 	record.Write(namespace)
 	record.Write(pod)
+	record.Write(container)
+	record.Write(segment)
 	record.Write(value)
 	return record.Bytes(), nil
 }
@@ -688,7 +714,7 @@ func (m *Manager) scanShardLocked(key string, shard byte, visit func(reference) 
 			}
 			return err
 		}
-		if bodyLength < 33 || bodyLength > 64*1024*1024 {
+		if bodyLength < 41 || bodyLength > 64*1024*1024 {
 			return fmt.Errorf("invalid index record length %d", bodyLength)
 		}
 		body := make([]byte, bodyLength)
@@ -704,20 +730,26 @@ func (m *Manager) scanShardLocked(key string, shard byte, visit func(reference) 
 		lineLength := binary.BigEndian.Uint32(body[17:21])
 		namespaceLength := binary.BigEndian.Uint32(body[21:25])
 		podLength := binary.BigEndian.Uint32(body[25:29])
-		valueLength := binary.BigEndian.Uint32(body[29:33])
-		payloadLength := uint64(namespaceLength) + uint64(podLength) + uint64(valueLength)
-		if payloadLength != uint64(bodyLength-33) {
+		containerLength := binary.BigEndian.Uint32(body[29:33])
+		segmentLength := binary.BigEndian.Uint32(body[33:37])
+		valueLength := binary.BigEndian.Uint32(body[37:41])
+		payloadLength := uint64(namespaceLength) + uint64(podLength) + uint64(containerLength) + uint64(segmentLength) + uint64(valueLength)
+		if payloadLength != uint64(bodyLength-41) {
 			return errors.New("invalid index record payload")
 		}
-		pos := uint32(33)
+		pos := uint32(41)
 		namespace := string(body[pos : pos+namespaceLength])
 		pos += namespaceLength
 		pod := string(body[pos : pos+podLength])
 		pos += podLength
+		container := string(body[pos : pos+containerLength])
+		pos += containerLength
+		segment := string(body[pos : pos+segmentLength])
+		pos += segmentLength
 		value := string(body[pos : pos+valueLength])
 		if err := visit(reference{
 			Timestamp: time.Unix(0, timestampNanos), ValidTime: validTime,
-			Namespace: namespace, Pod: pod, Value: value,
+			Namespace: namespace, Pod: pod, Container: container, Segment: segment, Value: value,
 			Offset: offset, Length: lineLength,
 		}); err != nil {
 			return err
@@ -738,7 +770,7 @@ func (m *Manager) readReferencePageLocked(key, value string, start, pageSize int
 		if ref.Value != value {
 			return nil
 		}
-		path := filepath.Join(m.logsRoot, ref.Namespace, ref.Pod+".log")
+		path := filepath.Join(m.logsRoot, ref.Namespace, ref.Pod, ref.Container, ref.Segment+".log")
 		size, checked := fileSizes[path]
 		if !checked {
 			info, statErr := os.Stat(path)
@@ -754,7 +786,8 @@ func (m *Manager) readReferencePageLocked(key, value string, start, pageSize int
 		}
 		entry := Entry{
 			Timestamp: ref.Timestamp.Format(time.RFC3339Nano), Namespace: ref.Namespace,
-			Pod: ref.Pod, Value: ref.Value, Offset: ref.Offset, Length: ref.Length,
+			Pod: ref.Pod, Container: ref.Container, Segment: ref.Segment,
+			Value: ref.Value, Offset: ref.Offset, Length: ref.Length,
 		}
 		heap.Push(h, sortableEntry{
 			entry: entry, position: total, time: ref.Timestamp, valid: ref.ValidTime,
@@ -784,7 +817,7 @@ func (m *Manager) readReferencePageLocked(key, value string, start, pageSize int
 }
 
 func (m *Manager) readReferencedLine(entry Entry) (string, error) {
-	f, err := os.Open(filepath.Join(m.logsRoot, entry.Namespace, entry.Pod+".log"))
+	f, err := os.Open(filepath.Join(m.logsRoot, entry.Namespace, entry.Pod, entry.Container, entry.Segment+".log"))
 	if err != nil {
 		return "", err
 	}
@@ -797,7 +830,7 @@ func (m *Manager) readReferencedLine(entry Entry) (string, error) {
 }
 
 func (m *Manager) referenceAvailable(ref reference, fileSizes map[string]int64) bool {
-	path := filepath.Join(m.logsRoot, ref.Namespace, ref.Pod+".log")
+	path := filepath.Join(m.logsRoot, ref.Namespace, ref.Pod, ref.Container, ref.Segment+".log")
 	size, checked := fileSizes[path]
 	if !checked {
 		info, err := os.Stat(path)

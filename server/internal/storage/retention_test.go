@@ -9,94 +9,101 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestRetentionManager_DeletesOldFiles(t *testing.T) {
-	dir := t.TempDir()
-	nsDir := filepath.Join(dir, "ns")
-	os.MkdirAll(nsDir, 0755)
+func writeSegment(t *testing.T, root, namespace, pod, container, date string) string {
+	t.Helper()
+	dir := filepath.Join(root, namespace, pod, container)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	path := filepath.Join(dir, date+".log")
+	if err := os.WriteFile(path, []byte("log data\n"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
 
-	// Write a file then backdate its mtime to 31 days ago.
-	oldPath := filepath.Join(nsDir, "old-pod.log")
-	os.WriteFile(oldPath, []byte("old log data"), 0644)
-	past := time.Now().Add(-31 * 24 * time.Hour)
-	os.Chtimes(oldPath, past, past)
+func TestRetentionManager_DeletesOldSegments(t *testing.T) {
+	dir := t.TempDir()
+	oldDate := time.Now().UTC().AddDate(0, 0, -31).Format("2006-01-02")
+	oldPath := writeSegment(t, dir, "ns", "pod", "app", oldDate)
 
 	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
 	rm.sweep()
 
 	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
-		t.Error("expected old log file to be deleted after sweep")
+		t.Error("expected old segment to be deleted after sweep")
 	}
 }
 
-func TestRetentionManager_KeepsNewFiles(t *testing.T) {
+func TestRetentionManager_KeepsRecentSegments(t *testing.T) {
 	dir := t.TempDir()
-	nsDir := filepath.Join(dir, "ns")
-	os.MkdirAll(nsDir, 0755)
-
-	newPath := filepath.Join(nsDir, "new-pod.log")
-	os.WriteFile(newPath, []byte("recent log data"), 0644)
-	// mtime is now — well within 30 days.
+	recentDate := time.Now().UTC().Format("2006-01-02")
+	newPath := writeSegment(t, dir, "ns", "pod", "app", recentDate)
 
 	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
 	rm.sweep()
 
 	if _, err := os.Stat(newPath); err != nil {
-		t.Errorf("expected recent log file to be kept after sweep: %v", err)
+		t.Errorf("expected recent segment to be kept after sweep: %v", err)
 	}
 }
 
-func TestRetentionManager_RemovesEmptyNamespaceDirs(t *testing.T) {
+func TestRetentionManager_RemovesEmptyContainerPodAndNamespaceDirs(t *testing.T) {
 	dir := t.TempDir()
-	nsDir := filepath.Join(dir, "ns")
-	os.MkdirAll(nsDir, 0755)
-
-	// Only one file in the namespace — backdate it.
-	logPath := filepath.Join(nsDir, "pod.log")
-	os.WriteFile(logPath, []byte("data"), 0644)
-	past := time.Now().Add(-31 * 24 * time.Hour)
-	os.Chtimes(logPath, past, past)
+	oldDate := time.Now().UTC().AddDate(0, 0, -31).Format("2006-01-02")
+	writeSegment(t, dir, "ns", "pod", "app", oldDate)
+	if err := WritePodMeta(dir, PodMeta{Namespace: "ns", Pod: "pod", Containers: []string{"app"}}); err != nil {
+		t.Fatalf("WritePodMeta: %v", err)
+	}
 
 	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
 	rm.sweep()
 
-	if _, err := os.Stat(nsDir); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "ns")); !os.IsNotExist(err) {
 		t.Error("expected empty namespace directory to be removed after sweep")
 	}
 }
 
-func TestRetentionManager_KeepsNonEmptyDirs(t *testing.T) {
+func TestRetentionManager_KeepsNonEmptyDirsWhenOtherSegmentsRemain(t *testing.T) {
 	dir := t.TempDir()
-	nsDir := filepath.Join(dir, "ns")
-	os.MkdirAll(nsDir, 0755)
-
-	// Old file (will be deleted) and a new file (will be kept).
-	oldPath := filepath.Join(nsDir, "old.log")
-	os.WriteFile(oldPath, []byte("old"), 0644)
-	past := time.Now().Add(-31 * 24 * time.Hour)
-	os.Chtimes(oldPath, past, past)
-
-	newPath := filepath.Join(nsDir, "new.log")
-	os.WriteFile(newPath, []byte("new"), 0644)
+	oldDate := time.Now().UTC().AddDate(0, 0, -31).Format("2006-01-02")
+	recentDate := time.Now().UTC().Format("2006-01-02")
+	writeSegment(t, dir, "ns", "pod", "app", oldDate)
+	newPath := writeSegment(t, dir, "ns", "pod", "app", recentDate)
 
 	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
 	rm.sweep()
 
-	if _, err := os.Stat(nsDir); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "ns")); err != nil {
 		t.Errorf("expected namespace dir to remain when non-empty: %v", err)
 	}
 	if _, err := os.Stat(newPath); err != nil {
-		t.Errorf("expected new log file to remain: %v", err)
+		t.Errorf("expected recent segment to remain: %v", err)
 	}
 }
 
-func TestRetentionManager_CompactsIndexesAfterDeletingLogs(t *testing.T) {
+func TestRetentionManager_KeepsOtherPodsInSameNamespace(t *testing.T) {
 	dir := t.TempDir()
-	nsDir := filepath.Join(dir, "ns")
-	os.MkdirAll(nsDir, 0755)
-	oldPath := filepath.Join(nsDir, "old.log")
-	os.WriteFile(oldPath, []byte("old"), 0644)
-	past := time.Now().Add(-31 * 24 * time.Hour)
-	os.Chtimes(oldPath, past, past)
+	oldDate := time.Now().UTC().AddDate(0, 0, -31).Format("2006-01-02")
+	writeSegment(t, dir, "ns", "old-pod", "app", oldDate)
+	recentDate := time.Now().UTC().Format("2006-01-02")
+	newPath := writeSegment(t, dir, "ns", "new-pod", "app", recentDate)
+
+	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.sweep()
+
+	if _, err := os.Stat(filepath.Join(dir, "ns", "old-pod")); !os.IsNotExist(err) {
+		t.Error("expected expired pod directory to be removed")
+	}
+	if _, err := os.Stat(newPath); err != nil {
+		t.Errorf("expected other pod's recent segment to remain: %v", err)
+	}
+}
+
+func TestRetentionManager_CompactsIndexesAfterDeletingSegments(t *testing.T) {
+	dir := t.TempDir()
+	oldDate := time.Now().UTC().AddDate(0, 0, -31).Format("2006-01-02")
+	writeSegment(t, dir, "ns", "pod", "app", oldDate)
 
 	compactCalls := 0
 	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
@@ -108,5 +115,68 @@ func TestRetentionManager_CompactsIndexesAfterDeletingLogs(t *testing.T) {
 
 	if compactCalls != 1 {
 		t.Fatalf("index compactor called %d times, want 1", compactCalls)
+	}
+}
+
+func TestRetentionManager_DoesNotCompactWhenNothingDeleted(t *testing.T) {
+	dir := t.TempDir()
+	recentDate := time.Now().UTC().Format("2006-01-02")
+	writeSegment(t, dir, "ns", "pod", "app", recentDate)
+
+	compactCalls := 0
+	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.SetIndexCompactor(func() error {
+		compactCalls++
+		return nil
+	})
+	rm.sweep()
+
+	if compactCalls != 0 {
+		t.Fatalf("index compactor called %d times, want 0", compactCalls)
+	}
+}
+
+// TestRetentionManager_SweepsLegacyFilesByMtime covers the MIGRATE_LEGACY=false
+// escape hatch: a stray v0.11 <ns>/<pod>.log file has no segment date to key
+// off, so it is swept by mtime exactly as it was before Phase 1.
+func TestRetentionManager_SweepsLegacyFilesByMtime(t *testing.T) {
+	dir := t.TempDir()
+	nsDir := filepath.Join(dir, "ns")
+	if err := os.MkdirAll(nsDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	oldPath := filepath.Join(nsDir, "legacy-pod.log")
+	if err := os.WriteFile(oldPath, []byte("old log data"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	past := time.Now().Add(-31 * 24 * time.Hour)
+	if err := os.Chtimes(oldPath, past, past); err != nil {
+		t.Fatalf("Chtimes: %v", err)
+	}
+
+	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.sweep()
+
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("expected old legacy log file to be deleted after sweep")
+	}
+}
+
+func TestRetentionManager_KeepsRecentLegacyFiles(t *testing.T) {
+	dir := t.TempDir()
+	nsDir := filepath.Join(dir, "ns")
+	if err := os.MkdirAll(nsDir, 0755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	newPath := filepath.Join(nsDir, "legacy-pod.log")
+	if err := os.WriteFile(newPath, []byte("recent log data"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.sweep()
+
+	if _, err := os.Stat(newPath); err != nil {
+		t.Errorf("expected recent legacy log file to be kept after sweep: %v", err)
 	}
 }

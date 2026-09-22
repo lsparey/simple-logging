@@ -14,6 +14,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/lsparey/simple-logging/internal/storage"
+
 	"go.uber.org/zap"
 )
 
@@ -239,8 +241,9 @@ func TestDetectJSONFromFile_AllowsStartupLines(t *testing.T) {
 	dir := t.TempDir()
 	namespace := "default"
 	pod := "api"
-	nsDir := filepath.Join(dir, namespace)
-	if err := os.MkdirAll(nsDir, 0755); err != nil {
+	container := "app"
+	containerDir := filepath.Join(dir, namespace, pod, container)
+	if err := os.MkdirAll(containerDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
@@ -254,19 +257,19 @@ func TestDetectJSONFromFile_AllowsStartupLines(t *testing.T) {
 		`{"level":"info","message":"response"}`,
 		`{"level":"info","message":"complete"}`,
 	}
-	f, err := os.Create(filepath.Join(nsDir, pod+".log"))
+	f, err := os.Create(filepath.Join(containerDir, "2026-06-08.log"))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	for i, line := range lines {
-		fmt.Fprintf(f, "2026-06-08T10:00:%02dZ [%s/%s/app] %s\n", i, namespace, pod, line)
+		fmt.Fprintf(f, "2026-06-08T10:00:%02dZ [%s/%s/%s] %s\n", i, namespace, pod, container, line)
 	}
 	if err := f.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
 	coll := New(fake.NewSimpleClientset(), dir, "", zap.NewNop())
-	coll.detectJsonFromFile(namespace, pod)
+	coll.detectJsonFromFile(namespace, pod, container)
 
 	if !coll.IsJsonLogging(namespace, pod) {
 		t.Error("expected stored log with startup lines to be detected as JSON")
@@ -286,18 +289,31 @@ func waitFor(t *testing.T, timeout time.Duration, cond func() bool) bool {
 	return cond()
 }
 
-// countLines returns how many lines of the stored log file for ns/pod contain
-// substr. A missing file counts as zero.
+// countLines returns how many lines across all of ns/pod's stored log
+// segments (any container) contain substr. A pod with no segments counts as
+// zero.
 func countLines(t *testing.T, logsRoot, ns, pod, substr string) int {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(logsRoot, ns, pod+".log"))
+	n := 0
+	containers, err := storage.ListContainers(logsRoot, ns, pod)
 	if err != nil {
 		return 0
 	}
-	n := 0
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.Contains(line, substr) {
-			n++
+	for _, container := range containers {
+		segments, err := storage.ListSegments(logsRoot, ns, pod, container)
+		if err != nil {
+			continue
+		}
+		for _, segment := range segments {
+			data, err := os.ReadFile(filepath.Join(storage.ContainerDir(logsRoot, ns, pod, container), segment+".log"))
+			if err != nil {
+				continue
+			}
+			for _, line := range strings.Split(string(data), "\n") {
+				if strings.Contains(line, substr) {
+					n++
+				}
+			}
 		}
 	}
 	return n
@@ -383,7 +399,7 @@ func TestCollector_Hybrid_LocalPodTailsFile(t *testing.T) {
 		t.Errorf("local pod must not be streamed via the API, found %d API lines", n)
 	}
 
-	data, err := os.ReadFile(filepath.Join(logsRoot, "default", "local-pod.log"))
+	data, err := os.ReadFile(filepath.Join(logsRoot, "default", "local-pod", "app", "2026-01-01.log"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -457,7 +473,7 @@ func TestAPIStream_UsesSourceTimestamp(t *testing.T) {
 		t.Fatal("expected the API stream's log line to be collected")
 	}
 
-	data, err := os.ReadFile(filepath.Join(logsRoot, "default", "ts-pod.log"))
+	data, err := os.ReadFile(filepath.Join(logsRoot, "default", "ts-pod", "app", "2020-01-01.log"))
 	if err != nil {
 		t.Fatal(err)
 	}

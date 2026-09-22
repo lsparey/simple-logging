@@ -179,7 +179,7 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 
 	// Immediately probe the stored log file so the JSON-logging flag is available
 	// before the live stream delivers its first batch of lines.
-	c.detectJsonFromFile(pod.Namespace, pod.Name)
+	c.detectJsonFromFile(pod.Namespace, pod.Name, defaultContainer(pod))
 
 	c.wg.Add(1)
 	go func() {
@@ -188,15 +188,20 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 	}()
 }
 
-// detectJsonFromFile scans the first jsonProbeLines non-empty lines of the pod's
-// stored log file and marks the pod as JSON-logging once enough valid JSON
-// objects are found. This provides an instant result on server restarts before
-// the live stream has had a chance to deliver enough lines.
-func (c *Collector) detectJsonFromFile(namespace, podName string) {
-	path := filepath.Join(c.logsRoot, namespace, podName+".log")
+// detectJsonFromFile scans the first jsonProbeLines non-empty lines of the
+// container's oldest stored log segment and marks the pod as JSON-logging
+// once enough valid JSON objects are found. This provides an instant result
+// on server restarts before the live stream has had a chance to deliver
+// enough lines.
+func (c *Collector) detectJsonFromFile(namespace, podName, container string) {
+	segments, err := storage.ListSegments(c.logsRoot, namespace, podName, container)
+	if err != nil || len(segments) == 0 {
+		return // no stored segments yet — nothing to do
+	}
+	path := filepath.Join(storage.ContainerDir(c.logsRoot, namespace, podName, container), segments[0]+".log")
 	f, err := os.Open(path)
 	if err != nil {
-		return // file doesn't exist yet — nothing to do
+		return
 	}
 	defer f.Close()
 
@@ -365,7 +370,7 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 		zap.String("source", source),
 	)
 
-	writer, err := storage.NewFileWriter(c.logsRoot, pod.Namespace, pod.Name)
+	writer, err := storage.NewSegmentWriter(c.logsRoot, pod.Namespace, pod.Name, containerName)
 	if err != nil {
 		log.Error("failed to open log file", zap.Error(err))
 		return
@@ -379,8 +384,9 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 	// Write a separator line when a pod restarts so log consumers can identify
 	// the boundary between distinct container lifecycles.
 	if isRestart && writer.HasContent() {
-		sep := fmt.Sprintf("--- pod restarted at %s ---", time.Now().UTC().Format(time.RFC3339))
-		if werr := writer.Write(sep); werr != nil {
+		now := time.Now().UTC()
+		sep := fmt.Sprintf("--- pod restarted at %s ---", now.Format(time.RFC3339))
+		if werr := writer.Write(now, sep); werr != nil {
 			log.Warn("failed to write restart separator", zap.Error(werr))
 		}
 	}
@@ -411,7 +417,7 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 //
 //	CRI:    <RFC3339Nano> <stream> <flag> <content>
 //	Docker: {"log":"<content>\n","stream":"stdout","time":"..."}
-func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.FileWriter, log *zap.Logger) {
+func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.SegmentWriter, log *zap.Logger) {
 	containerDir := filepath.Join(c.nodeLogsRoot,
 		fmt.Sprintf("%s_%s_%s", pod.Namespace, pod.Name, string(pod.UID)),
 		containerName)
@@ -518,9 +524,9 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 					}
 					_ = f.Close()
 					restartCount++
-					sep := fmt.Sprintf("--- container restarted at %s ---",
-						time.Now().UTC().Format(time.RFC3339))
-					if werr := writer.Write(sep); werr != nil {
+					now := time.Now().UTC()
+					sep := fmt.Sprintf("--- container restarted at %s ---", now.Format(time.RFC3339))
+					if werr := writer.Write(now, sep); werr != nil {
 						log.Warn("failed to write restart separator", zap.Error(werr))
 					}
 					partial.Reset()
@@ -571,7 +577,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 				pod.Namespace, pod.Name, containerName,
 				logContent,
 			)
-			if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, line); werr != nil {
+			if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line); werr != nil {
 				log.Error("failed to write log line", zap.Error(werr))
 				_ = f.Close()
 				return
@@ -700,7 +706,7 @@ func parseCRILogLine(line string) (ts time.Time, content string, isPartial bool)
 // reconnect resumes from the timestamp of the last line received so history
 // is not replayed (at most one second may be duplicated, because the API only
 // accepts whole-second SinceTime values).
-func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.FileWriter, log *zap.Logger) {
+func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.SegmentWriter, log *zap.Logger) {
 	// If we already have a log file for this pod, skip replaying the full
 	// historical log. The stored file already contains the history.
 	var since *metav1.Time
@@ -751,7 +757,7 @@ func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, container
 // streamAPIOnce opens a single follow stream and copies lines to writer until
 // it ends. It returns the wall-clock time of the last line written (zero if
 // none) and a non-nil error if the stream failed to open or ended abnormally.
-func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.FileWriter, log *zap.Logger, since *metav1.Time, probe *jsonProbe, jsonDecided *bool) (time.Time, error) {
+func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.SegmentWriter, log *zap.Logger, since *metav1.Time, probe *jsonProbe, jsonDecided *bool) (time.Time, error) {
 	logOpts := &corev1.PodLogOptions{
 		Container:  containerName,
 		Follow:     true,
@@ -798,7 +804,7 @@ func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containe
 			pod.Namespace, pod.Name, containerName,
 			content,
 		)
-		if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, line); werr != nil {
+		if werr := c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line); werr != nil {
 			return lastLine, fmt.Errorf("write log line: %w", werr)
 		}
 		lastLine = lineTS
@@ -847,13 +853,13 @@ func isJSONLine(line string) bool {
 	return json.Valid([]byte(trimmed))
 }
 
-func (c *Collector) writeLogLine(writer *storage.FileWriter, namespace, pod, line string) error {
-	offset, length, err := writer.WriteWithLocation(line)
+func (c *Collector) writeLogLine(writer *storage.SegmentWriter, namespace, pod, container string, lineTS time.Time, line string) error {
+	segment, offset, length, err := writer.WriteWithLocation(lineTS, line)
 	if err != nil {
 		return err
 	}
 	if c.indexes != nil {
-		c.indexes.ObserveLineAt(namespace, pod, offset, length, line)
+		c.indexes.ObserveLineAt(namespace, pod, container, segment, offset, length, line)
 	}
 	return nil
 }

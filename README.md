@@ -133,12 +133,9 @@ helm install simple-logging simple-logging/simple-logging \
 
 ## Retention
 
-`config.retentionDays` (default 30) controls how long log files are kept. Today this is based on file **mtime**, not log line timestamps: a pod's whole log file is deleted once it has gone `retentionDays` without a new line being written to it, not once its oldest line turns `retentionDays` old. In practice this means:
+`config.retentionDays` (default 30) controls how long log lines are kept. Logs are stored as one file per container per UTC day; retention deletes any day's file once it is strictly older than `retentionDays`, independent of whether the pod is still logging. Worst-case overshoot is under 24 hours (a day's file isn't deleted until the day itself has fully expired), which is the normal reading of "retain for `retentionDays`".
 
-- A pod that logs continuously keeps its full history for as long as it keeps logging, even past `retentionDays`.
-- A pod that stops logging (deleted, scaled down) has its file deleted `retentionDays` after its last line, which is usually what you want but is not a hard per-line cutoff.
-
-A hard, per-line retention cutoff (independent of write activity) is planned but not yet implemented.
+Upgrading from a v0.11 install migrates existing `<namespace>/<pod>.log` files into this layout automatically on first startup (see [Upgrading](#upgrading)); set `MIGRATE_LEGACY=false` to opt out and leave legacy files in place, in which case they're swept by their file modification time instead (matching the old, less precise behaviour) rather than participating in the day-based cutoff.
 
 ## Upgrading
 
@@ -146,6 +143,8 @@ A hard, per-line retention cutoff (independent of write activity) is planned but
 helm repo update
 helm upgrade simple-logging simple-logging/simple-logging --namespace simple-logging
 ```
+
+Upgrading from a v0.11 install (or older) triggers a one-time, automatic migration of existing logs to the current on-disk layout the first time the new version starts. The pod's readiness probe stays failing until migration completes, so `kubectl rollout status` will simply take longer than usual on a large PVC rather than reporting a healthy pod prematurely; existing history is preserved. The PVC itself is reused — no `persistence.claimSuffix` change is needed.
 
 ## Image tags
 

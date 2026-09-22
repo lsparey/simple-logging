@@ -6,78 +6,131 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
-// FileWriter appends log lines to a single pod's log file.
-// It is safe for concurrent use; all writes are serialised by a mutex.
-type FileWriter struct {
-	mu   sync.Mutex
-	path string
-	f    *os.File
+// SegmentWriter appends log lines for one pod's container to daily segment
+// files under <logsRoot>/<namespace>/<pod>/<container>/<date>.log. It rolls
+// over to a new file whenever a written line's own timestamp crosses a UTC
+// day boundary, so retention can delete a whole day's history as a single
+// file removal instead of rewriting a shared file.
+type SegmentWriter struct {
+	mu sync.Mutex
+
+	logsRoot                  string
+	namespace, pod, container string
+
+	f           *os.File
+	segmentDate string // "YYYY-MM-DD" of the currently open segment, "" if none open yet
+
+	hadExistingContent bool
 }
 
-// NewFileWriter opens (or creates) the log file at
-// <logsRoot>/<namespace>/<pod>.log, creating the parent directory if needed.
-func NewFileWriter(logsRoot, namespace, pod string) (*FileWriter, error) {
-	dir := filepath.Join(logsRoot, namespace)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("create log dir %q: %w", dir, err)
-	}
-
-	path := filepath.Join(dir, pod+".log")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+// NewSegmentWriter opens a writer for namespace/pod/container. It does not
+// create a segment file until the first write, since the segment depends on
+// that write's timestamp.
+func NewSegmentWriter(logsRoot, namespace, pod, container string) (*SegmentWriter, error) {
+	segments, err := ListSegments(logsRoot, namespace, pod, container)
 	if err != nil {
-		return nil, fmt.Errorf("open log file %q: %w", path, err)
+		return nil, fmt.Errorf("list segments for %s/%s/%s: %w", namespace, pod, container, err)
 	}
 
-	return &FileWriter{path: path, f: f}, nil
+	w := &SegmentWriter{
+		logsRoot:           logsRoot,
+		namespace:          namespace,
+		pod:                pod,
+		container:          container,
+		hadExistingContent: len(segments) > 0,
+	}
+
+	if err := recordContainerSeen(logsRoot, namespace, pod, container, time.Now().UTC()); err != nil {
+		return nil, fmt.Errorf("record pod meta: %w", err)
+	}
+
+	return w, nil
 }
 
-// Write appends line followed by a newline to the log file.
-func (w *FileWriter) Write(line string) error {
-	_, _, err := w.WriteWithLocation(line)
+// Write appends line, stamped with lineTS, to the appropriate segment.
+func (w *SegmentWriter) Write(lineTS time.Time, line string) error {
+	_, _, _, err := w.WriteWithLocation(lineTS, line)
 	return err
 }
 
-// WriteWithLocation appends a line and returns its byte offset and length in
-// the canonical log file. Indexes store this compact location instead of a
-// second copy of the complete log line.
-func (w *FileWriter) WriteWithLocation(line string) (int64, uint32, error) {
+// WriteWithLocation appends line to the segment for lineTS's UTC date,
+// rolling over from any previously open segment first. It returns the
+// segment's date ("YYYY-MM-DD") and the line's byte offset and length within
+// that segment file, which indexes store instead of a second copy of the line.
+func (w *SegmentWriter) WriteWithLocation(lineTS time.Time, line string) (segment string, offset int64, length uint32, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	offset, err := w.f.Seek(0, io.SeekEnd)
+
+	date := lineTS.UTC().Format(segmentDateForm)
+	if w.f == nil || date != w.segmentDate {
+		if err := w.rollToLocked(date); err != nil {
+			return "", 0, 0, err
+		}
+	}
+
+	off, err := w.f.Seek(0, io.SeekEnd)
 	if err != nil {
-		return 0, 0, err
+		return "", 0, 0, err
 	}
 	written, err := fmt.Fprintln(w.f, line)
 	if err != nil {
-		return 0, 0, err
+		return "", 0, 0, err
 	}
 	if written == 0 {
-		return 0, 0, io.ErrShortWrite
+		return "", 0, 0, io.ErrShortWrite
 	}
-	return offset, uint32(written - 1), nil
+	return w.segmentDate, off, uint32(written - 1), nil
 }
 
-// HasContent reports whether the log file already contains data on disk.
-// Used to decide whether to write a restart separator and whether to skip
-// replaying historical logs from the Kubernetes API.
-func (w *FileWriter) HasContent() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	info, err := w.f.Stat()
+// rollToLocked closes the currently open segment (if any) and opens the
+// segment file for date, creating the container directory if needed. mu must
+// be held by the caller.
+func (w *SegmentWriter) rollToLocked(date string) error {
+	if w.f != nil {
+		if err := w.f.Close(); err != nil {
+			return fmt.Errorf("close previous segment: %w", err)
+		}
+	}
+
+	dir := ContainerDir(w.logsRoot, w.namespace, w.pod, w.container)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create container dir %q: %w", dir, err)
+	}
+
+	path := filepath.Join(dir, date+".log")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		return false
+		return fmt.Errorf("open segment %q: %w", path, err)
 	}
-	return info.Size() > 0
+
+	w.f = f
+	w.segmentDate = date
+	w.hadExistingContent = true
+	return nil
 }
 
-// Close syncs and closes the underlying file.
-func (w *FileWriter) Close() error {
+// HasContent reports whether this pod/container already had log segments on
+// disk before this writer was constructed (or has since written any). Used to
+// decide whether to write a restart separator and whether to skip replaying
+// historical logs from the Kubernetes API.
+func (w *SegmentWriter) HasContent() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	return w.hadExistingContent
+}
+
+// Close syncs and closes the currently open segment, if any.
+func (w *SegmentWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.f == nil {
+		return nil
+	}
 	if err := w.f.Sync(); err != nil {
-		return fmt.Errorf("sync log file %q: %w", w.path, err)
+		return fmt.Errorf("sync segment: %w", err)
 	}
 	return w.f.Close()
 }

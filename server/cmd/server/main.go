@@ -62,6 +62,20 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// ── Storage layout migration ──────────────────────────────────────────────
+	// Runs synchronously before anything else starts (collector, watcher,
+	// server) so the readiness probe stays failing for the duration, and so
+	// nothing reads the logs root mid-migration.
+	if cfg.MigrateLegacy {
+		migrationStart := time.Now()
+		if err := storage.MigrateLegacyLayout(cfg.LogsRoot, log); err != nil {
+			log.Fatal("legacy log layout migration failed", zap.Error(err))
+		}
+		log.Info("legacy log layout migration complete", zap.Duration("took", time.Since(migrationStart)))
+	} else {
+		log.Info("legacy log layout migration disabled (MIGRATE_LEGACY=false)")
+	}
+
 	// ── Phase 4: Kubernetes client & pod watcher ──────────────────────────────
 	cs, err := k8s.NewClientset()
 	if err != nil {
