@@ -62,6 +62,19 @@ type LogService struct {
 	jsonLogging JsonLoggingChecker
 	deployments DeploymentMapper
 	indexes     *indexes.Manager
+
+	// diskHighWaterPercent/diskLowWaterPercent are the configured disk guard
+	// thresholds, reported by ListLogFiles alongside current usage. Zero
+	// until SetDiskWaterMarks is called.
+	diskHighWaterPercent int
+	diskLowWaterPercent  int
+}
+
+// SetDiskWaterMarks records the disk guard's configured thresholds so
+// ListLogFiles can report them alongside current usage.
+func (s *LogService) SetDiskWaterMarks(highPercent, lowPercent int) {
+	s.diskHighWaterPercent = highPercent
+	s.diskLowWaterPercent = lowPercent
 }
 
 // NewLogService creates a LogService backed by files in logsRoot.
@@ -104,11 +117,16 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 
 	pods := make([]*pb.PodInfo, 0, len(podNames))
 	for _, podName := range podNames {
+		containers, err := storage.ListContainers(s.logsRoot, req.Namespace, podName)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "read pod dir %q: %v", podName, err)
+		}
 		pods = append(pods, &pb.PodInfo{
 			Name:        podName,
 			Namespace:   req.Namespace,
 			Active:      s.active.IsActive(req.Namespace, podName),
 			JsonLogging: s.jsonLogging.IsJsonLogging(req.Namespace, podName),
+			Containers:  containers,
 		})
 	}
 
@@ -270,11 +288,19 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 		files = files[:maxListedLogFiles]
 	}
 
+	diskUsedPercent, err := storage.DiskUsedPercent(s.logsRoot)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "check disk usage: %v", err)
+	}
+
 	return &pb.ListLogFilesResponse{
-		Files:               files,
-		TotalSizeBytes:      totalSize,
-		TotalLogFileCount:   totalLogFileCount,
-		TotalIndexFileCount: totalIndexFileCount,
+		Files:                files,
+		TotalSizeBytes:       totalSize,
+		TotalLogFileCount:    totalLogFileCount,
+		TotalIndexFileCount:  totalIndexFileCount,
+		DiskUsedPercent:      int32(diskUsedPercent),
+		DiskHighWaterPercent: int32(s.diskHighWaterPercent),
+		DiskLowWaterPercent:  int32(s.diskLowWaterPercent),
 	}, nil
 }
 

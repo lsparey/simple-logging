@@ -125,6 +125,9 @@ func TestListPods(t *testing.T) {
 	if byName["pod-b"].Active {
 		t.Error("expected pod-b to be inactive")
 	}
+	if containers := byName["pod-a"].Containers; len(containers) != 1 || containers[0] != "app" {
+		t.Errorf("expected pod-a containers = [app], got %v", containers)
+	}
 }
 
 func TestListPods_UnknownNamespace(t *testing.T) {
@@ -136,6 +139,28 @@ func TestListPods_UnknownNamespace(t *testing.T) {
 	}
 	if len(resp.Pods) != 0 {
 		t.Errorf("expected empty pod list for unknown namespace, got %d", len(resp.Pods))
+	}
+}
+
+func TestListPods_ReportsAllContainers(t *testing.T) {
+	dir := t.TempDir()
+	writeLogFile(t, dir, "default", "multi-pod", []string{
+		"2026-05-20T10:00:00Z [default/multi-pod/app] hello",
+		"2026-05-20T10:00:01Z [default/multi-pod/sidecar] hello",
+	})
+
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	resp, err := svc.ListPods(context.Background(), &pb.ListPodsRequest{Namespace: "default"})
+	if err != nil {
+		t.Fatalf("ListPods: %v", err)
+	}
+	if len(resp.Pods) != 1 {
+		t.Fatalf("expected 1 pod, got %d", len(resp.Pods))
+	}
+	want := []string{"app", "sidecar"}
+	got := resp.Pods[0].Containers
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("containers = %v, want %v", got, want)
 	}
 }
 
@@ -230,6 +255,28 @@ func TestListLogFiles(t *testing.T) {
 	}
 	if resp.TotalIndexFileCount != 3 {
 		t.Errorf("total index file count = %d, want 3", resp.TotalIndexFileCount)
+	}
+}
+
+func TestListLogFiles_ReportsDiskUsage(t *testing.T) {
+	dir := t.TempDir()
+	writeLogFile(t, dir, "default", "pod-a", []string{"alpha"})
+
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	svc.SetDiskWaterMarks(90, 80)
+
+	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	if err != nil {
+		t.Fatalf("ListLogFiles: %v", err)
+	}
+	if resp.DiskUsedPercent < 0 || resp.DiskUsedPercent > 100 {
+		t.Errorf("DiskUsedPercent = %d, want a value in [0, 100]", resp.DiskUsedPercent)
+	}
+	if resp.DiskHighWaterPercent != 90 {
+		t.Errorf("DiskHighWaterPercent = %d, want 90", resp.DiskHighWaterPercent)
+	}
+	if resp.DiskLowWaterPercent != 80 {
+		t.Errorf("DiskLowWaterPercent = %d, want 80", resp.DiskLowWaterPercent)
 	}
 }
 

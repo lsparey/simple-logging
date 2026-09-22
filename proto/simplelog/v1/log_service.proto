@@ -76,6 +76,10 @@ message PodInfo {
   bool active = 3;
   // json_logging is true when the pod's log output appears to use JSON formatting.
   bool json_logging = 4;
+  // containers lists the names of containers with persisted logs for this
+  // pod. Every pod has collected exactly one container to date; this is
+  // forward-compatible groundwork for multi-container collection.
+  repeated string containers = 5;
 }
 
 message ListPodsResponse {
@@ -218,6 +222,15 @@ message ListLogFilesResponse {
   int64 total_size_bytes = 2;
   int32 total_log_file_count = 3;
   int32 total_index_file_count = 4;
+
+  // disk_used_percent is the current percentage of the log storage volume in
+  // use. disk_high_water_percent and disk_low_water_percent are the
+  // configured thresholds at which the disk guard starts, and stops,
+  // deleting the oldest log segments (see config.diskHighWaterPercent /
+  // config.diskLowWaterPercent in the Helm chart).
+  int32 disk_used_percent = 5;
+  int32 disk_high_water_percent = 6;
+  int32 disk_low_water_percent = 7;
 }
 
 // ── Indexes ──────────────────────────────────────────────────────────────────

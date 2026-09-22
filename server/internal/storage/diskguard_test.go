@@ -135,11 +135,11 @@ func TestDiskGuard_CleansUpEmptyDirsAfterDeletingLastSegment(t *testing.T) {
 
 func TestDiskUsedPercent_ReturnsSaneValue(t *testing.T) {
 	dir := t.TempDir()
-	percent, err := diskUsedPercent(dir)
+	percent, err := DiskUsedPercent(dir)
 	if err != nil {
-		t.Fatalf("diskUsedPercent: %v", err)
+		t.Fatalf("DiskUsedPercent: %v", err)
 	}
 	if percent < 0 || percent > 100 {
-		t.Errorf("diskUsedPercent = %d, want a value in [0, 100]", percent)
+		t.Errorf("DiskUsedPercent = %d, want a value in [0, 100]", percent)
 	}
 }
