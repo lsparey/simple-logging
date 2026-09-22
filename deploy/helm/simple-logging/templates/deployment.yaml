@@ -13,6 +13,13 @@ metadata:
     {{- include "simple-logging.labels" . | nindent 4 }}
 spec:
   replicas: 1
+  # The app is a hardcoded singleton (replicas: 1 above) and the default PVC
+  # is ReadWriteOnce, so RollingUpdate can strand the new pod in
+  # FailedAttachVolume when it lands on a different node than the old one on
+  # multi-node clusters. Recreate guarantees the old pod fully terminates
+  # (and releases the volume) before the new one is created.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "simple-logging.selectorLabels" . | nindent 6 }}
