@@ -145,6 +145,37 @@ func TestCollectionMode(t *testing.T) {
 	}
 }
 
+func TestLoad_MigrateLegacyDefaultsTrue(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOGS_ROOT", dir)
+	t.Setenv("MIGRATE_LEGACY", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.MigrateLegacy {
+		t.Error("expected MigrateLegacy to default to true")
+	}
+}
+
+func TestLoad_MigrateLegacyDisabled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("LOGS_ROOT", dir)
+	for _, v := range []string{"false", "0"} {
+		t.Run(v, func(t *testing.T) {
+			t.Setenv("MIGRATE_LEGACY", v)
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cfg.MigrateLegacy {
+				t.Errorf("expected MigrateLegacy=false for MIGRATE_LEGACY=%q", v)
+			}
+		})
+	}
+}
+
 func TestLoad_NodeNameFromEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOGS_ROOT", dir)

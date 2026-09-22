@@ -28,6 +28,12 @@ type Config struct {
 	// testing purposes. Defaults to false; set REST_DEBUG=true to enable.
 	RESTDebugEnabled bool
 
+	// MigrateLegacy controls whether the v0.11 single-file-per-pod log layout
+	// is migrated to the segmented layout at startup. Defaults to true; set
+	// MIGRATE_LEGACY=false to leave legacy files untouched (they are then
+	// ignored by the API and swept by mtime, as before Phase 1).
+	MigrateLegacy bool
+
 	// PPROFPort is the port for the Go pprof HTTP server (localhost only).
 	// 0 means disabled (the default). Set PPROF_PORT to enable.
 	PPROFPort int
@@ -79,6 +85,7 @@ func Load() (*Config, error) {
 		RetentionDays:          30,
 		RetentionCheckInterval: 24 * time.Hour,
 		LogLevel:               getEnv("LOG_LEVEL", "info"),
+		MigrateLegacy:          true,
 	}
 
 	if raw := os.Getenv("GRPC_WEB_PORT"); raw != "" {
@@ -107,6 +114,10 @@ func Load() (*Config, error) {
 
 	if raw := os.Getenv("REST_DEBUG"); raw == "true" || raw == "1" {
 		cfg.RESTDebugEnabled = true
+	}
+
+	if raw := os.Getenv("MIGRATE_LEGACY"); raw == "false" || raw == "0" {
+		cfg.MigrateLegacy = false
 	}
 
 	if raw := os.Getenv("PPROF_PORT"); raw != "" {
