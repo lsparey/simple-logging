@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, GetWorkloadLogsRequest, GetWorkloadLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListLogFilesRequest, ListLogFilesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, ListWorkloadsRequest, ListWorkloadsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse, StreamWorkloadLogsRequest, StreamWorkloadLogsResponse } from "./log_service_pb.js";
+import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, GetWorkloadLogsRequest, GetWorkloadLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListLogFilesRequest, ListLogFilesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, ListWorkloadsRequest, ListWorkloadsResponse, SearchLogsRequest, SearchLogsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse, StreamWorkloadLogsRequest, StreamWorkloadLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -214,6 +214,19 @@ export const LogService = {
       I: GetIndexLogsRequest,
       O: GetIndexLogsResponse,
       kind: MethodKind.Unary,
+    },
+    /**
+     * SearchLogs streams log lines matching a substring or regex query across
+     * one or more pods/containers, optionally scoped by namespace, workload, or
+     * time range, and bounded by max_results.
+     *
+     * @generated from rpc simplelog.v1.LogService.SearchLogs
+     */
+    searchLogs: {
+      name: "SearchLogs",
+      I: SearchLogsRequest,
+      O: SearchLogsResponse,
+      kind: MethodKind.ServerStreaming,
     },
   }
 } as const;
