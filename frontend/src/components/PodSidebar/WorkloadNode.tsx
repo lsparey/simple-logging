@@ -14,15 +14,6 @@ interface Props {
   onSelect?: () => void;
 }
 
-const KIND_LABELS: Record<string, string> = {
-  Deployment: 'Deploy',
-  StatefulSet: 'STS',
-  DaemonSet: 'DS',
-  Job: 'Job',
-  CronJob: 'CronJob',
-  Pod: 'Pod',
-};
-
 export default function WorkloadNode({ workload, onSelect }: Props) {
   const { selectedNamespace, selectedWorkloadKind, selectedWorkloadName, setSelectedWorkload, setJsonLogging } = useLogStore();
   const navigate = useNavigate();
@@ -59,12 +50,6 @@ export default function WorkloadNode({ workload, onSelect }: Props) {
             mr: 1,
             flexShrink: 0,
           }}
-        />
-        <Chip
-          label={KIND_LABELS[workload.kind] ?? workload.kind}
-          size="small"
-          variant="outlined"
-          sx={{ height: 18, fontSize: '0.625rem', mr: 1, flexShrink: 0 }}
         />
         <ListItemText
           primary={workload.name}

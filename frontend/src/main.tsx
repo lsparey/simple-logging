@@ -12,6 +12,7 @@ import { useLogStore } from './store/logStore.js';
   const indexMatch = pathname.match(/^\/index\/([^/]+)\/?$/);
   const indexesMatch = pathname.match(/^\/indexes\/?$/);
   const workloadMatch = pathname.match(/^\/ns\/([^/]+)\/([^/]+)\/([^/]+)\/?$/);
+  const nsKindMatch = pathname.match(/^\/ns\/([^/]+)\/([^/]+)\/?$/);
   const nsOnlyMatch = pathname.match(/^\/ns\/([^/]+)\/?$/);
   if (indexMatch) {
     useLogStore.getState().setSelectedIndex(decodeURIComponent(indexMatch[1]));
@@ -23,6 +24,8 @@ import { useLogStore } from './store/logStore.js';
       decodeURIComponent(workloadMatch[2]),
       decodeURIComponent(workloadMatch[3]),
     );
+  } else if (nsKindMatch) {
+    useLogStore.setState({ selectedNamespace: decodeURIComponent(nsKindMatch[1]) });
   } else if (nsOnlyMatch) {
     useLogStore.setState({ selectedNamespace: decodeURIComponent(nsOnlyMatch[1]) });
   }

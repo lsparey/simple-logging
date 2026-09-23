@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -12,24 +12,27 @@ import { useNavigate } from 'react-router-dom';
 import { useWorkloadList } from '../../hooks/useWorkloadList.js';
 import { useLogStore } from '../../store/logStore.js';
 import WorkloadNode from './WorkloadNode.js';
+import type { WorkloadKind } from './sidebarSections.js';
 
 interface Props {
   namespace: string;
-  viewMode: 'workloads';
+  viewMode: WorkloadKind;
   onLeafSelect?: () => void;
 }
 
-export default function NamespaceNode({ namespace, onLeafSelect }: Props) {
+export default function NamespaceNode({ namespace, viewMode, onLeafSelect }: Props) {
   const selectedNamespace = useLogStore((s) => s.selectedNamespace);
   const [open, setOpen] = useState(() => selectedNamespace === namespace);
   const { workloads } = useWorkloadList(open ? namespace : null);
   const navigate = useNavigate();
 
+  const kindWorkloads = useMemo(() => workloads.filter((w) => w.kind === viewMode), [workloads, viewMode]);
+
   function handleClick() {
     const next = !open;
     setOpen(next);
     if (next) {
-      navigate(`/ns/${encodeURIComponent(namespace)}`);
+      navigate(`/ns/${encodeURIComponent(namespace)}/${encodeURIComponent(viewMode)}`);
     }
   }
 
@@ -49,7 +52,7 @@ export default function NamespaceNode({ namespace, onLeafSelect }: Props) {
       </ListItem>
       <Collapse in={open} unmountOnExit>
         <List disablePadding>
-          {workloads.map((w) => (
+          {kindWorkloads.map((w) => (
             <WorkloadNode key={`${w.kind}/${w.name}`} workload={w} onSelect={onLeafSelect} />
           ))}
         </List>
