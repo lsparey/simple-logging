@@ -31,6 +31,7 @@ const WORKLOADS: Record<string, WorkloadFixture[]> = {
   default: [
     { kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-6d8c7f'] },
     { kind: 'Deployment', name: 'api-server', namespace: 'default', active: false, jsonLogging: false, pods: ['api-server-5b4c9e'] },
+    { kind: 'StatefulSet', name: 'cache', namespace: 'default', active: true, jsonLogging: false, pods: ['cache-0'] },
     { kind: 'Pod', name: 'standalone-pod', namespace: 'default', active: true, jsonLogging: false, pods: ['standalone-pod'] },
   ],
   'kube-system': [
@@ -179,6 +180,23 @@ function routes(router: ConnectRouter) {
 
     listWorkloads(req) {
       return { workloads: WORKLOADS[req.namespace] ?? [] };
+    },
+
+    // Every pod individually, regardless of ownership — derived from the
+    // same WORKLOADS fixture, so a pod owned by a Deployment (e.g.
+    // web-app-6d8c7f) appears here too, not just under its Deployment.
+    listPods(req) {
+      const workloads = WORKLOADS[req.namespace] ?? [];
+      const pods = workloads.flatMap((w) =>
+        w.pods.map((podName) => ({
+          name: podName,
+          namespace: req.namespace,
+          active: w.active,
+          jsonLogging: w.jsonLogging,
+          containers: ['app'],
+        })),
+      );
+      return { pods };
     },
 
     getWorkloadLogs(req) {

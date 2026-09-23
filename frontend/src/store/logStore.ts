@@ -20,11 +20,12 @@ interface LogStore {
   selectedWorkloadName: string | null;
   setSelectedWorkload: (namespace: string, kind: string, name: string, jsonLogging?: boolean) => void;
 
-  // Client-side filters over the merged workload log view, applied to
-  // already-fetched lines by parsing each line's "[ns/pod/container]" tag.
-  // null means "no filter" (show every pod/container).
-  selectedPodFilter: string | null;
-  setSelectedPodFilter: (pod: string | null) => void;
+  // Client-side container filter over the merged workload log view, applied
+  // to already-fetched lines by parsing each line's "[ns/pod/container]"
+  // tag. null means "no filter" (show every container). There is no
+  // equivalent pod filter: browsing a single pod's own logs is done by
+  // selecting that pod directly in the sidebar (kind "Pod"), not by
+  // filtering a multi-pod workload's merged view down to one pod.
   selectedContainerFilter: string | null;
   setSelectedContainerFilter: (container: string | null) => void;
 
@@ -118,7 +119,6 @@ export const useLogStore = create<LogStore>((set) => ({
       selectedNamespace: namespace,
       selectedWorkloadKind: kind,
       selectedWorkloadName: name,
-      selectedPodFilter: null,
       selectedContainerFilter: null,
       selectedIndexKey: null,
       selectedIndexValue: '',
@@ -127,8 +127,6 @@ export const useLogStore = create<LogStore>((set) => ({
       selectionKey: s.selectionKey + 1,
     })),
 
-  selectedPodFilter: null,
-  setSelectedPodFilter: (pod) => set({ selectedPodFilter: pod }),
   selectedContainerFilter: null,
   setSelectedContainerFilter: (container) => set({ selectedContainerFilter: container }),
 
@@ -141,7 +139,6 @@ export const useLogStore = create<LogStore>((set) => ({
       selectedNamespace: null,
       selectedWorkloadKind: null,
       selectedWorkloadName: null,
-      selectedPodFilter: null,
       selectedContainerFilter: null,
       selectedIndexKey: '',
       selectedIndexValue: '',
@@ -165,7 +162,6 @@ export const useLogStore = create<LogStore>((set) => ({
       selectedNamespace: null,
       selectedWorkloadKind: null,
       selectedWorkloadName: null,
-      selectedPodFilter: null,
       selectedContainerFilter: null,
       selectedIndexKey: key,
       selectedIndexValue: '',
@@ -249,46 +245,29 @@ export function makeIndexFormatKey(indexKey: string): string {
   return `index:${indexKey}`;
 }
 
-/** Extracts the (pod, container) pair from a line's "[ns/pod/container]" tag. */
-function lineTag(line: string): { pod: string; container: string } | null {
+/** Extracts the container name from a line's "[ns/pod/container]" tag, or null. */
+export function lineContainer(line: string): string | null {
   const start = line.indexOf('[');
   const end = line.indexOf(']', start);
   if (start < 0 || end < 0) return null;
   const parts = line.slice(start + 1, end).split('/');
-  return parts.length === 3 ? { pod: parts[1], container: parts[2] } : null;
+  return parts.length === 3 ? parts[2] : null;
 }
 
-/** Extracts the pod name from a line's "[ns/pod/container]" tag, or null. */
-export function linePod(line: string): string | null {
-  return lineTag(line)?.pod ?? null;
-}
-
-/** Extracts the container name from a line's "[ns/pod/container]" tag, or null. */
-export function lineContainer(line: string): string | null {
-  return lineTag(line)?.container ?? null;
-}
-
-/** Derived: lines filtered by current searchText, selectedPodFilter and selectedContainerFilter */
+/** Derived: lines filtered by current searchText and selectedContainerFilter */
 export function useFilteredLines(): string[] {
   const lines = useLogStore((s) => s.lines);
   const searchText = useLogStore((s) => s.searchText);
-  const podFilter = useLogStore((s) => s.selectedPodFilter);
   const containerFilter = useLogStore((s) => s.selectedContainerFilter);
   return useMemo(() => {
     let result = lines;
-    if (podFilter || containerFilter) {
-      result = result.filter((l) => {
-        const tag = lineTag(l);
-        if (!tag) return false;
-        if (podFilter && tag.pod !== podFilter) return false;
-        if (containerFilter && tag.container !== containerFilter) return false;
-        return true;
-      });
+    if (containerFilter) {
+      result = result.filter((l) => lineContainer(l) === containerFilter);
     }
     if (searchText) {
       const lower = searchText.toLowerCase();
       result = result.filter((l) => l.toLowerCase().includes(lower));
     }
     return result;
-  }, [lines, searchText, podFilter, containerFilter]);
+  }, [lines, searchText, containerFilter]);
 }

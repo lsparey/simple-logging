@@ -103,30 +103,22 @@ export default function LogPanel() {
   const handleScrollUp = useCallback(() => setAutoScroll(false), []);
   const handleScrollBottom = useCallback(() => setAutoScroll(true), []);
 
-  // Resolves a search hit's pod back to the workload that owns it (search
-  // results only carry namespace/pod/container, not the owning workload),
-  // then selects that workload filtered to the hit's pod/container and, if
-  // the hit has a timestamp, narrows the time range to a window around it so
-  // the surrounding context loads instead of just the latest page.
+  // Selects the search hit's own pod directly (kind "Pod" resolves any pod
+  // by name regardless of its real owner), filtered to the hit's container
+  // and, if the hit has a timestamp, with the time range narrowed to a
+  // window around it so the surrounding context loads instead of just the
+  // latest page.
   const handleJumpToContext = useCallback(async (target: JumpTarget) => {
-    let workloadKind = 'Pod';
-    let workloadName = target.pod;
     let jsonLogging: boolean | undefined;
     try {
-      const resp = await logClient.listWorkloads({ namespace: target.namespace });
-      const workload = resp.workloads.find((w) => w.pods.includes(target.pod));
-      if (workload) {
-        workloadKind = workload.kind;
-        workloadName = workload.name;
-        jsonLogging = workload.jsonLogging;
-      }
+      const resp = await logClient.listPods({ namespace: target.namespace });
+      jsonLogging = resp.pods.find((p) => p.name === target.pod)?.jsonLogging;
     } catch {
-      // best-effort: fall back to treating the pod as its own workload
+      // best-effort: default jsonLogging to false on failure
     }
 
     const store = useLogStore.getState();
-    store.setSelectedWorkload(target.namespace, workloadKind, workloadName, jsonLogging);
-    store.setSelectedPodFilter(target.pod);
+    store.setSelectedWorkload(target.namespace, 'Pod', target.pod, jsonLogging);
     store.setSelectedContainerFilter(target.container);
     if (target.tsMs !== null) {
       store.setTimeRange(
@@ -135,7 +127,7 @@ export default function LogPanel() {
       );
     }
     setSearchMode('page');
-    navigate(`/ns/${encodeURIComponent(target.namespace)}/${encodeURIComponent(workloadKind)}/${encodeURIComponent(workloadName)}`);
+    navigate(`/ns/${encodeURIComponent(target.namespace)}/Pod/${encodeURIComponent(target.pod)}`);
   }, [navigate]);
 
   if (!namespace || !kind || !name) {

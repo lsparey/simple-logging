@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
-import { lineContainer, linePod, makeFormatKey, makeIndexFormatKey, useLogStore, useFilteredLines } from './logStore.js';
+import { lineContainer, makeFormatKey, makeIndexFormatKey, useLogStore, useFilteredLines } from './logStore.js';
 
 // Reset the store to a clean state between tests so they don't bleed into each other.
 beforeEach(() => {
@@ -14,7 +14,6 @@ beforeEach(() => {
     selectedNamespace: null,
     selectedWorkloadKind: null,
     selectedWorkloadName: null,
-    selectedPodFilter: null,
     selectedContainerFilter: null,
     startTime: 0,
     endTime: 0,
@@ -25,7 +24,6 @@ afterEach(() => {
   useLogStore.setState({
     lines: [],
     searchText: '',
-    selectedPodFilter: null,
     selectedContainerFilter: null,
   });
 });
@@ -90,20 +88,16 @@ describe('logStore — selection side effects', () => {
     expect(s.selectedWorkloadName).toBe('my-deploy');
   });
 
-  it('setSelectedWorkload resets the pod and container filters', () => {
+  it('setSelectedWorkload resets the container filter', () => {
     act(() => {
       useLogStore.getState().setSelectedWorkload('default', 'Pod', 'pod-a');
-      useLogStore.getState().setSelectedPodFilter('pod-a');
       useLogStore.getState().setSelectedContainerFilter('sidecar');
     });
-    expect(useLogStore.getState().selectedPodFilter).toBe('pod-a');
     expect(useLogStore.getState().selectedContainerFilter).toBe('sidecar');
 
     act(() => useLogStore.getState().setSelectedWorkload('default', 'Deployment', 'my-deploy'));
 
-    const s = useLogStore.getState();
-    expect(s.selectedPodFilter).toBeNull();
-    expect(s.selectedContainerFilter).toBeNull();
+    expect(useLogStore.getState().selectedContainerFilter).toBeNull();
   });
 });
 
@@ -194,17 +188,7 @@ describe('lineContainer', () => {
   });
 });
 
-describe('linePod', () => {
-  it('extracts the pod from a "[ns/pod/container]" tag', () => {
-    expect(linePod('2026-05-20T10:00:00Z [default/my-pod/app] hello')).toBe('my-pod');
-  });
-
-  it('returns null for a line without a bracketed tag', () => {
-    expect(linePod('--- pod restarted at 2026-05-20T10:00:00Z ---')).toBeNull();
-  });
-});
-
-describe('useFilteredLines — pod and container filters', () => {
+describe('useFilteredLines — container filter', () => {
   it('filters to only the selected container', () => {
     act(() => {
       useLogStore.getState().setLines([
@@ -216,19 +200,6 @@ describe('useFilteredLines — pod and container filters', () => {
 
     const { result } = renderHook(() => useFilteredLines());
     expect(result.current).toEqual(['2026-05-20T10:00:01Z [default/pod/sidecar] sidecar line']);
-  });
-
-  it('filters to only the selected pod', () => {
-    act(() => {
-      useLogStore.getState().setLines([
-        '2026-05-20T10:00:00Z [default/pod-a/app] a line',
-        '2026-05-20T10:00:01Z [default/pod-b/app] b line',
-      ]);
-      useLogStore.getState().setSelectedPodFilter('pod-b');
-    });
-
-    const { result } = renderHook(() => useFilteredLines());
-    expect(result.current).toEqual(['2026-05-20T10:00:01Z [default/pod-b/app] b line']);
   });
 
   it('combines the container filter with searchText', () => {
@@ -245,13 +216,12 @@ describe('useFilteredLines — pod and container filters', () => {
     expect(result.current).toEqual(['2026-05-20T10:00:00Z [default/pod/app] error here']);
   });
 
-  it('returns all lines when no filters are set', () => {
+  it('returns all lines when no filter is set', () => {
     act(() => {
       useLogStore.getState().setLines([
         '2026-05-20T10:00:00Z [default/pod/app] a',
         '2026-05-20T10:00:01Z [default/pod/sidecar] b',
       ]);
-      useLogStore.getState().setSelectedPodFilter(null);
       useLogStore.getState().setSelectedContainerFilter(null);
     });
 

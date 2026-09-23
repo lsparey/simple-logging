@@ -20,7 +20,7 @@ export default function IndexSidebar({ onLeafSelect }: Props) {
   }, [indexListVersion, reload]);
 
   return (
-    <Box sx={{ overflow: 'auto', flex: 1 }}>
+    <>
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
           <CircularProgress size={20} />
@@ -39,6 +39,6 @@ export default function IndexSidebar({ onLeafSelect }: Props) {
       <List disablePadding>
         {indexes.map((idx) => <IndexNode key={idx.key} index={idx} onSelect={onLeafSelect} />)}
       </List>
-    </Box>
+    </>
   );
 }

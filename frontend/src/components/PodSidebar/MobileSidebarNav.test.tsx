@@ -8,19 +8,24 @@ import { useLogStore } from '../../store/logStore.js';
 vi.mock('../../hooks/useNamespaces.js', () => ({
   useNamespaces: vi.fn(),
 }));
-vi.mock('../../hooks/useWorkloadList.js', () => ({
-  useWorkloadList: vi.fn(),
+vi.mock('../../hooks/useWorkloadsByNamespace.js', () => ({
+  useWorkloadsByNamespace: vi.fn(),
+}));
+vi.mock('../../hooks/usePodsByNamespace.js', () => ({
+  usePodsByNamespace: vi.fn(),
 }));
 vi.mock('../../hooks/useIndexList.js', () => ({
   useIndexList: vi.fn(),
 }));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
-import { useWorkloadList } from '../../hooks/useWorkloadList.js';
+import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
+import { usePodsByNamespace } from '../../hooks/usePodsByNamespace.js';
 import { useIndexList } from '../../hooks/useIndexList.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
-const mockUseWorkloadList = vi.mocked(useWorkloadList);
+const mockUseWorkloadsByNamespace = vi.mocked(useWorkloadsByNamespace);
+const mockUsePodsByNamespace = vi.mocked(usePodsByNamespace);
 const mockUseIndexList = vi.mocked(useIndexList);
 
 const theme = createTheme();
@@ -35,11 +40,14 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
-  mockUseWorkloadList.mockReturnValue({
-    workloads: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
+  mockUseWorkloadsByNamespace.mockReturnValue({
+    workloadsByNamespace: {
+      default: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
+    },
     loading: false,
     error: null,
   });
+  mockUsePodsByNamespace.mockReturnValue({ podsByNamespace: {}, loading: false, error: null });
   mockUseIndexList.mockReturnValue({
     indexes: [{ key: 'idx1' }],
     loading: false,
@@ -61,18 +69,29 @@ beforeEach(() => {
 });
 
 describe('MobileSidebarNav', () => {
-  it('shows no namespace content until a bottom icon is tapped', () => {
+  it('shows only the Indexes and Workloads bottom icons', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
+    expect(screen.getByRole('button', { name: 'Indexes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workloads' })).toBeInTheDocument();
     expect(screen.queryByText('default')).not.toBeInTheDocument();
   });
 
-  it('opens the overlay to drill into a namespace, and closes it once a workload is picked', async () => {
+  it('tapping Workloads opens the namespace tree', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
-    await waitFor(() => expect(screen.getByText('default')).toBeInTheDocument());
 
+    expect(screen.getByText('default')).toBeInTheDocument();
+  });
+
+  it('drills from the namespace tree into a kind and a workload, closing the overlay once selected', async () => {
+    render(<MobileSidebarNav />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
     fireEvent.click(screen.getByText('default'));
+    await waitFor(() => expect(screen.getByText('Deployments')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Deployments'));
     await waitFor(() => expect(screen.getByText('web-app')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('web-app'));
@@ -80,6 +99,16 @@ describe('MobileSidebarNav', () => {
     await waitFor(() => expect(screen.queryByText('default')).not.toBeInTheDocument());
     expect(useLogStore.getState().selectedWorkloadKind).toBe('Deployment');
     expect(useLogStore.getState().selectedWorkloadName).toBe('web-app');
+  });
+
+  it('the back arrow from the Workloads drawer closes it back to the icons', () => {
+    render(<MobileSidebarNav />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
+    expect(screen.getByText('default')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
   });
 
   it('opens the overlay for Indexes without immediately closing it', async () => {

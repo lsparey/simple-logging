@@ -12,7 +12,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import DownloadIcon from '@mui/icons-material/Download';
-import { useLogStore, makeFormatKey, linePod, lineContainer } from '../../store/logStore.js';
+import { useLogStore, makeFormatKey, lineContainer } from '../../store/logStore.js';
 import JsonFormatModal from './JsonFormatModal.js';
 import LogHistogram from './LogHistogram.js';
 import { candidateJsonKeys } from '../../utils/jsonKeys.js';
@@ -37,8 +37,6 @@ export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveT
     jsonFormats,
     setJsonFormat,
     lines,
-    selectedPodFilter,
-    setSelectedPodFilter,
     selectedContainerFilter,
     setSelectedContainerFilter,
     startTime,
@@ -51,15 +49,6 @@ export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveT
 
   const candidateKeys = useMemo(() => candidateJsonKeys(lines), [lines]);
 
-  const podOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const line of lines) {
-      const pod = linePod(line);
-      if (pod) set.add(pod);
-    }
-    return Array.from(set).sort();
-  }, [lines]);
-
   const containerOptions = useMemo(() => {
     const set = new Set<string>();
     for (const line of lines) {
@@ -70,13 +59,7 @@ export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveT
   }, [lines]);
 
   function handleDownload() {
-    const params = new URLSearchParams({ ns: namespace });
-    if (selectedPodFilter) {
-      params.set('pod', selectedPodFilter);
-    } else {
-      params.set('kind', kind);
-      params.set('name', name);
-    }
+    const params = new URLSearchParams({ ns: namespace, kind, name });
     if (selectedContainerFilter) params.set('container', selectedContainerFilter);
     if (startTime) params.set('from', String(startTime));
     if (endTime) params.set('to', String(endTime));
@@ -134,22 +117,6 @@ export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveT
           label="Live"
           sx={{ ml: 0.5 }}
         />
-
-        {podOptions.length > 1 && (
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <Select
-              value={selectedPodFilter ?? ''}
-              displayEmpty
-              onChange={(e: SelectChangeEvent) => setSelectedPodFilter(e.target.value || null)}
-              inputProps={{ 'aria-label': 'Filter by pod' }}
-            >
-              <MenuItem value="">All pods</MenuItem>
-              {podOptions.map((pod) => (
-                <MenuItem key={pod} value={pod}>{pod}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
 
         {containerOptions.length > 1 && (
           <FormControl size="small" sx={{ minWidth: 150 }}>

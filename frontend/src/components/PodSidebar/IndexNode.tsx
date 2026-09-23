@@ -1,8 +1,7 @@
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import KeyIcon from '@mui/icons-material/Key';
+import Box from '@mui/material/Box';
 import { useNavigate } from 'react-router-dom';
 import type { LogIndexInfo } from '../../gen/simplelog/v1/log_service_pb.js';
 import { useLogStore } from '../../store/logStore.js';
@@ -18,7 +17,7 @@ export default function IndexNode({ index, onSelect }: Props) {
   const selected = selectedIndexKey === index.key;
 
   return (
-    <ListItem disablePadding>
+    <ListItem disablePadding sx={{ pl: 2 }}>
       <ListItemButton
         dense
         selected={selected}
@@ -28,9 +27,17 @@ export default function IndexNode({ index, onSelect }: Props) {
           onSelect?.();
         }}
       >
-        <ListItemIcon sx={{ minWidth: 32 }}>
-          <KeyIcon fontSize="small" />
-        </ListItemIcon>
+        <Box
+          component="span"
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            bgcolor: 'info.main',
+            mr: 1,
+            flexShrink: 0,
+          }}
+        />
         <ListItemText
           primary={index.key}
           slotProps={{ primary: { variant: 'body2', sx: { fontFamily: 'monospace' } } }}

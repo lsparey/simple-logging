@@ -6,22 +6,13 @@ import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorkloadInfo } from '../../gen/simplelog/v1/log_service_pb.js';
+import type { SidebarWorkload } from './sidebarSections.js';
 import { useLogStore } from '../../store/logStore.js';
 
 interface Props {
-  workload: WorkloadInfo;
+  workload: SidebarWorkload;
   onSelect?: () => void;
 }
-
-const KIND_LABELS: Record<string, string> = {
-  Deployment: 'Deploy',
-  StatefulSet: 'STS',
-  DaemonSet: 'DS',
-  Job: 'Job',
-  CronJob: 'CronJob',
-  Pod: 'Pod',
-};
 
 export default function WorkloadNode({ workload, onSelect }: Props) {
   const { selectedNamespace, selectedWorkloadKind, selectedWorkloadName, setSelectedWorkload, setJsonLogging } = useLogStore();
@@ -37,7 +28,7 @@ export default function WorkloadNode({ workload, onSelect }: Props) {
   }, [selected, workload.jsonLogging, setJsonLogging]);
 
   return (
-    <ListItem disablePadding sx={{ pl: 3 }}>
+    <ListItem disablePadding sx={{ pl: 4 }}>
       <ListItemButton
         dense
         selected={selected}
@@ -59,12 +50,6 @@ export default function WorkloadNode({ workload, onSelect }: Props) {
             mr: 1,
             flexShrink: 0,
           }}
-        />
-        <Chip
-          label={KIND_LABELS[workload.kind] ?? workload.kind}
-          size="small"
-          variant="outlined"
-          sx={{ height: 18, fontSize: '0.625rem', mr: 1, flexShrink: 0 }}
         />
         <ListItemText
           primary={workload.name}

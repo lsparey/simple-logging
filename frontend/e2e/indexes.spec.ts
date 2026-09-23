@@ -6,6 +6,26 @@ test.describe('Indexes', () => {
     await page.getByText('Indexes').click();
   });
 
+  test('shows a way to create an index immediately, before any key is selected', async ({ page }) => {
+    // Expanding "Indexes" alone (no key clicked yet) must already switch the
+    // main panel over, since with zero indexes there is no key to click at
+    // all — the Create Index button is the only way in.
+    await expect(page.getByText('Create or select an index to query JSON logs.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Create Index' })).toBeVisible();
+
+    const key = `tempCreateFromEmpty${Date.now()}`;
+    await page.getByRole('button', { name: 'Create Index' }).click();
+    await page.getByLabel('JSON key').fill(key);
+    await page.getByRole('button', { name: 'Create' }).click();
+
+    await expect(page.locator('.MuiChip-root').filter({ hasText: key })).toBeVisible();
+
+    // Clean up so this doesn't leak into other parallel tests sharing the mock server.
+    await page.getByRole('button', { name: /index actions/i }).click();
+    await page.getByRole('menuitem', { name: 'Delete index' }).click();
+    await expect(page.getByText(key)).not.toBeVisible();
+  });
+
   test('lists values by latest activity and drills into matching log messages', async ({ page }) => {
     await page.getByText('companyUuid').click();
 
