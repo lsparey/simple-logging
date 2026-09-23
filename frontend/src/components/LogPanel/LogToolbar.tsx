@@ -7,21 +7,20 @@ import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import { useLogStore, makeFormatKey } from '../../store/logStore.js';
+import { useLogStore, makeFormatKey, linePod, lineContainer } from '../../store/logStore.js';
 import JsonFormatModal from './JsonFormatModal.js';
 import LogHistogram from './LogHistogram.js';
 import { candidateJsonKeys } from '../../utils/jsonKeys.js';
 
 interface Props {
   namespace: string;
-  /** Either `pod` or `deployment` is set, not both. */
-  pod?: string;
-  deployment?: string;
+  kind: string;
+  name: string;
   liveEnabled: boolean;
   onLiveToggle: (on: boolean) => void;
 }
 
-export default function LogToolbar({ namespace, pod, deployment, liveEnabled, onLiveToggle }: Props) {
+export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveToggle }: Props) {
   const {
     searchText,
     setSearchText,
@@ -29,18 +28,35 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
     jsonFormats,
     setJsonFormat,
     lines,
-    selectedPodContainers,
-    selectedContainer,
-    setSelectedContainer,
+    selectedPodFilter,
+    setSelectedPodFilter,
+    selectedContainerFilter,
+    setSelectedContainerFilter,
   } = useLogStore();
   const [modalOpen, setModalOpen] = useState(false);
 
-  const formatKey = makeFormatKey(namespace, pod, deployment);
+  const formatKey = makeFormatKey(namespace, kind, name);
   const jsonFormat = jsonFormats[formatKey] ?? null;
 
-  const label = deployment ? deployment : pod;
-
   const candidateKeys = useMemo(() => candidateJsonKeys(lines), [lines]);
+
+  const podOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const line of lines) {
+      const pod = linePod(line);
+      if (pod) set.add(pod);
+    }
+    return Array.from(set).sort();
+  }, [lines]);
+
+  const containerOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const line of lines) {
+      const container = lineContainer(line);
+      if (container) set.add(container);
+    }
+    return Array.from(set).sort();
+  }, [lines]);
 
   return (
     <>
@@ -57,7 +73,7 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
         }}
       >
         <Chip
-          label={label}
+          label={name}
           size="small"
           variant="outlined"
           sx={{ fontFamily: 'monospace' }}
@@ -94,16 +110,32 @@ export default function LogToolbar({ namespace, pod, deployment, liveEnabled, on
           sx={{ ml: 0.5 }}
         />
 
-        {pod && selectedPodContainers.length > 1 && (
+        {podOptions.length > 1 && (
           <FormControl size="small" sx={{ minWidth: 150 }}>
             <Select
-              value={selectedContainer ?? ''}
+              value={selectedPodFilter ?? ''}
               displayEmpty
-              onChange={(e: SelectChangeEvent) => setSelectedContainer(e.target.value || null)}
+              onChange={(e: SelectChangeEvent) => setSelectedPodFilter(e.target.value || null)}
+              inputProps={{ 'aria-label': 'Filter by pod' }}
+            >
+              <MenuItem value="">All pods</MenuItem>
+              {podOptions.map((pod) => (
+                <MenuItem key={pod} value={pod}>{pod}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+
+        {containerOptions.length > 1 && (
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <Select
+              value={selectedContainerFilter ?? ''}
+              displayEmpty
+              onChange={(e: SelectChangeEvent) => setSelectedContainerFilter(e.target.value || null)}
               inputProps={{ 'aria-label': 'Filter by container' }}
             >
               <MenuItem value="">All containers</MenuItem>
-              {selectedPodContainers.map((container) => (
+              {containerOptions.map((container) => (
                 <MenuItem key={container} value={container}>{container}</MenuItem>
               ))}
             </Select>
