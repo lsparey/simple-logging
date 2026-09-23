@@ -78,6 +78,11 @@ service LogService {
 
   // GetIndexLogs returns log lines whose indexed JSON key matches the value.
   rpc GetIndexLogs(GetIndexLogsRequest) returns (GetIndexLogsResponse);
+
+  // SearchLogs streams log lines matching a substring or regex query across
+  // one or more pods/containers, optionally scoped by namespace, workload, or
+  // time range, and bounded by max_results.
+  rpc SearchLogs(SearchLogsRequest) returns (stream SearchLogsResponse);
 }
 
 // ── ListNamespaces ────────────────────────────────────────────────────────────
@@ -401,4 +406,54 @@ message GetIndexLogsResponse {
   repeated string lines = 1;
   string next_page_token = 2;
   string prev_page_token = 3;
+}
+
+// ── SearchLogs ───────────────────────────────────────────────────────────────
+
+message SearchLogsRequest {
+  // namespace scopes the search to one namespace; "" searches every namespace.
+  string namespace = 1;
+
+  // workload_kind/workload_name scope the search to one workload's pods.
+  // Leave both empty to not scope by workload.
+  string workload_kind = 2;
+  string workload_name = 3;
+
+  // pod scopes the search to one pod. Ignored if workload_kind/workload_name
+  // are set.
+  string pod = 4;
+
+  // container scopes the search to one container name within the selected
+  // pod(s). "" searches every container.
+  string container = 5;
+
+  // query is the text to search for: a case-insensitive substring match, or
+  // an RE2 pattern when regex is true.
+  string query = 6;
+  bool regex = 7;
+
+  // start_time_unix_ms and end_time_unix_ms bound the search by log line
+  // timestamp. 0 means unbounded on that side.
+  int64 start_time_unix_ms = 8;
+  int64 end_time_unix_ms = 9;
+
+  // max_results caps the number of matches returned. Defaults to 1000 if
+  // unset or 0; capped at a server-defined maximum.
+  int32 max_results = 10;
+
+  // newest_first prioritizes scanning the most recent log segments first, so
+  // that when max_results truncates the search, the returned matches are the
+  // most recent ones rather than the oldest.
+  bool newest_first = 11;
+}
+
+message SearchLogsResponse {
+  string line = 1;
+  string namespace = 2;
+  string pod = 3;
+  string container = 4;
+
+  // truncated is set on the final message when max_results was reached
+  // before every matching file was scanned.
+  bool truncated = 5;
 }

@@ -2242,6 +2242,224 @@ func (x *GetIndexLogsResponse) GetPrevPageToken() string {
 	return ""
 }
 
+type SearchLogsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// namespace scopes the search to one namespace; "" searches every namespace.
+	Namespace string `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// workload_kind/workload_name scope the search to one workload's pods.
+	// Leave both empty to not scope by workload.
+	WorkloadKind string `protobuf:"bytes,2,opt,name=workload_kind,json=workloadKind,proto3" json:"workload_kind,omitempty"`
+	WorkloadName string `protobuf:"bytes,3,opt,name=workload_name,json=workloadName,proto3" json:"workload_name,omitempty"`
+	// pod scopes the search to one pod. Ignored if workload_kind/workload_name
+	// are set.
+	Pod string `protobuf:"bytes,4,opt,name=pod,proto3" json:"pod,omitempty"`
+	// container scopes the search to one container name within the selected
+	// pod(s). "" searches every container.
+	Container string `protobuf:"bytes,5,opt,name=container,proto3" json:"container,omitempty"`
+	// query is the text to search for: a case-insensitive substring match, or
+	// an RE2 pattern when regex is true.
+	Query string `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
+	Regex bool   `protobuf:"varint,7,opt,name=regex,proto3" json:"regex,omitempty"`
+	// start_time_unix_ms and end_time_unix_ms bound the search by log line
+	// timestamp. 0 means unbounded on that side.
+	StartTimeUnixMs int64 `protobuf:"varint,8,opt,name=start_time_unix_ms,json=startTimeUnixMs,proto3" json:"start_time_unix_ms,omitempty"`
+	EndTimeUnixMs   int64 `protobuf:"varint,9,opt,name=end_time_unix_ms,json=endTimeUnixMs,proto3" json:"end_time_unix_ms,omitempty"`
+	// max_results caps the number of matches returned. Defaults to 1000 if
+	// unset or 0; capped at a server-defined maximum.
+	MaxResults int32 `protobuf:"varint,10,opt,name=max_results,json=maxResults,proto3" json:"max_results,omitempty"`
+	// newest_first prioritizes scanning the most recent log segments first, so
+	// that when max_results truncates the search, the returned matches are the
+	// most recent ones rather than the oldest.
+	NewestFirst   bool `protobuf:"varint,11,opt,name=newest_first,json=newestFirst,proto3" json:"newest_first,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchLogsRequest) Reset() {
+	*x = SearchLogsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchLogsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchLogsRequest) ProtoMessage() {}
+
+func (x *SearchLogsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchLogsRequest.ProtoReflect.Descriptor instead.
+func (*SearchLogsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *SearchLogsRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *SearchLogsRequest) GetWorkloadKind() string {
+	if x != nil {
+		return x.WorkloadKind
+	}
+	return ""
+}
+
+func (x *SearchLogsRequest) GetWorkloadName() string {
+	if x != nil {
+		return x.WorkloadName
+	}
+	return ""
+}
+
+func (x *SearchLogsRequest) GetPod() string {
+	if x != nil {
+		return x.Pod
+	}
+	return ""
+}
+
+func (x *SearchLogsRequest) GetContainer() string {
+	if x != nil {
+		return x.Container
+	}
+	return ""
+}
+
+func (x *SearchLogsRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *SearchLogsRequest) GetRegex() bool {
+	if x != nil {
+		return x.Regex
+	}
+	return false
+}
+
+func (x *SearchLogsRequest) GetStartTimeUnixMs() int64 {
+	if x != nil {
+		return x.StartTimeUnixMs
+	}
+	return 0
+}
+
+func (x *SearchLogsRequest) GetEndTimeUnixMs() int64 {
+	if x != nil {
+		return x.EndTimeUnixMs
+	}
+	return 0
+}
+
+func (x *SearchLogsRequest) GetMaxResults() int32 {
+	if x != nil {
+		return x.MaxResults
+	}
+	return 0
+}
+
+func (x *SearchLogsRequest) GetNewestFirst() bool {
+	if x != nil {
+		return x.NewestFirst
+	}
+	return false
+}
+
+type SearchLogsResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Line      string                 `protobuf:"bytes,1,opt,name=line,proto3" json:"line,omitempty"`
+	Namespace string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Pod       string                 `protobuf:"bytes,3,opt,name=pod,proto3" json:"pod,omitempty"`
+	Container string                 `protobuf:"bytes,4,opt,name=container,proto3" json:"container,omitempty"`
+	// truncated is set on the final message when max_results was reached
+	// before every matching file was scanned.
+	Truncated     bool `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SearchLogsResponse) Reset() {
+	*x = SearchLogsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SearchLogsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SearchLogsResponse) ProtoMessage() {}
+
+func (x *SearchLogsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SearchLogsResponse.ProtoReflect.Descriptor instead.
+func (*SearchLogsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *SearchLogsResponse) GetLine() string {
+	if x != nil {
+		return x.Line
+	}
+	return ""
+}
+
+func (x *SearchLogsResponse) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *SearchLogsResponse) GetPod() string {
+	if x != nil {
+		return x.Pod
+	}
+	return ""
+}
+
+func (x *SearchLogsResponse) GetContainer() string {
+	if x != nil {
+		return x.Container
+	}
+	return ""
+}
+
+func (x *SearchLogsResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
 var File_simplelog_v1_log_service_proto protoreflect.FileDescriptor
 
 const file_simplelog_v1_log_service_proto_rawDesc = "" +
@@ -2399,7 +2617,27 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\x14GetIndexLogsResponse\x12\x14\n" +
 	"\x05lines\x18\x01 \x03(\tR\x05lines\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12&\n" +
-	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken2\xb5\v\n" +
+	"\x0fprev_page_token\x18\x03 \x01(\tR\rprevPageToken\"\xf1\x02\n" +
+	"\x11SearchLogsRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12#\n" +
+	"\rworkload_kind\x18\x02 \x01(\tR\fworkloadKind\x12#\n" +
+	"\rworkload_name\x18\x03 \x01(\tR\fworkloadName\x12\x10\n" +
+	"\x03pod\x18\x04 \x01(\tR\x03pod\x12\x1c\n" +
+	"\tcontainer\x18\x05 \x01(\tR\tcontainer\x12\x14\n" +
+	"\x05query\x18\x06 \x01(\tR\x05query\x12\x14\n" +
+	"\x05regex\x18\a \x01(\bR\x05regex\x12+\n" +
+	"\x12start_time_unix_ms\x18\b \x01(\x03R\x0fstartTimeUnixMs\x12'\n" +
+	"\x10end_time_unix_ms\x18\t \x01(\x03R\rendTimeUnixMs\x12\x1f\n" +
+	"\vmax_results\x18\n" +
+	" \x01(\x05R\n" +
+	"maxResults\x12!\n" +
+	"\fnewest_first\x18\v \x01(\bR\vnewestFirst\"\x94\x01\n" +
+	"\x12SearchLogsResponse\x12\x12\n" +
+	"\x04line\x18\x01 \x01(\tR\x04line\x12\x1c\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x10\n" +
+	"\x03pod\x18\x03 \x01(\tR\x03pod\x12\x1c\n" +
+	"\tcontainer\x18\x04 \x01(\tR\tcontainer\x12\x1c\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated2\x88\f\n" +
 	"\n" +
 	"LogService\x12[\n" +
 	"\x0eListNamespaces\x12#.simplelog.v1.ListNamespacesRequest\x1a$.simplelog.v1.ListNamespacesResponse\x12I\n" +
@@ -2418,7 +2656,9 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\vCreateIndex\x12 .simplelog.v1.CreateIndexRequest\x1a!.simplelog.v1.CreateIndexResponse\x12R\n" +
 	"\vDeleteIndex\x12 .simplelog.v1.DeleteIndexRequest\x1a!.simplelog.v1.DeleteIndexResponse\x12^\n" +
 	"\x0fListIndexValues\x12$.simplelog.v1.ListIndexValuesRequest\x1a%.simplelog.v1.ListIndexValuesResponse\x12U\n" +
-	"\fGetIndexLogs\x12!.simplelog.v1.GetIndexLogsRequest\x1a\".simplelog.v1.GetIndexLogsResponseB@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
+	"\fGetIndexLogs\x12!.simplelog.v1.GetIndexLogsRequest\x1a\".simplelog.v1.GetIndexLogsResponse\x12Q\n" +
+	"\n" +
+	"SearchLogs\x12\x1f.simplelog.v1.SearchLogsRequest\x1a .simplelog.v1.SearchLogsResponse0\x01B@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
 
 var (
 	file_simplelog_v1_log_service_proto_rawDescOnce sync.Once
@@ -2432,7 +2672,7 @@ func file_simplelog_v1_log_service_proto_rawDescGZIP() []byte {
 	return file_simplelog_v1_log_service_proto_rawDescData
 }
 
-var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*ListNamespacesRequest)(nil),        // 0: simplelog.v1.ListNamespacesRequest
 	(*ListNamespacesResponse)(nil),       // 1: simplelog.v1.ListNamespacesResponse
@@ -2472,6 +2712,8 @@ var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*ListIndexValuesResponse)(nil),      // 35: simplelog.v1.ListIndexValuesResponse
 	(*GetIndexLogsRequest)(nil),          // 36: simplelog.v1.GetIndexLogsRequest
 	(*GetIndexLogsResponse)(nil),         // 37: simplelog.v1.GetIndexLogsResponse
+	(*SearchLogsRequest)(nil),            // 38: simplelog.v1.SearchLogsRequest
+	(*SearchLogsResponse)(nil),           // 39: simplelog.v1.SearchLogsResponse
 }
 var file_simplelog_v1_log_service_proto_depIdxs = []int32{
 	3,  // 0: simplelog.v1.ListPodsResponse.pods:type_name -> simplelog.v1.PodInfo
@@ -2497,24 +2739,26 @@ var file_simplelog_v1_log_service_proto_depIdxs = []int32{
 	31, // 20: simplelog.v1.LogService.DeleteIndex:input_type -> simplelog.v1.DeleteIndexRequest
 	33, // 21: simplelog.v1.LogService.ListIndexValues:input_type -> simplelog.v1.ListIndexValuesRequest
 	36, // 22: simplelog.v1.LogService.GetIndexLogs:input_type -> simplelog.v1.GetIndexLogsRequest
-	1,  // 23: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
-	4,  // 24: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
-	6,  // 25: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
-	8,  // 26: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
-	11, // 27: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
-	13, // 28: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
-	15, // 29: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
-	18, // 30: simplelog.v1.LogService.ListWorkloads:output_type -> simplelog.v1.ListWorkloadsResponse
-	20, // 31: simplelog.v1.LogService.GetWorkloadLogs:output_type -> simplelog.v1.GetWorkloadLogsResponse
-	22, // 32: simplelog.v1.LogService.StreamWorkloadLogs:output_type -> simplelog.v1.StreamWorkloadLogsResponse
-	25, // 33: simplelog.v1.LogService.ListLogFiles:output_type -> simplelog.v1.ListLogFilesResponse
-	28, // 34: simplelog.v1.LogService.ListIndexes:output_type -> simplelog.v1.ListIndexesResponse
-	30, // 35: simplelog.v1.LogService.CreateIndex:output_type -> simplelog.v1.CreateIndexResponse
-	32, // 36: simplelog.v1.LogService.DeleteIndex:output_type -> simplelog.v1.DeleteIndexResponse
-	35, // 37: simplelog.v1.LogService.ListIndexValues:output_type -> simplelog.v1.ListIndexValuesResponse
-	37, // 38: simplelog.v1.LogService.GetIndexLogs:output_type -> simplelog.v1.GetIndexLogsResponse
-	23, // [23:39] is the sub-list for method output_type
-	7,  // [7:23] is the sub-list for method input_type
+	38, // 23: simplelog.v1.LogService.SearchLogs:input_type -> simplelog.v1.SearchLogsRequest
+	1,  // 24: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
+	4,  // 25: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
+	6,  // 26: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
+	8,  // 27: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
+	11, // 28: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
+	13, // 29: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
+	15, // 30: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
+	18, // 31: simplelog.v1.LogService.ListWorkloads:output_type -> simplelog.v1.ListWorkloadsResponse
+	20, // 32: simplelog.v1.LogService.GetWorkloadLogs:output_type -> simplelog.v1.GetWorkloadLogsResponse
+	22, // 33: simplelog.v1.LogService.StreamWorkloadLogs:output_type -> simplelog.v1.StreamWorkloadLogsResponse
+	25, // 34: simplelog.v1.LogService.ListLogFiles:output_type -> simplelog.v1.ListLogFilesResponse
+	28, // 35: simplelog.v1.LogService.ListIndexes:output_type -> simplelog.v1.ListIndexesResponse
+	30, // 36: simplelog.v1.LogService.CreateIndex:output_type -> simplelog.v1.CreateIndexResponse
+	32, // 37: simplelog.v1.LogService.DeleteIndex:output_type -> simplelog.v1.DeleteIndexResponse
+	35, // 38: simplelog.v1.LogService.ListIndexValues:output_type -> simplelog.v1.ListIndexValuesResponse
+	37, // 39: simplelog.v1.LogService.GetIndexLogs:output_type -> simplelog.v1.GetIndexLogsResponse
+	39, // 40: simplelog.v1.LogService.SearchLogs:output_type -> simplelog.v1.SearchLogsResponse
+	24, // [24:41] is the sub-list for method output_type
+	7,  // [7:24] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -2531,7 +2775,7 @@ func file_simplelog_v1_log_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simplelog_v1_log_service_proto_rawDesc), len(file_simplelog_v1_log_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   38,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

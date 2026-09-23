@@ -35,6 +35,7 @@ const (
 	LogService_DeleteIndex_FullMethodName          = "/simplelog.v1.LogService/DeleteIndex"
 	LogService_ListIndexValues_FullMethodName      = "/simplelog.v1.LogService/ListIndexValues"
 	LogService_GetIndexLogs_FullMethodName         = "/simplelog.v1.LogService/GetIndexLogs"
+	LogService_SearchLogs_FullMethodName           = "/simplelog.v1.LogService/SearchLogs"
 )
 
 // LogServiceClient is the client API for LogService service.
@@ -100,6 +101,10 @@ type LogServiceClient interface {
 	ListIndexValues(ctx context.Context, in *ListIndexValuesRequest, opts ...grpc.CallOption) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
 	GetIndexLogs(ctx context.Context, in *GetIndexLogsRequest, opts ...grpc.CallOption) (*GetIndexLogsResponse, error)
+	// SearchLogs streams log lines matching a substring or regex query across
+	// one or more pods/containers, optionally scoped by namespace, workload, or
+	// time range, and bounded by max_results.
+	SearchLogs(ctx context.Context, in *SearchLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SearchLogsResponse], error)
 }
 
 type logServiceClient struct {
@@ -297,6 +302,25 @@ func (c *logServiceClient) GetIndexLogs(ctx context.Context, in *GetIndexLogsReq
 	return out, nil
 }
 
+func (c *logServiceClient) SearchLogs(ctx context.Context, in *SearchLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SearchLogsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &LogService_ServiceDesc.Streams[3], LogService_SearchLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SearchLogsRequest, SearchLogsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_SearchLogsClient = grpc.ServerStreamingClient[SearchLogsResponse]
+
 // LogServiceServer is the server API for LogService service.
 // All implementations should embed UnimplementedLogServiceServer
 // for forward compatibility.
@@ -360,6 +384,10 @@ type LogServiceServer interface {
 	ListIndexValues(context.Context, *ListIndexValuesRequest) (*ListIndexValuesResponse, error)
 	// GetIndexLogs returns log lines whose indexed JSON key matches the value.
 	GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error)
+	// SearchLogs streams log lines matching a substring or regex query across
+	// one or more pods/containers, optionally scoped by namespace, workload, or
+	// time range, and bounded by max_results.
+	SearchLogs(*SearchLogsRequest, grpc.ServerStreamingServer[SearchLogsResponse]) error
 }
 
 // UnimplementedLogServiceServer should be embedded to have
@@ -416,6 +444,9 @@ func (UnimplementedLogServiceServer) ListIndexValues(context.Context, *ListIndex
 }
 func (UnimplementedLogServiceServer) GetIndexLogs(context.Context, *GetIndexLogsRequest) (*GetIndexLogsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIndexLogs not implemented")
+}
+func (UnimplementedLogServiceServer) SearchLogs(*SearchLogsRequest, grpc.ServerStreamingServer[SearchLogsResponse]) error {
+	return status.Error(codes.Unimplemented, "method SearchLogs not implemented")
 }
 func (UnimplementedLogServiceServer) testEmbeddedByValue() {}
 
@@ -704,6 +735,17 @@ func _LogService_GetIndexLogs_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _LogService_SearchLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SearchLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LogServiceServer).SearchLogs(m, &grpc.GenericServerStream[SearchLogsRequest, SearchLogsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_SearchLogsServer = grpc.ServerStreamingServer[SearchLogsResponse]
+
 // LogService_ServiceDesc is the grpc.ServiceDesc for LogService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -778,6 +820,11 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamWorkloadLogs",
 			Handler:       _LogService_StreamWorkloadLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SearchLogs",
+			Handler:       _LogService_SearchLogs_Handler,
 			ServerStreams: true,
 		},
 	},
