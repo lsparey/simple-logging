@@ -19,11 +19,16 @@ interface Props {
 /**
  * Top-level "Indexes" tree row, sitting alongside the namespace folders.
  * Expanding it reveals the index list inline (via IndexSidebar) rather than
- * replacing the rest of the tree — selecting an index key is what actually
- * switches the main panel over (see IndexNode / setSelectedIndex).
+ * replacing the rest of the tree. Unlike a namespace or kind row, opening it
+ * also switches the main panel to IndexPanel (enterIndexMode) — indexes
+ * aren't a pure grouping mechanism the way namespaces/kinds are, and
+ * IndexPanel's own "Create Index" button is the only way to create one when
+ * none exist yet, so it needs to be reachable without first having a key to
+ * click.
  */
 export default function IndexesNode({ onLeafSelect }: Props) {
   const selectedIndexKey = useLogStore((s) => s.selectedIndexKey);
+  const enterIndexMode = useLogStore((s) => s.enterIndexMode);
   const [open, setOpen] = useState(() => selectedIndexKey !== null);
   const navigate = useNavigate();
 
@@ -31,6 +36,7 @@ export default function IndexesNode({ onLeafSelect }: Props) {
     const next = !open;
     setOpen(next);
     if (next) {
+      enterIndexMode();
       navigate('/indexes');
     }
   }
