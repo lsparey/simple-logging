@@ -3,12 +3,12 @@ import { logClient } from '../grpc/client.js';
 import type { WorkloadInfo } from '../gen/simplelog/v1/log_service_pb.js';
 
 /**
- * Fetches every namespace's workloads in parallel, filtered down to kind, so
- * callers can tell upfront which namespaces have anything to show for a
- * given workload kind (rather than discovering it's empty only after the
- * user expands it).
+ * Fetches every namespace's workloads in parallel, optionally filtered down
+ * to one kind, so callers can tell upfront which namespaces have anything to
+ * show (rather than discovering it's empty only after the user expands it).
+ * Omit kind to get every workload of every kind for each namespace.
  */
-export function useWorkloadsByNamespace(namespaces: string[], kind: string) {
+export function useWorkloadsByNamespace(namespaces: string[], kind?: string) {
   const [byNamespace, setByNamespace] = useState<Record<string, WorkloadInfo[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,8 @@ export function useWorkloadsByNamespace(namespaces: string[], kind: string) {
         const results = await Promise.all(
           namespaces.map(async (ns) => {
             const resp = await logClient.listWorkloads({ namespace: ns });
-            return [ns, resp.workloads.filter((w) => w.kind === kind)] as const;
+            const workloads = kind ? resp.workloads.filter((w) => w.kind === kind) : resp.workloads;
+            return [ns, workloads] as const;
           }),
         );
         if (!cancelled) {

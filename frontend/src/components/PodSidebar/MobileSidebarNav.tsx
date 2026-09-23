@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
@@ -13,13 +13,31 @@ import KeyIcon from '@mui/icons-material/Key';
 import CategoryIcon from '@mui/icons-material/Category';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useLogStore } from '../../store/logStore.js';
-import SidebarSectionView from './SidebarSectionView.js';
-import { WORKLOAD_KIND_SECTIONS, inferSectionFromPath, type WorkloadKind } from './sidebarSections.js';
+import WorkloadTree from './WorkloadTree.js';
+import IndexSidebar from './IndexSidebar.js';
+import { inferAreaFromPath } from './sidebarSections.js';
 
 export const MOBILE_NAV_HEIGHT = 56;
 
-// null = closed, 'kindPicker' = choosing a workload kind, otherwise the open section.
-type MobileView = null | 'indexes' | 'kindPicker' | WorkloadKind;
+type MobileView = null | 'indexes' | 'workloads';
+
+function DrawerPane({ label, onBack, children }: { label: string; onBack: () => void; children: ReactNode }) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <List disablePadding>
+        <ListItem disablePadding sx={{ borderBottom: 1, borderColor: 'divider' }}>
+          <ListItemButton onClick={onBack} dense aria-label="Back">
+            <ListItemIcon sx={{ minWidth: 32 }}>
+              <ArrowBackIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary={label} slotProps={{ primary: { variant: 'body2' } }} />
+          </ListItemButton>
+        </ListItem>
+      </List>
+      {children}
+    </Box>
+  );
+}
 
 export default function MobileSidebarNav() {
   const location = useLocation();
@@ -27,9 +45,7 @@ export default function MobileSidebarNav() {
   const { enterIndexMode, leaveIndexMode } = useLogStore();
   const [view, setView] = useState<MobileView>(null);
 
-  const activeSection = inferSectionFromPath(location.pathname);
-  const indexesActive = activeSection === 'indexes';
-  const workloadsActive = activeSection !== null && activeSection !== 'indexes';
+  const activeArea = inferAreaFromPath(location.pathname);
 
   function openIndexes() {
     setView('indexes');
@@ -37,13 +53,9 @@ export default function MobileSidebarNav() {
     navigate('/indexes');
   }
 
-  function openWorkloadsMenu() {
-    setView('kindPicker');
+  function openWorkloads() {
+    setView('workloads');
     leaveIndexMode();
-  }
-
-  function openKind(kind: WorkloadKind) {
-    setView(kind);
   }
 
   function closeDrawer() {
@@ -69,12 +81,12 @@ export default function MobileSidebarNav() {
         }}
       >
         <Tooltip title="Indexes">
-          <IconButton aria-label="Indexes" color={indexesActive ? 'primary' : 'default'} onClick={openIndexes}>
+          <IconButton aria-label="Indexes" color={activeArea === 'indexes' ? 'primary' : 'default'} onClick={openIndexes}>
             <KeyIcon />
           </IconButton>
         </Tooltip>
         <Tooltip title="Workloads">
-          <IconButton aria-label="Workloads" color={workloadsActive ? 'primary' : 'default'} onClick={openWorkloadsMenu}>
+          <IconButton aria-label="Workloads" color={activeArea === 'workloads' ? 'primary' : 'default'} onClick={openWorkloads}>
             <CategoryIcon />
           </IconButton>
         </Tooltip>
@@ -90,39 +102,15 @@ export default function MobileSidebarNav() {
           },
         }}
       >
-        {view === 'kindPicker' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            <List disablePadding>
-              <ListItem disablePadding sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <ListItemButton onClick={closeDrawer} dense aria-label="Back">
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <ArrowBackIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText primary="Workloads" slotProps={{ primary: { variant: 'body2' } }} />
-                </ListItemButton>
-              </ListItem>
-            </List>
-            <List disablePadding>
-              {WORKLOAD_KIND_SECTIONS.map(({ key, label, Icon }) => (
-                <ListItem key={key} disablePadding>
-                  <ListItemButton onClick={() => openKind(key)} dense>
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <Icon fontSize="small" />
-                    </ListItemIcon>
-                    <ListItemText primary={label} slotProps={{ primary: { variant: 'body2' } }} />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        )}
-
         {view === 'indexes' && (
-          <SidebarSectionView section="indexes" onBack={closeDrawer} onLeafSelect={closeDrawer} />
+          <DrawerPane label="Indexes" onBack={closeDrawer}>
+            <IndexSidebar onLeafSelect={closeDrawer} />
+          </DrawerPane>
         )}
-
-        {view !== null && view !== 'kindPicker' && view !== 'indexes' && (
-          <SidebarSectionView section={view} onBack={openWorkloadsMenu} onLeafSelect={closeDrawer} />
+        {view === 'workloads' && (
+          <DrawerPane label="Workloads" onBack={closeDrawer}>
+            <WorkloadTree onLeafSelect={closeDrawer} />
+          </DrawerPane>
         )}
       </Drawer>
     </>

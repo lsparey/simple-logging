@@ -28,7 +28,7 @@ export default function WorkloadNode({ workload, onSelect }: Props) {
   }, [selected, workload.jsonLogging, setJsonLogging]);
 
   return (
-    <ListItem disablePadding sx={{ pl: 3 }}>
+    <ListItem disablePadding sx={{ pl: 4 }}>
       <ListItemButton
         dense
         selected={selected}
