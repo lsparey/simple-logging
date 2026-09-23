@@ -698,3 +698,62 @@ func TestCollector_MultiContainer_JsonLoggingReflectsDefaultContainerOnly(t *tes
 		t.Error("sidecar's plain-text probe must not overwrite the default container's JSON flag")
 	}
 }
+
+func TestCollector_OnAdd_RecordsOwnerInPodMeta(t *testing.T) {
+	logsRoot := t.TempDir()
+
+	pod := makePod("default", "web-app-6d8c7f9c4b-x2f9p")
+	pod.Labels = map[string]string{"pod-template-hash": "6d8c7f9c4b"}
+	pod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "web-app-6d8c7f9c4b"}}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, "", zap.NewNop())
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	// recordOwner runs synchronously in OnAdd, before the per-container
+	// goroutines are started, so meta.json is written by the time OnAdd returns.
+	meta, err := storage.ReadPodMeta(logsRoot, "default", "web-app-6d8c7f9c4b-x2f9p")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if meta.OwnerKind != "Deployment" || meta.OwnerName != "web-app" {
+		t.Errorf("owner = (%q, %q), want (Deployment, web-app)", meta.OwnerKind, meta.OwnerName)
+	}
+}
+
+func TestCollector_OnAdd_RecordsCronJobOwnerInPodMeta(t *testing.T) {
+	logsRoot := t.TempDir()
+
+	pod := makePod("default", "backup-2893471000-x2f9p")
+	pod.OwnerReferences = []metav1.OwnerReference{{Kind: "Job", Name: "backup-2893471000"}}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, "", zap.NewNop())
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	meta, err := storage.ReadPodMeta(logsRoot, "default", "backup-2893471000-x2f9p")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if meta.OwnerKind != "Job" || meta.OwnerName != "backup-2893471000" || meta.CronJobName != "backup" {
+		t.Errorf("meta = %+v, want OwnerKind=Job OwnerName=backup-2893471000 CronJobName=backup", meta)
+	}
+}
+
+func TestCollector_OnAdd_BarePodOwnerIsPod(t *testing.T) {
+	logsRoot := t.TempDir()
+
+	pod := makePod("default", "standalone-pod")
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, "", zap.NewNop())
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	meta, err := storage.ReadPodMeta(logsRoot, "default", "standalone-pod")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if meta.OwnerKind != "Pod" || meta.OwnerName != "standalone-pod" {
+		t.Errorf("owner = (%q, %q), want (Pod, standalone-pod)", meta.OwnerKind, meta.OwnerName)
+	}
+}
