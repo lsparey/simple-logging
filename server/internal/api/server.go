@@ -40,6 +40,7 @@ func NewServer(port int, svc *LogService, enableDebug bool, log *zap.Logger) *Se
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+	mux.HandleFunc("/download", downloadHandler(svc))
 
 	if enableDebug {
 		registerDebugRoutes(mux, svc)
