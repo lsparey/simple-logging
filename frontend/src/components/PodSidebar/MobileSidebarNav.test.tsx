@@ -8,24 +8,19 @@ import { useLogStore } from '../../store/logStore.js';
 vi.mock('../../hooks/useNamespaces.js', () => ({
   useNamespaces: vi.fn(),
 }));
-vi.mock('../../hooks/usePodList.js', () => ({
-  usePodList: vi.fn(),
-}));
-vi.mock('../../hooks/useDeploymentList.js', () => ({
-  useDeploymentList: vi.fn(),
+vi.mock('../../hooks/useWorkloadList.js', () => ({
+  useWorkloadList: vi.fn(),
 }));
 vi.mock('../../hooks/useIndexList.js', () => ({
   useIndexList: vi.fn(),
 }));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
-import { usePodList } from '../../hooks/usePodList.js';
-import { useDeploymentList } from '../../hooks/useDeploymentList.js';
+import { useWorkloadList } from '../../hooks/useWorkloadList.js';
 import { useIndexList } from '../../hooks/useIndexList.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
-const mockUsePodList = vi.mocked(usePodList);
-const mockUseDeploymentList = vi.mocked(useDeploymentList);
+const mockUseWorkloadList = vi.mocked(useWorkloadList);
 const mockUseIndexList = vi.mocked(useIndexList);
 
 const theme = createTheme();
@@ -40,9 +35,8 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
-  mockUsePodList.mockReturnValue({ pods: [], loading: false, error: null });
-  mockUseDeploymentList.mockReturnValue({
-    deployments: [{ name: 'web-app', namespace: 'default', active: true, jsonLogging: false }],
+  mockUseWorkloadList.mockReturnValue({
+    workloads: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
     loading: false,
     error: null,
   });
@@ -55,8 +49,8 @@ beforeEach(() => {
 
   useLogStore.setState({
     selectedNamespace: null,
-    selectedPod: null,
-    selectedDeployment: null,
+    selectedWorkloadKind: null,
+    selectedWorkloadName: null,
     selectedIndexKey: null,
     lines: [],
     searchText: '',
@@ -72,10 +66,10 @@ describe('MobileSidebarNav', () => {
     expect(screen.queryByText('default')).not.toBeInTheDocument();
   });
 
-  it('opens the overlay to drill into a namespace, and closes it once a deployment is picked', async () => {
+  it('opens the overlay to drill into a namespace, and closes it once a workload is picked', async () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Deployments' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
     await waitFor(() => expect(screen.getByText('default')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('default'));
@@ -84,7 +78,8 @@ describe('MobileSidebarNav', () => {
     fireEvent.click(screen.getByText('web-app'));
 
     await waitFor(() => expect(screen.queryByText('default')).not.toBeInTheDocument());
-    expect(useLogStore.getState().selectedDeployment).toBe('web-app');
+    expect(useLogStore.getState().selectedWorkloadKind).toBe('Deployment');
+    expect(useLogStore.getState().selectedWorkloadName).toBe('web-app');
   });
 
   it('opens the overlay for Indexes without immediately closing it', async () => {
