@@ -37,6 +37,21 @@ test.describe('PodSidebar', () => {
     await expect(page.getByText('web-app')).not.toBeVisible();
   });
 
+  test('hides namespaces that have nothing of the chosen kind', async ({ page }) => {
+    // kube-system only has a Deployment in the fixture, so it should not
+    // appear at all under Pods (default has standalone-pod).
+    await page.getByText('Pods').click();
+    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('kube-system')).not.toBeVisible();
+  });
+
+  test('shows "No <Kind>" when nothing in any namespace matches the chosen kind', async ({ page }) => {
+    await page.getByText('StatefulSets').click();
+    await expect(page.getByText('No StatefulSets')).toBeVisible();
+    await expect(page.getByText('default')).not.toBeVisible();
+    await expect(page.getByText('kube-system')).not.toBeVisible();
+  });
+
   test('collapses the namespace list on a second click', async ({ page }) => {
     await page.getByText('Deployments').click();
     await page.getByText('default').click();

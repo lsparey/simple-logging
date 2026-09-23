@@ -14,15 +14,15 @@ import { useLogStore } from '../../store/logStore.js';
 vi.mock('../../hooks/useNamespaces.js', () => ({
   useNamespaces: vi.fn(),
 }));
-vi.mock('../../hooks/useWorkloadList.js', () => ({
-  useWorkloadList: vi.fn(),
+vi.mock('../../hooks/useWorkloadsByNamespace.js', () => ({
+  useWorkloadsByNamespace: vi.fn(),
 }));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
-import { useWorkloadList } from '../../hooks/useWorkloadList.js';
+import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
-const mockUseWorkloadList = vi.mocked(useWorkloadList);
+const mockUseWorkloadsByNamespace = vi.mocked(useWorkloadsByNamespace);
 
 // Minimal MUI theme wrapper so MUI components render without warnings
 const theme = createTheme();
@@ -34,14 +34,22 @@ function Wrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+const WEB_APP = { kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] };
+const COREDNS = { kind: 'Deployment', name: 'coredns', namespace: 'kube-system', active: true, jsonLogging: false, pods: ['coredns-abc'] };
+
 // ---------------------------------------------------------------------------
 // Shared setup
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: no workloads until the namespace is expanded
-  mockUseWorkloadList.mockReturnValue({ workloads: [], loading: false, error: null });
+  // Default: every namespace has at least one matching workload, so section
+  // menu / namespace-list tests don't need to think about the empty state.
+  mockUseWorkloadsByNamespace.mockReturnValue({
+    workloadsByNamespace: { default: [WEB_APP], 'kube-system': [COREDNS] },
+    loading: false,
+    error: null,
+  });
 
   // Reset store selection state
   useLogStore.setState({
@@ -99,6 +107,40 @@ describe('PodSidebar', () => {
     expect(screen.getByText('kube-system')).toBeInTheDocument();
   });
 
+  it('hides namespaces that have nothing of the chosen kind', () => {
+    mockUseNamespaces.mockReturnValue({
+      namespaces: ['default', 'kube-system'],
+      loading: false,
+      error: null,
+    });
+    mockUseWorkloadsByNamespace.mockReturnValue({
+      workloadsByNamespace: { default: [WEB_APP], 'kube-system': [] },
+      loading: false,
+      error: null,
+    });
+    render(<PodSidebar />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText('Deployments'));
+    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.queryByText('kube-system')).not.toBeInTheDocument();
+  });
+
+  it('shows "No <kind>" when nothing has a workload of the chosen kind', () => {
+    mockUseNamespaces.mockReturnValue({
+      namespaces: ['default', 'kube-system'],
+      loading: false,
+      error: null,
+    });
+    mockUseWorkloadsByNamespace.mockReturnValue({
+      workloadsByNamespace: { default: [], 'kube-system': [] },
+      loading: false,
+      error: null,
+    });
+    render(<PodSidebar />, { wrapper: Wrapper });
+    fireEvent.click(screen.getByText('CronJobs'));
+    expect(screen.getByText('No CronJobs')).toBeInTheDocument();
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
+  });
+
   it('shows a back button and the section label after choosing a section, and returns to the menu', () => {
     mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
     render(<PodSidebar />, { wrapper: Wrapper });
@@ -111,24 +153,6 @@ describe('PodSidebar', () => {
     expect(screen.getByText('Deployments')).toBeInTheDocument();
     expect(screen.getByText('Pods')).toBeInTheDocument();
   });
-
-  it('switching kinds shows only that kind\'s workloads', async () => {
-    mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
-    mockUseWorkloadList.mockReturnValue({
-      workloads: [
-        { kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] },
-        { kind: 'Pod', name: 'standalone', namespace: 'default', active: true, jsonLogging: false, pods: ['standalone'] },
-      ],
-      loading: false,
-      error: null,
-    });
-    render(<PodSidebar />, { wrapper: Wrapper });
-
-    fireEvent.click(screen.getByText('Deployments'));
-    fireEvent.click(screen.getByText('default'));
-    await waitFor(() => expect(screen.getByText('web-app')).toBeInTheDocument());
-    expect(screen.queryByText('standalone')).not.toBeInTheDocument();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -137,31 +161,24 @@ describe('PodSidebar', () => {
 
 describe('NamespaceNode', () => {
   it('renders the namespace label', () => {
-    render(<NamespaceNode namespace="default" viewMode="Deployment" />, { wrapper: Wrapper });
+    render(<NamespaceNode namespace="default" viewMode="Deployment" workloads={[]} />, { wrapper: Wrapper });
     expect(screen.getByText('default')).toBeInTheDocument();
   });
 
   it('does not show children before the node is expanded', () => {
-    mockUseWorkloadList.mockReturnValue({
-      workloads: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
-      loading: false,
-      error: null,
-    });
-    render(<NamespaceNode namespace="default" viewMode="Deployment" />, { wrapper: Wrapper });
+    render(<NamespaceNode namespace="default" viewMode="Deployment" workloads={[WEB_APP]} />, { wrapper: Wrapper });
     expect(screen.queryByText('web-app')).not.toBeInTheDocument();
   });
 
-  it('shows workloads of the matching kind after expanding the namespace', async () => {
-    mockUseWorkloadList.mockReturnValue({
-      workloads: [
-        { kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] },
-        { kind: 'Deployment', name: 'api-server', namespace: 'default', active: false, jsonLogging: false, pods: ['api-server-abc'] },
-        { kind: 'StatefulSet', name: 'cache', namespace: 'default', active: true, jsonLogging: false, pods: ['cache-0'] },
-      ],
-      loading: false,
-      error: null,
-    });
-    render(<NamespaceNode namespace="default" viewMode="Deployment" />, { wrapper: Wrapper });
+  it('shows the given workloads after expanding the namespace', async () => {
+    render(
+      <NamespaceNode
+        namespace="default"
+        viewMode="Deployment"
+        workloads={[WEB_APP, { ...WEB_APP, name: 'api-server' }]}
+      />,
+      { wrapper: Wrapper },
+    );
 
     fireEvent.click(screen.getByText('default'));
 
@@ -169,19 +186,20 @@ describe('NamespaceNode', () => {
       expect(screen.getByText('web-app')).toBeInTheDocument();
       expect(screen.getByText('api-server')).toBeInTheDocument();
     });
-    expect(screen.queryByText('cache')).not.toBeInTheDocument();
   });
 
   it('shows a pod-count badge only for workloads with more than one pod', async () => {
-    mockUseWorkloadList.mockReturnValue({
-      workloads: [
-        { kind: 'Pod', name: 'single-pod-workload', namespace: 'default', active: true, jsonLogging: false, pods: ['single-pod-workload'] },
-        { kind: 'Pod', name: 'other-pod', namespace: 'default', active: true, jsonLogging: false, pods: ['other-pod'] },
-      ],
-      loading: false,
-      error: null,
-    });
-    render(<NamespaceNode namespace="default" viewMode="Pod" />, { wrapper: Wrapper });
+    render(
+      <NamespaceNode
+        namespace="default"
+        viewMode="Pod"
+        workloads={[
+          { kind: 'Pod', name: 'single-pod-workload', namespace: 'default', active: true, jsonLogging: false, pods: ['single-pod-workload'] },
+          { kind: 'Pod', name: 'other-pod', namespace: 'default', active: true, jsonLogging: false, pods: ['other-pod'] },
+        ]}
+      />,
+      { wrapper: Wrapper },
+    );
     fireEvent.click(screen.getByText('default'));
 
     await waitFor(() => {
@@ -192,12 +210,7 @@ describe('NamespaceNode', () => {
   });
 
   it('collapses back after a second click', async () => {
-    mockUseWorkloadList.mockReturnValue({
-      workloads: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
-      loading: false,
-      error: null,
-    });
-    render(<NamespaceNode namespace="default" viewMode="Deployment" />, { wrapper: Wrapper });
+    render(<NamespaceNode namespace="default" viewMode="Deployment" workloads={[WEB_APP]} />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByText('default')); // expand
     await waitFor(() => expect(screen.getByText('web-app')).toBeInTheDocument());
@@ -213,12 +226,7 @@ describe('NamespaceNode', () => {
 
 describe('NamespaceNode — workload selection', () => {
   it('selecting a workload updates the store', async () => {
-    mockUseWorkloadList.mockReturnValue({
-      workloads: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
-      loading: false,
-      error: null,
-    });
-    render(<NamespaceNode namespace="default" viewMode="Deployment" />, { wrapper: Wrapper });
+    render(<NamespaceNode namespace="default" viewMode="Deployment" workloads={[WEB_APP]} />, { wrapper: Wrapper });
     fireEvent.click(screen.getByText('default'));
 
     await waitFor(() => expect(screen.getByText('web-app')).toBeInTheDocument());

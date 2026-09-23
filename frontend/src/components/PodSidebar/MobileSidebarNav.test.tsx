@@ -8,19 +8,19 @@ import { useLogStore } from '../../store/logStore.js';
 vi.mock('../../hooks/useNamespaces.js', () => ({
   useNamespaces: vi.fn(),
 }));
-vi.mock('../../hooks/useWorkloadList.js', () => ({
-  useWorkloadList: vi.fn(),
+vi.mock('../../hooks/useWorkloadsByNamespace.js', () => ({
+  useWorkloadsByNamespace: vi.fn(),
 }));
 vi.mock('../../hooks/useIndexList.js', () => ({
   useIndexList: vi.fn(),
 }));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
-import { useWorkloadList } from '../../hooks/useWorkloadList.js';
+import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
 import { useIndexList } from '../../hooks/useIndexList.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
-const mockUseWorkloadList = vi.mocked(useWorkloadList);
+const mockUseWorkloadsByNamespace = vi.mocked(useWorkloadsByNamespace);
 const mockUseIndexList = vi.mocked(useIndexList);
 
 const theme = createTheme();
@@ -35,8 +35,10 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
-  mockUseWorkloadList.mockReturnValue({
-    workloads: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
+  mockUseWorkloadsByNamespace.mockReturnValue({
+    workloadsByNamespace: {
+      default: [{ kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] }],
+    },
     loading: false,
     error: null,
   });
