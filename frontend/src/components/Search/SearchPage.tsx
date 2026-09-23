@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
@@ -10,6 +11,7 @@ import Chip from '@mui/material/Chip';
 import Alert from '@mui/material/Alert';
 import { logClient } from '../../grpc/client.js';
 import type { SearchLogsResponse } from '../../gen/simplelog/v1/log_service_pb.js';
+import { useLogStore } from '../../store/logStore.js';
 import { highlightMatches } from '../../utils/highlightMatches.js';
 import { formatDateTime } from '../../utils/formatDateTime.js';
 
@@ -22,24 +24,17 @@ function splitLine(line: string): { tsMs: number | null; message: string } {
   return { tsMs: Number.isNaN(parsed) ? null : parsed, message: m[2] };
 }
 
-export interface JumpTarget {
-  namespace: string;
-  pod: string;
-  container: string;
-  tsMs: number | null;
-}
+// How far around a search hit's timestamp to load when jumping to context,
+// so the surrounding lines are visible without pulling in unrelated history.
+const JUMP_CONTEXT_WINDOW_MS = 5 * 60 * 1000;
 
-interface Props {
-  namespace: string;
-  kind: string;
-  name: string;
-  onJumpToContext: (target: JumpTarget) => void;
-}
-
-export default function SearchPanel({ namespace, kind, name, onJumpToContext }: Props) {
+export default function SearchPage() {
+  const navigate = useNavigate();
+  const [namespace, setNamespace] = useState('');
+  const [workloadKind, setWorkloadKind] = useState('');
+  const [workloadName, setWorkloadName] = useState('');
   const [query, setQuery] = useState('');
   const [regex, setRegex] = useState(false);
-  const [everywhere, setEverywhere] = useState(false);
   const [newestFirst, setNewestFirst] = useState(true);
   const [results, setResults] = useState<SearchLogsResponse[]>([]);
   const [searching, setSearching] = useState(false);
@@ -60,9 +55,9 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
     try {
       const stream = logClient.searchLogs(
         {
-          namespace: everywhere ? '' : namespace,
-          workloadKind: everywhere ? '' : kind,
-          workloadName: everywhere ? '' : name,
+          namespace: namespace.trim(),
+          workloadKind: workloadKind.trim(),
+          workloadName: workloadName.trim(),
           query,
           regex,
           newestFirst,
@@ -81,12 +76,42 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
     } finally {
       if (!controller.signal.aborted) setSearching(false);
     }
-  }, [namespace, kind, name, query, regex, everywhere, newestFirst]);
+  }, [namespace, workloadKind, workloadName, query, regex, newestFirst]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Selects a hit's own pod directly (kind "Pod" resolves any pod by name
+  // regardless of its real owner), filtered to the hit's container and, if
+  // the hit has a timestamp, with the time range narrowed to a window
+  // around it so the surrounding context loads instead of just the latest
+  // page.
+  const jumpToContext = useCallback(async (target: { namespace: string; pod: string; container: string; tsMs: number | null }) => {
+    let jsonLogging: boolean | undefined;
+    try {
+      const resp = await logClient.listPods({ namespace: target.namespace });
+      jsonLogging = resp.pods.find((p) => p.name === target.pod)?.jsonLogging;
+    } catch {
+      // best-effort: default jsonLogging to false on failure
+    }
+
+    const store = useLogStore.getState();
+    store.setSelectedWorkload(target.namespace, 'Pod', target.pod, jsonLogging);
+    store.setSelectedContainerFilter(target.container);
+    if (target.tsMs !== null) {
+      store.setTimeRange(
+        Math.floor((target.tsMs - JUMP_CONTEXT_WINDOW_MS) / 1000),
+        Math.floor((target.tsMs + JUMP_CONTEXT_WINDOW_MS) / 1000),
+      );
+    }
+    navigate(`/ns/${encodeURIComponent(target.namespace)}/Pod/${encodeURIComponent(target.pod)}`);
+  }, [navigate]);
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+        <Typography variant="h6">Search</Typography>
+      </Box>
+
       <Box
         sx={{
           display: 'flex',
@@ -94,14 +119,38 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
           alignItems: 'center',
           gap: 1.5,
           px: 2,
-          py: 1,
+          py: 1.5,
           borderBottom: 1,
           borderColor: 'divider',
         }}
       >
         <TextField
           size="small"
-          placeholder="Search server-side…"
+          label="Namespace"
+          placeholder="All"
+          value={namespace}
+          onChange={(e) => setNamespace(e.target.value)}
+          sx={{ width: 160 }}
+        />
+        <TextField
+          size="small"
+          label="Workload kind"
+          placeholder="Any"
+          value={workloadKind}
+          onChange={(e) => setWorkloadKind(e.target.value)}
+          sx={{ width: 160 }}
+        />
+        <TextField
+          size="small"
+          label="Workload name"
+          placeholder="Any"
+          value={workloadName}
+          onChange={(e) => setWorkloadName(e.target.value)}
+          sx={{ width: 160 }}
+        />
+        <TextField
+          size="small"
+          placeholder="Query…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -112,10 +161,6 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
         <FormControlLabel
           control={<Checkbox size="small" checked={regex} onChange={(e) => setRegex(e.target.checked)} />}
           label="Regex"
-        />
-        <FormControlLabel
-          control={<Checkbox size="small" checked={everywhere} onChange={(e) => setEverywhere(e.target.checked)} />}
-          label="Everywhere"
         />
         <FormControlLabel
           control={<Checkbox size="small" checked={newestFirst} onChange={(e) => setNewestFirst(e.target.checked)} />}
@@ -131,7 +176,7 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
         {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
         {!searching && !error && results.length === 0 && (
           <Typography variant="body2" color="text.disabled">
-            {query ? 'No matches yet.' : 'Enter a query and press Search.'}
+            {query ? 'No matches yet.' : 'Enter a query and press Search. Leave namespace/kind/name blank to search everywhere.'}
           </Typography>
         )}
         {results.map((r, i) => {
@@ -139,7 +184,7 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
           return (
             <Box
               key={i}
-              onClick={() => onJumpToContext({ namespace: r.namespace, pod: r.pod, container: r.container, tsMs })}
+              onClick={() => jumpToContext({ namespace: r.namespace, pod: r.pod, container: r.container, tsMs })}
               sx={{
                 display: 'flex',
                 gap: 1,
@@ -156,7 +201,7 @@ export default function SearchPanel({ namespace, kind, name, onJumpToContext }: 
               <Typography variant="caption" color="text.disabled" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {tsMs !== null ? formatDateTime(BigInt(tsMs)) : ''}
               </Typography>
-              <Chip label={`${r.pod}/${r.container}`} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem', flexShrink: 0 }} />
+              <Chip label={`${r.namespace}/${r.pod}/${r.container}`} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem', flexShrink: 0 }} />
               <Typography component="span" variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', wordBreak: 'break-word' }}>
                 {highlightMatches(message, query, regex)}
               </Typography>
