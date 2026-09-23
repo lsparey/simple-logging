@@ -124,7 +124,7 @@ func main() {
 	go diskGuard.Run(ctx)
 
 	// ── Phase 8/9: gRPC Service & gRPC-Web Server ───────────────────
-	svc := api.NewLogServiceWithIndexes(cfg.LogsRoot, coll, coll, coll, indexManager)
+	svc := api.NewLogServiceWithIndexes(cfg.LogsRoot, coll, coll, indexManager)
 	svc.SetDiskWaterMarks(cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent)
 	srv := api.NewServer(cfg.GRPCWebPort, svc, cfg.RESTDebugEnabled, log)
 

@@ -26,6 +26,9 @@ const (
 	LogService_ListDeployments_FullMethodName      = "/simplelog.v1.LogService/ListDeployments"
 	LogService_GetDeploymentLogs_FullMethodName    = "/simplelog.v1.LogService/GetDeploymentLogs"
 	LogService_StreamDeploymentLogs_FullMethodName = "/simplelog.v1.LogService/StreamDeploymentLogs"
+	LogService_ListWorkloads_FullMethodName        = "/simplelog.v1.LogService/ListWorkloads"
+	LogService_GetWorkloadLogs_FullMethodName      = "/simplelog.v1.LogService/GetWorkloadLogs"
+	LogService_StreamWorkloadLogs_FullMethodName   = "/simplelog.v1.LogService/StreamWorkloadLogs"
 	LogService_ListLogFiles_FullMethodName         = "/simplelog.v1.LogService/ListLogFiles"
 	LogService_ListIndexes_FullMethodName          = "/simplelog.v1.LogService/ListIndexes"
 	LogService_CreateIndex_FullMethodName          = "/simplelog.v1.LogService/CreateIndex"
@@ -54,14 +57,37 @@ type LogServiceClient interface {
 	StreamLogs(ctx context.Context, in *StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamLogsResponse], error)
 	// ListDeployments returns all deployments (groups of pods sharing the same
 	// deployment name) within a namespace for which log files exist.
+	//
+	// Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
+	// thin wrapper for one release before removal.
 	ListDeployments(ctx context.Context, in *ListDeploymentsRequest, opts ...grpc.CallOption) (*ListDeploymentsResponse, error)
 	// GetDeploymentLogs returns a paginated, optionally time-filtered page of
 	// log lines merged from all pods belonging to a deployment, sorted by time.
+	//
+	// Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
+	// a thin wrapper for one release before removal.
 	GetDeploymentLogs(ctx context.Context, in *GetDeploymentLogsRequest, opts ...grpc.CallOption) (*GetDeploymentLogsResponse, error)
 	// StreamDeploymentLogs tails all active pods for a deployment and streams
 	// merged log lines in real time. The stream stays open until the client
 	// cancels it.
+	//
+	// Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
+	// as a thin wrapper for one release before removal.
 	StreamDeploymentLogs(ctx context.Context, in *StreamDeploymentLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamDeploymentLogsResponse], error)
+	// ListWorkloads returns every workload (a group of pods sharing the same
+	// owner, resolved from each pod's ownerReferences) within a namespace:
+	// Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
+	// created by a CronJob run is listed under both its own Job entry and its
+	// CronJob's entry.
+	ListWorkloads(ctx context.Context, in *ListWorkloadsRequest, opts ...grpc.CallOption) (*ListWorkloadsResponse, error)
+	// GetWorkloadLogs returns a paginated, optionally time-filtered page of log
+	// lines merged from every pod and container belonging to a workload,
+	// sorted by time.
+	GetWorkloadLogs(ctx context.Context, in *GetWorkloadLogsRequest, opts ...grpc.CallOption) (*GetWorkloadLogsResponse, error)
+	// StreamWorkloadLogs tails all active pods for a workload and streams
+	// merged log lines in real time. The stream stays open until the client
+	// cancels it.
+	StreamWorkloadLogs(ctx context.Context, in *StreamWorkloadLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamWorkloadLogsResponse], error)
 	// ListLogFiles returns every persisted pod log and index file with metadata.
 	ListLogFiles(ctx context.Context, in *ListLogFilesRequest, opts ...grpc.CallOption) (*ListLogFilesResponse, error)
 	// ListIndexes returns all JSON log indexes configured on disk.
@@ -172,6 +198,45 @@ func (c *logServiceClient) StreamDeploymentLogs(ctx context.Context, in *StreamD
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LogService_StreamDeploymentLogsClient = grpc.ServerStreamingClient[StreamDeploymentLogsResponse]
 
+func (c *logServiceClient) ListWorkloads(ctx context.Context, in *ListWorkloadsRequest, opts ...grpc.CallOption) (*ListWorkloadsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListWorkloadsResponse)
+	err := c.cc.Invoke(ctx, LogService_ListWorkloads_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logServiceClient) GetWorkloadLogs(ctx context.Context, in *GetWorkloadLogsRequest, opts ...grpc.CallOption) (*GetWorkloadLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetWorkloadLogsResponse)
+	err := c.cc.Invoke(ctx, LogService_GetWorkloadLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *logServiceClient) StreamWorkloadLogs(ctx context.Context, in *StreamWorkloadLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[StreamWorkloadLogsResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &LogService_ServiceDesc.Streams[2], LogService_StreamWorkloadLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[StreamWorkloadLogsRequest, StreamWorkloadLogsResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_StreamWorkloadLogsClient = grpc.ServerStreamingClient[StreamWorkloadLogsResponse]
+
 func (c *logServiceClient) ListLogFiles(ctx context.Context, in *ListLogFilesRequest, opts ...grpc.CallOption) (*ListLogFilesResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListLogFilesResponse)
@@ -252,14 +317,37 @@ type LogServiceServer interface {
 	StreamLogs(*StreamLogsRequest, grpc.ServerStreamingServer[StreamLogsResponse]) error
 	// ListDeployments returns all deployments (groups of pods sharing the same
 	// deployment name) within a namespace for which log files exist.
+	//
+	// Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
+	// thin wrapper for one release before removal.
 	ListDeployments(context.Context, *ListDeploymentsRequest) (*ListDeploymentsResponse, error)
 	// GetDeploymentLogs returns a paginated, optionally time-filtered page of
 	// log lines merged from all pods belonging to a deployment, sorted by time.
+	//
+	// Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
+	// a thin wrapper for one release before removal.
 	GetDeploymentLogs(context.Context, *GetDeploymentLogsRequest) (*GetDeploymentLogsResponse, error)
 	// StreamDeploymentLogs tails all active pods for a deployment and streams
 	// merged log lines in real time. The stream stays open until the client
 	// cancels it.
+	//
+	// Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
+	// as a thin wrapper for one release before removal.
 	StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error
+	// ListWorkloads returns every workload (a group of pods sharing the same
+	// owner, resolved from each pod's ownerReferences) within a namespace:
+	// Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
+	// created by a CronJob run is listed under both its own Job entry and its
+	// CronJob's entry.
+	ListWorkloads(context.Context, *ListWorkloadsRequest) (*ListWorkloadsResponse, error)
+	// GetWorkloadLogs returns a paginated, optionally time-filtered page of log
+	// lines merged from every pod and container belonging to a workload,
+	// sorted by time.
+	GetWorkloadLogs(context.Context, *GetWorkloadLogsRequest) (*GetWorkloadLogsResponse, error)
+	// StreamWorkloadLogs tails all active pods for a workload and streams
+	// merged log lines in real time. The stream stays open until the client
+	// cancels it.
+	StreamWorkloadLogs(*StreamWorkloadLogsRequest, grpc.ServerStreamingServer[StreamWorkloadLogsResponse]) error
 	// ListLogFiles returns every persisted pod log and index file with metadata.
 	ListLogFiles(context.Context, *ListLogFilesRequest) (*ListLogFilesResponse, error)
 	// ListIndexes returns all JSON log indexes configured on disk.
@@ -301,6 +389,15 @@ func (UnimplementedLogServiceServer) GetDeploymentLogs(context.Context, *GetDepl
 }
 func (UnimplementedLogServiceServer) StreamDeploymentLogs(*StreamDeploymentLogsRequest, grpc.ServerStreamingServer[StreamDeploymentLogsResponse]) error {
 	return status.Error(codes.Unimplemented, "method StreamDeploymentLogs not implemented")
+}
+func (UnimplementedLogServiceServer) ListWorkloads(context.Context, *ListWorkloadsRequest) (*ListWorkloadsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListWorkloads not implemented")
+}
+func (UnimplementedLogServiceServer) GetWorkloadLogs(context.Context, *GetWorkloadLogsRequest) (*GetWorkloadLogsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetWorkloadLogs not implemented")
+}
+func (UnimplementedLogServiceServer) StreamWorkloadLogs(*StreamWorkloadLogsRequest, grpc.ServerStreamingServer[StreamWorkloadLogsResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamWorkloadLogs not implemented")
 }
 func (UnimplementedLogServiceServer) ListLogFiles(context.Context, *ListLogFilesRequest) (*ListLogFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListLogFiles not implemented")
@@ -452,6 +549,53 @@ func _LogService_StreamDeploymentLogs_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type LogService_StreamDeploymentLogsServer = grpc.ServerStreamingServer[StreamDeploymentLogsResponse]
 
+func _LogService_ListWorkloads_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListWorkloadsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).ListWorkloads(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_ListWorkloads_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).ListWorkloads(ctx, req.(*ListWorkloadsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogService_GetWorkloadLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkloadLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(LogServiceServer).GetWorkloadLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: LogService_GetWorkloadLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(LogServiceServer).GetWorkloadLogs(ctx, req.(*GetWorkloadLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _LogService_StreamWorkloadLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamWorkloadLogsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(LogServiceServer).StreamWorkloadLogs(m, &grpc.GenericServerStream[StreamWorkloadLogsRequest, StreamWorkloadLogsResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type LogService_StreamWorkloadLogsServer = grpc.ServerStreamingServer[StreamWorkloadLogsResponse]
+
 func _LogService_ListLogFiles_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListLogFilesRequest)
 	if err := dec(in); err != nil {
@@ -588,6 +732,14 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _LogService_GetDeploymentLogs_Handler,
 		},
 		{
+			MethodName: "ListWorkloads",
+			Handler:    _LogService_ListWorkloads_Handler,
+		},
+		{
+			MethodName: "GetWorkloadLogs",
+			Handler:    _LogService_GetWorkloadLogs_Handler,
+		},
+		{
 			MethodName: "ListLogFiles",
 			Handler:    _LogService_ListLogFiles_Handler,
 		},
@@ -621,6 +773,11 @@ var LogService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamDeploymentLogs",
 			Handler:       _LogService_StreamDeploymentLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamWorkloadLogs",
+			Handler:       _LogService_StreamWorkloadLogs_Handler,
 			ServerStreams: true,
 		},
 	},

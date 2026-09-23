@@ -24,16 +24,42 @@ service LogService {
 
   // ListDeployments returns all deployments (groups of pods sharing the same
   // deployment name) within a namespace for which log files exist.
+  //
+  // Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
+  // thin wrapper for one release before removal.
   rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse);
 
   // GetDeploymentLogs returns a paginated, optionally time-filtered page of
   // log lines merged from all pods belonging to a deployment, sorted by time.
+  //
+  // Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
+  // a thin wrapper for one release before removal.
   rpc GetDeploymentLogs(GetDeploymentLogsRequest) returns (GetDeploymentLogsResponse);
 
   // StreamDeploymentLogs tails all active pods for a deployment and streams
   // merged log lines in real time. The stream stays open until the client
   // cancels it.
+  //
+  // Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
+  // as a thin wrapper for one release before removal.
   rpc StreamDeploymentLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse);
+
+  // ListWorkloads returns every workload (a group of pods sharing the same
+  // owner, resolved from each pod's ownerReferences) within a namespace:
+  // Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
+  // created by a CronJob run is listed under both its own Job entry and its
+  // CronJob's entry.
+  rpc ListWorkloads(ListWorkloadsRequest) returns (ListWorkloadsResponse);
+
+  // GetWorkloadLogs returns a paginated, optionally time-filtered page of log
+  // lines merged from every pod and container belonging to a workload,
+  // sorted by time.
+  rpc GetWorkloadLogs(GetWorkloadLogsRequest) returns (GetWorkloadLogsResponse);
+
+  // StreamWorkloadLogs tails all active pods for a workload and streams
+  // merged log lines in real time. The stream stays open until the client
+  // cancels it.
+  rpc StreamWorkloadLogs(StreamWorkloadLogsRequest) returns (stream StreamWorkloadLogsResponse);
 
   // ListLogFiles returns every persisted pod log and index file with metadata.
   rpc ListLogFiles(ListLogFilesRequest) returns (ListLogFilesResponse);
@@ -199,6 +225,82 @@ message StreamDeploymentLogsRequest {
 }
 
 message StreamDeploymentLogsResponse {
+  string line = 1;
+}
+
+// ── ListWorkloads ────────────────────────────────────────────────────────────
+
+message ListWorkloadsRequest {
+  string namespace = 1;
+}
+
+message WorkloadInfo {
+  // kind is one of "Deployment", "StatefulSet", "DaemonSet", "Job",
+  // "CronJob", or "Pod" (an unowned bare pod, listed as its own workload).
+  string kind      = 1;
+  string name      = 2;
+  string namespace = 3;
+  // active is true when at least one pod in the workload is currently running.
+  bool active = 4;
+  // json_logging is true when at least one pod in the workload uses JSON log formatting.
+  bool json_logging = 5;
+  // pods lists the names of pods currently grouped under this workload, so
+  // clients can filter a workload's merged log view down to one pod (or,
+  // combined with ListPods, down to one container) without a second call.
+  repeated string pods = 6;
+}
+
+message ListWorkloadsResponse {
+  repeated WorkloadInfo workloads = 1;
+}
+
+// ── GetWorkloadLogs ───────────────────────────────────────────────────────────
+
+message GetWorkloadLogsRequest {
+  string namespace = 1;
+  string kind      = 2;
+  string name      = 3;
+
+  // start_time and end_time are Unix timestamps (seconds).
+  // A value of 0 means no bound on that side.
+  int64 start_time = 4;
+  int64 end_time   = 5;
+
+  // page_size is the maximum number of log lines to return.
+  // Defaults to 200 if unset or 0; capped at a server-defined maximum.
+  int32 page_size = 6;
+
+  // page_token is an opaque cursor returned by a previous GetWorkloadLogs call.
+  // Leave empty to start from the beginning.
+  string page_token = 7;
+
+  // load_last_page, when true, returns the last page of logs (most recent
+  // lines) regardless of page_token. Use prev_page_token from the response
+  // to page backwards through older logs.
+  bool load_last_page = 8;
+}
+
+message GetWorkloadLogsResponse {
+  repeated string lines = 1;
+
+  // next_page_token is the cursor to pass in the next request.
+  // An empty value means this is the last page.
+  string next_page_token = 2;
+
+  // prev_page_token is the cursor to pass to load the page of older logs
+  // that precedes this one. Empty when already at the beginning.
+  string prev_page_token = 3;
+}
+
+// ── StreamWorkloadLogs ─────────────────────────────────────────────────────────
+
+message StreamWorkloadLogsRequest {
+  string namespace = 1;
+  string kind      = 2;
+  string name      = 3;
+}
+
+message StreamWorkloadLogsResponse {
   string line = 1;
 }
 

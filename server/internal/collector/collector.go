@@ -112,11 +112,6 @@ type Collector struct {
 	// scanning every stream in the cluster on each call.
 	activeContainerCount map[podKey]int
 
-	// deploymentPods maps "namespace/deployment" -> set of pod names.
-	deploymentPods map[string]map[string]struct{}
-	// podDeployment maps "namespace/pod" -> deployment name.
-	podDeployment map[string]string
-
 	// jsonLogging tracks which pods have been determined to use JSON log formatting.
 	jsonLogging map[podKey]bool
 
@@ -157,8 +152,6 @@ func NewWithIndexes(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log 
 		apiMaxBackoff:        apiStreamMaxBackoff,
 		streams:              make(map[containerKey]*activeStream),
 		activeContainerCount: make(map[podKey]int),
-		deploymentPods:       make(map[string]map[string]struct{}),
-		podDeployment:        make(map[string]string),
 		jsonLogging:          make(map[podKey]bool),
 		indexes:              indexManager,
 	}
@@ -197,7 +190,6 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 	}
 
 	c.mu.Lock()
-	c.trackDeployment(pod)
 	items := make([]startItem, 0, len(containers))
 	for _, containerName := range containers {
 		ck := containerKey{namespace: pod.Namespace, pod: pod.Name, container: containerName}
@@ -314,18 +306,6 @@ func (c *Collector) OnDelete(pod *corev1.Pod) {
 		}
 	}
 	delete(c.jsonLogging, pk)
-
-	podMapKey := pod.Namespace + "/" + pod.Name
-	if depName, tracked := c.podDeployment[podMapKey]; tracked {
-		delete(c.podDeployment, podMapKey)
-		depKey := pod.Namespace + "/" + depName
-		if pods, ok := c.deploymentPods[depKey]; ok {
-			delete(pods, pod.Name)
-			if len(pods) == 0 {
-				delete(c.deploymentPods, depKey)
-			}
-		}
-	}
 	c.mu.Unlock()
 
 	if stopped > 0 {
@@ -358,63 +338,6 @@ func (c *Collector) setJsonLogging(namespace, pod string, isJson bool) {
 	c.mu.Lock()
 	c.jsonLogging[podKey{namespace: namespace, name: pod}] = isJson
 	c.mu.Unlock()
-}
-
-// GetDeploymentName returns the deployment name for a pod if it is known.
-func (c *Collector) GetDeploymentName(namespace, podName string) (string, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	d, ok := c.podDeployment[namespace+"/"+podName]
-	return d, ok
-}
-
-// ListKnownDeployments returns the names of all deployments the collector has
-// observed in the given namespace.
-func (c *Collector) ListKnownDeployments(namespace string) []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	prefix := namespace + "/"
-	var result []string
-	for key := range c.deploymentPods {
-		if strings.HasPrefix(key, prefix) {
-			result = append(result, strings.TrimPrefix(key, prefix))
-		}
-	}
-	return result
-}
-
-// trackDeployment updates the deployment<->pod mappings for a pod. mu must be
-// held by the caller.
-func (c *Collector) trackDeployment(pod *corev1.Pod) {
-	rsHash := pod.Labels["pod-template-hash"]
-	if rsHash == "" {
-		return
-	}
-	// pod.Name == <deployment>-<rsHash>-<podHash>
-	// Strip the last segment (pod-specific hash) then check the remainder
-	// ends with "-<rsHash>" to derive the deployment name.
-	lastDash := strings.LastIndex(pod.Name, "-")
-	if lastDash < 0 {
-		return
-	}
-	nameWithoutPodHash := pod.Name[:lastDash]
-	suffix := "-" + rsHash
-	if !strings.HasSuffix(nameWithoutPodHash, suffix) {
-		return
-	}
-	deploymentName := nameWithoutPodHash[:len(nameWithoutPodHash)-len(suffix)]
-	if deploymentName == "" {
-		return
-	}
-
-	depKey := pod.Namespace + "/" + deploymentName
-	podMapKey := pod.Namespace + "/" + pod.Name
-
-	if c.deploymentPods[depKey] == nil {
-		c.deploymentPods[depKey] = make(map[string]struct{})
-	}
-	c.deploymentPods[depKey][pod.Name] = struct{}{}
-	c.podDeployment[podMapKey] = deploymentName
 }
 
 // recordOwner resolves the workload that owns pod from its ownerReferences

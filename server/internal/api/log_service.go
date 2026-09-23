@@ -45,22 +45,12 @@ type JsonLoggingChecker interface {
 	IsJsonLogging(namespace, pod string) bool
 }
 
-// DeploymentMapper resolves the deployment that owns a pod and enumerates
-// deployments seen in a namespace.
-type DeploymentMapper interface {
-	// GetDeploymentName returns the deployment name for a pod if known.
-	GetDeploymentName(namespace, podName string) (string, bool)
-	// ListKnownDeployments returns all deployment names observed in the namespace.
-	ListKnownDeployments(namespace string) []string
-}
-
 // LogService implements the generated pb.LogServiceServer interface.
 type LogService struct {
 	pb.UnimplementedLogServiceServer
 	logsRoot    string
 	active      ActiveChecker
 	jsonLogging JsonLoggingChecker
-	deployments DeploymentMapper
 	indexes     *indexes.Manager
 
 	// diskHighWaterPercent/diskLowWaterPercent are the configured disk guard
@@ -78,13 +68,13 @@ func (s *LogService) SetDiskWaterMarks(highPercent, lowPercent int) {
 }
 
 // NewLogService creates a LogService backed by files in logsRoot.
-func NewLogService(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker, deployments DeploymentMapper) *LogService {
-	return NewLogServiceWithIndexes(logsRoot, active, jsonLogging, deployments, indexes.NewManager(logsRoot))
+func NewLogService(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker) *LogService {
+	return NewLogServiceWithIndexes(logsRoot, active, jsonLogging, indexes.NewManager(logsRoot))
 }
 
 // NewLogServiceWithIndexes creates a LogService using a shared index manager.
-func NewLogServiceWithIndexes(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker, deployments DeploymentMapper, indexManager *indexes.Manager) *LogService {
-	return &LogService{logsRoot: logsRoot, active: active, jsonLogging: jsonLogging, deployments: deployments, indexes: indexManager}
+func NewLogServiceWithIndexes(logsRoot string, active ActiveChecker, jsonLogging JsonLoggingChecker, indexManager *indexes.Manager) *LogService {
+	return &LogService{logsRoot: logsRoot, active: active, jsonLogging: jsonLogging, indexes: indexManager}
 }
 
 // ListNamespaces returns the names of all namespace subdirectories under logsRoot.

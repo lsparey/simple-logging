@@ -1,175 +1,114 @@
 package api
 
 import (
-	"bufio"
-	"container/heap"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
-	"os"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
-	"github.com/lsparey/simple-logging/internal/storage"
 )
 
-// deploymentPodsForNamespace returns all pod names on disk that belong to the
-// given deployment. It uses the DeploymentMapper for pods the collector has
-// observed, and falls back to a heuristic for historical pods the current
-// process has not seen (e.g. from a previous run).
-func (s *LogService) deploymentPodsForNamespace(namespace, deployment string) ([]string, error) {
-	podNames, err := storage.ListPodDirs(s.logsRoot, namespace)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
-	}
-
-	seen := make(map[string]struct{})
-	for _, podName := range podNames {
-		// Try the mapper first (exact, from live pod observation).
-		if dep, ok := s.deployments.GetDeploymentName(namespace, podName); ok {
-			if dep == deployment {
-				seen[podName] = struct{}{}
-			}
-			continue
-		}
-
-		// Heuristic fallback for historical pods not seen by the current process:
-		// pod name = <deployment>-<rsHash>-<podHash>
-		// Check whether the pod name starts with "<deployment>-" and has two more
-		// dash-separated segments after that (each 5+ lowercase-alphanumeric chars).
-		if isDeploymentPod(podName, deployment) {
-			seen[podName] = struct{}{}
-		}
-	}
-
-	pods := make([]string, 0, len(seen))
-	for p := range seen {
-		pods = append(pods, p)
-	}
-	sort.Strings(pods)
-	return pods, nil
-}
-
-// isDeploymentPod returns true when podName looks like it belongs to deployment
-// using the standard Kubernetes naming convention:
-//
-//	<deployment>-<rsHash>-<podHash>
-//
-// where rsHash and podHash are lowercase alphanumeric strings.
-func isDeploymentPod(podName, deployment string) bool {
-	prefix := deployment + "-"
-	if !strings.HasPrefix(podName, prefix) {
-		return false
-	}
-	rest := podName[len(prefix):]
-	// rest should be "<rsHash>-<podHash>" — two alphanumeric segments separated by a dash.
-	dashIdx := strings.Index(rest, "-")
-	if dashIdx < 1 {
-		return false
-	}
-	rsHash := rest[:dashIdx]
-	podHash := rest[dashIdx+1:]
-	return isAlphanumLower(rsHash) && isAlphanumLower(podHash) && len(podHash) >= 4
-}
-
-func isAlphanumLower(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-			return false
-		}
-	}
-	return true
-}
+// ListDeployments, GetDeploymentLogs and StreamDeploymentLogs are thin
+// wrappers around the equivalent Workload RPCs with kind="Deployment",
+// kept for one release so existing clients don't break; see ListWorkloads,
+// GetWorkloadLogs and StreamWorkloadLogs in workload_service.go for the
+// real implementation. Remove alongside the frontend's switch to the
+// Workload RPCs.
 
 // ListDeployments returns all deployments with log files in the given namespace.
-func (s *LogService) ListDeployments(_ context.Context, req *pb.ListDeploymentsRequest) (*pb.ListDeploymentsResponse, error) {
-	if req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace is required")
-	}
-
-	podNames, err := storage.ListPodDirs(s.logsRoot, req.Namespace)
+//
+// Deprecated: superseded by ListWorkloads.
+func (s *LogService) ListDeployments(ctx context.Context, req *pb.ListDeploymentsRequest) (*pb.ListDeploymentsResponse, error) {
+	resp, err := s.ListWorkloads(ctx, &pb.ListWorkloadsRequest{Namespace: req.Namespace})
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
+		return nil, err
 	}
-
-	// Collect deployment names by inspecting each pod.
-	deploymentActive := make(map[string]bool)
-	deploymentJson := make(map[string]bool)
-	for _, podName := range podNames {
-		var depName string
-		if d, ok := s.deployments.GetDeploymentName(req.Namespace, podName); ok {
-			depName = d
-		} else {
-			// Heuristic: strip the two trailing hash segments.
-			depName = inferDeploymentName(podName)
-		}
-		if depName == "" {
+	deployments := make([]*pb.DeploymentInfo, 0, len(resp.Workloads))
+	for _, w := range resp.Workloads {
+		if w.Kind != "Deployment" {
 			continue
 		}
-
-		active := s.active.IsActive(req.Namespace, podName)
-		if cur, exists := deploymentActive[depName]; exists {
-			deploymentActive[depName] = cur || active
-		} else {
-			deploymentActive[depName] = active
-		}
-
-		if s.jsonLogging.IsJsonLogging(req.Namespace, podName) {
-			deploymentJson[depName] = true
-		} else if _, exists := deploymentJson[depName]; !exists {
-			deploymentJson[depName] = false
-		}
-	}
-
-	// Also include deployments tracked by the collector but not yet flushed to disk.
-	for _, d := range s.deployments.ListKnownDeployments(req.Namespace) {
-		if _, exists := deploymentActive[d]; !exists {
-			deploymentActive[d] = false
-		}
-	}
-
-	deployments := make([]*pb.DeploymentInfo, 0, len(deploymentActive))
-	for name, active := range deploymentActive {
 		deployments = append(deployments, &pb.DeploymentInfo{
-			Name:        name,
-			Namespace:   req.Namespace,
-			Active:      active,
-			JsonLogging: deploymentJson[name],
+			Name:        w.Name,
+			Namespace:   w.Namespace,
+			Active:      w.Active,
+			JsonLogging: w.JsonLogging,
 		})
 	}
-	sort.Slice(deployments, func(i, j int) bool {
-		return deployments[i].Name < deployments[j].Name
-	})
-
 	return &pb.ListDeploymentsResponse{Deployments: deployments}, nil
 }
 
-// inferDeploymentName attempts to derive a deployment name from a pod name
-// using the heuristic that the last two dash-separated alphanumeric segments
-// are the ReplicaSet hash and pod hash.
-func inferDeploymentName(podName string) string {
-	parts := strings.Split(podName, "-")
-	if len(parts) < 3 {
-		return ""
+// GetDeploymentLogs returns a paginated, time-sorted page of log lines from
+// all pods belonging to the given deployment.
+//
+// Deprecated: superseded by GetWorkloadLogs.
+func (s *LogService) GetDeploymentLogs(ctx context.Context, req *pb.GetDeploymentLogsRequest) (*pb.GetDeploymentLogsResponse, error) {
+	if req.Namespace == "" || req.Deployment == "" {
+		return nil, status.Error(codes.InvalidArgument, "namespace and deployment are required")
 	}
-	podHash := parts[len(parts)-1]
-	rsHash := parts[len(parts)-2]
-	if !isAlphanumLower(podHash) || !isAlphanumLower(rsHash) || len(podHash) < 4 {
-		return ""
+	resp, err := s.GetWorkloadLogs(ctx, &pb.GetWorkloadLogsRequest{
+		Namespace:    req.Namespace,
+		Kind:         "Deployment",
+		Name:         req.Deployment,
+		StartTime:    req.StartTime,
+		EndTime:      req.EndTime,
+		PageSize:     req.PageSize,
+		PageToken:    req.PageToken,
+		LoadLastPage: req.LoadLastPage,
+	})
+	if err != nil {
+		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+			return nil, status.Errorf(codes.NotFound, "no logs found for deployment %s/%s", req.Namespace, req.Deployment)
+		}
+		return nil, err
 	}
-	return strings.Join(parts[:len(parts)-2], "-")
+	return &pb.GetDeploymentLogsResponse{
+		Lines:         resp.Lines,
+		NextPageToken: resp.NextPageToken,
+		PrevPageToken: resp.PrevPageToken,
+	}, nil
 }
 
-// ── GetDeploymentLogs ─────────────────────────────────────────────────────────
+// deploymentToWorkloadStream adapts a StreamDeploymentLogs server stream to
+// the LogService_StreamWorkloadLogsServer interface StreamWorkloadLogs
+// expects, translating each sent message. All other grpc.ServerStream
+// methods (Context, SetHeader, ...) are satisfied by the embedded stream.
+type deploymentToWorkloadStream struct {
+	pb.LogService_StreamDeploymentLogsServer
+}
+
+func (a *deploymentToWorkloadStream) Send(resp *pb.StreamWorkloadLogsResponse) error {
+	return a.LogService_StreamDeploymentLogsServer.Send(&pb.StreamDeploymentLogsResponse{Line: resp.Line})
+}
+
+// StreamDeploymentLogs tails all active pods for a deployment and streams
+// merged log lines in real time.
+//
+// Deprecated: superseded by StreamWorkloadLogs.
+func (s *LogService) StreamDeploymentLogs(req *pb.StreamDeploymentLogsRequest, stream pb.LogService_StreamDeploymentLogsServer) error {
+	if req.Namespace == "" || req.Deployment == "" {
+		return status.Error(codes.InvalidArgument, "namespace and deployment are required")
+	}
+	err := s.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{
+		Namespace: req.Namespace,
+		Kind:      "Deployment",
+		Name:      req.Deployment,
+	}, &deploymentToWorkloadStream{stream})
+	if err != nil {
+		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
+			return status.Errorf(codes.NotFound, "no logs found for deployment %s/%s", req.Namespace, req.Deployment)
+		}
+		return err
+	}
+	return nil
+}
+
+// ── Merge-sort and pagination helpers, shared with workload_service.go ──────
 
 // logEntry is a single log line together with its parsed timestamp, used for
 // merge-sorting across multiple pod log files.
@@ -250,147 +189,6 @@ func decodeNanosToken(token string) (nanosToken, error) {
 	}
 }
 
-// GetDeploymentLogs returns a paginated, time-sorted page of log lines from
-// all pods belonging to the given deployment.
-func (s *LogService) GetDeploymentLogs(ctx context.Context, req *pb.GetDeploymentLogsRequest) (*pb.GetDeploymentLogsResponse, error) {
-	if req.Namespace == "" || req.Deployment == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace and deployment are required")
-	}
-
-	pageSize := int(req.PageSize)
-	if pageSize <= 0 {
-		pageSize = defaultPageSize
-	}
-	if pageSize > maxPageSize {
-		pageSize = maxPageSize
-	}
-
-	// Decode the cursor: forward (8-byte nanos) or backward (9-byte with 0x01 flag).
-	var afterNanos int64
-	var beforeNanos int64
-	if req.PageToken != "" {
-		tok, err := decodeNanosToken(req.PageToken)
-		if err != nil {
-			return nil, err
-		}
-		if tok.backward {
-			beforeNanos = tok.nanos
-		} else {
-			afterNanos = tok.nanos
-		}
-	}
-
-	// reversed = we want the most recent N lines (last page or backward cursor).
-	reversed := req.LoadLastPage || beforeNanos > 0
-
-	pods, err := s.deploymentPodsForNamespace(req.Namespace, req.Deployment)
-	if err != nil {
-		return nil, err
-	}
-	if len(pods) == 0 {
-		return nil, status.Errorf(codes.NotFound, "no logs found for deployment %s/%s", req.Namespace, req.Deployment)
-	}
-
-	var startTime, endTime time.Time
-	if req.StartTime != 0 {
-		startTime = time.Unix(req.StartTime, 0)
-	}
-	if req.EndTime != 0 {
-		endTime = time.Unix(req.EndTime, 0)
-	}
-	afterTime := time.Unix(0, afterNanos)
-	beforeTime := time.Unix(0, beforeNanos)
-
-	// Scan every file but retain only the requested page. Previously every
-	// matching line was held in memory before truncating to pageSize.
-	h := &logEntryHeap{newest: reversed}
-	heap.Init(h)
-	var insertIdx int
-	var matchingCount int
-
-	for _, pod := range pods {
-		chunks, err := podChunks(s.logsRoot, req.Namespace, pod)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "list log segments: %v", err)
-		}
-		for _, chunk := range chunks {
-			f, err := os.Open(chunk.path)
-			if err != nil {
-				if os.IsNotExist(err) {
-					continue
-				}
-				return nil, status.Errorf(codes.Internal, "open log segment: %v", err)
-			}
-
-			scanner := bufio.NewScanner(f)
-			for scanner.Scan() {
-				if err := ctx.Err(); err != nil {
-					f.Close()
-					return nil, status.FromContextError(err).Err()
-				}
-				line := scanner.Text()
-				ts := parseLineTimestamp(line)
-
-				if !startTime.IsZero() && ts.Before(startTime) {
-					continue
-				}
-				if !endTime.IsZero() && ts.After(endTime) {
-					continue
-				}
-				// Forward cursor: skip lines at or before afterTime.
-				if afterNanos > 0 && !ts.After(afterTime) {
-					continue
-				}
-				// Backward cursor: skip lines at or after beforeTime.
-				if beforeNanos > 0 && !ts.Before(beforeTime) {
-					continue
-				}
-				heap.Push(h, logEntry{ts: ts, idx: insertIdx, line: line})
-				insertIdx++
-				matchingCount++
-				if h.Len() > pageSize {
-					heap.Pop(h)
-				}
-			}
-			f.Close()
-		}
-	}
-
-	page := h.entries
-	sort.Slice(page, func(i, j int) bool { return logEntryLess(page[i], page[j]) })
-	hasMore := matchingCount > len(page)
-
-	resp := &pb.GetDeploymentLogsResponse{Lines: make([]string, len(page))}
-	for i, entry := range page {
-		resp.Lines[i] = entry.line
-	}
-
-	if reversed {
-		// prev_page_token: if there are lines before this page, encode a "before
-		// first line of this page" backward cursor.
-		if hasMore && len(page) > 0 {
-			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
-		}
-		// next_page_token: for a backward cursor, provide a forward cursor so
-		// the caller can navigate back toward newer logs.
-		if beforeNanos > 0 && len(page) > 0 {
-			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
-		}
-		// For load_last_page there is no next page (we are already at the end).
-	} else {
-		// next_page_token: there are more lines after this page.
-		if hasMore && len(page) > 0 {
-			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
-		}
-		// prev_page_token: only meaningful when we started mid-stream (afterNanos > 0).
-		if afterNanos > 0 && len(page) > 0 {
-			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
-		}
-	}
-
-	return resp, nil
-}
-
 // parseLineTimestamp extracts the RFC3339 timestamp from the first
 // space-delimited field of a log line. Returns the zero time on failure.
 func parseLineTimestamp(line string) time.Time {
@@ -403,69 +201,6 @@ func parseLineTimestamp(line string) time.Time {
 		return time.Time{}
 	}
 	return ts
-}
-
-// ── StreamDeploymentLogs ──────────────────────────────────────────────────────
-
-// StreamDeploymentLogs fans out to StreamLogs for all currently active pods in
-// the deployment and multiplexes their output onto a single stream.
-func (s *LogService) StreamDeploymentLogs(req *pb.StreamDeploymentLogsRequest, stream pb.LogService_StreamDeploymentLogsServer) error {
-	if req.Namespace == "" || req.Deployment == "" {
-		return status.Error(codes.InvalidArgument, "namespace and deployment are required")
-	}
-
-	pods, err := s.deploymentPodsForNamespace(req.Namespace, req.Deployment)
-	if err != nil {
-		return err
-	}
-
-	// Filter to pods that are currently active and have a log file.
-	var activePods []string
-	for _, pod := range pods {
-		if s.active.IsActive(req.Namespace, pod) {
-			activePods = append(activePods, pod)
-		}
-	}
-	// If no active pods, still stream from all pod files so we tail any that
-	// have existing log data and pick up new writes.
-	if len(activePods) == 0 {
-		activePods = pods
-	}
-	if len(activePods) == 0 {
-		return status.Errorf(codes.NotFound, "no logs found for deployment %s/%s", req.Namespace, req.Deployment)
-	}
-
-	ctx := stream.Context()
-	lineCh := make(chan string, 64)
-
-	var wg sync.WaitGroup
-	for _, pod := range activePods {
-		wg.Add(1)
-		go func(podName string) {
-			defer wg.Done()
-			tailPodToChannel(ctx, s.logsRoot, req.Namespace, podName, lineCh)
-		}(pod)
-	}
-
-	// Close lineCh once all tailers exit so the range below terminates.
-	go func() {
-		wg.Wait()
-		close(lineCh)
-	}()
-
-	for {
-		select {
-		case line, ok := <-lineCh:
-			if !ok {
-				return nil
-			}
-			if err := stream.Send(&pb.StreamDeploymentLogsResponse{Line: line}); err != nil {
-				return err
-			}
-		case <-ctx.Done():
-			return nil
-		}
-	}
 }
 
 // tailPodToChannel tails a pod's most recent log segment and sends new lines
