@@ -9,30 +9,22 @@ import { useLogStore } from './store/logStore.js';
 // auto-expand the right namespace on load.
 (function initStoreFromUrl() {
   const pathname = window.location.pathname;
-  const deploymentMatch = pathname.match(/^\/deployment\/([^/]+)\/([^/]+)\/?$/);
-  const deploymentNsOnlyMatch = pathname.match(/^\/deployment\/([^/]+)\/?$/);
   const indexMatch = pathname.match(/^\/index\/([^/]+)\/?$/);
   const indexesMatch = pathname.match(/^\/indexes\/?$/);
-  const podMatch = pathname.match(/^\/pod\/([^/]+)\/([^/]+)\/?$/);
-  const podNsOnlyMatch = pathname.match(/^\/pod\/([^/]+)\/?$/);
+  const workloadMatch = pathname.match(/^\/ns\/([^/]+)\/([^/]+)\/([^/]+)\/?$/);
+  const nsOnlyMatch = pathname.match(/^\/ns\/([^/]+)\/?$/);
   if (indexMatch) {
     useLogStore.getState().setSelectedIndex(decodeURIComponent(indexMatch[1]));
   } else if (indexesMatch) {
     useLogStore.getState().enterIndexMode();
-  } else if (deploymentMatch) {
-    useLogStore.getState().setSelectedDeployment(
-      decodeURIComponent(deploymentMatch[1]),
-      decodeURIComponent(deploymentMatch[2]),
+  } else if (workloadMatch) {
+    useLogStore.getState().setSelectedWorkload(
+      decodeURIComponent(workloadMatch[1]),
+      decodeURIComponent(workloadMatch[2]),
+      decodeURIComponent(workloadMatch[3]),
     );
-  } else if (deploymentNsOnlyMatch) {
-    useLogStore.setState({ selectedNamespace: decodeURIComponent(deploymentNsOnlyMatch[1]) });
-  } else if (podMatch) {
-    useLogStore.getState().setSelectedPod(
-      decodeURIComponent(podMatch[1]),
-      decodeURIComponent(podMatch[2]),
-    );
-  } else if (podNsOnlyMatch) {
-    useLogStore.setState({ selectedNamespace: decodeURIComponent(podNsOnlyMatch[1]) });
+  } else if (nsOnlyMatch) {
+    useLogStore.setState({ selectedNamespace: decodeURIComponent(nsOnlyMatch[1]) });
   }
 })();
 
