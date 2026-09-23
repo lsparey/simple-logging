@@ -9,7 +9,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
-import type { ConnectRouter } from '@connectrpc/connect';
+import { Code, ConnectError, type ConnectRouter } from '@connectrpc/connect';
 import { LogService } from '../src/gen/simplelog/v1/log_service_pb.js';
 
 // ---------------------------------------------------------------------------
@@ -237,6 +237,48 @@ function routes(router: ConnectRouter) {
         pageSize: req.pageSize,
       });
     },
+
+    async *searchLogs(req) {
+      let matcher: (line: string) => boolean;
+      if (req.regex) {
+        let re: RegExp;
+        try {
+          re = new RegExp(req.query);
+        } catch {
+          throw new ConnectError('invalid regex', Code.InvalidArgument);
+        }
+        matcher = (line) => re.test(line);
+      } else {
+        const lowerQuery = req.query.toLowerCase();
+        matcher = (line) => line.toLowerCase().includes(lowerQuery);
+      }
+
+      const sources: Array<{ namespace: string; pod: string }> = [];
+      if (req.workloadKind && req.workloadName) {
+        sources.push({ namespace: req.namespace, pod: req.workloadName });
+      } else {
+        const namespaces = req.namespace ? [req.namespace] : NAMESPACES;
+        for (const ns of namespaces) {
+          for (const w of WORKLOADS[ns] ?? []) sources.push({ namespace: ns, pod: w.name });
+        }
+      }
+
+      const maxResults = req.maxResults || 1000;
+      let sent = 0;
+      for (const source of sources) {
+        const allLines = logLinesFor(source.pod);
+        const ordered = req.newestFirst ? [...allLines].reverse() : allLines;
+        for (const line of ordered) {
+          if (!matcher(line)) continue;
+          if (sent >= maxResults) {
+            yield { truncated: true };
+            return;
+          }
+          yield { line, namespace: source.namespace, pod: source.pod, container: 'app' };
+          sent++;
+        }
+      }
+    },
   });
 }
 
@@ -276,7 +318,35 @@ function withCors(req: IncomingMessage, res: ServerResponse) {
     return;
   }
 
+  if (req.method === 'GET' && req.url?.startsWith('/download')) {
+    handleDownload(req, res);
+    return;
+  }
+
   connectHandler(req, res);
+}
+
+/** Mirrors the real server's GET /download?ns=&pod=&kind=&name=&container=&from=&to= endpoint. */
+function handleDownload(req: IncomingMessage, res: ServerResponse) {
+  const url = new URL(req.url!, 'http://localhost');
+  const ns = url.searchParams.get('ns');
+  const pod = url.searchParams.get('pod');
+  const kind = url.searchParams.get('kind');
+  const name = url.searchParams.get('name');
+  if (!ns || !(pod || (kind && name))) {
+    res.writeHead(400);
+    res.end('ns and (pod, or kind and name) are required');
+    return;
+  }
+  const identifier = pod ?? `${kind}-${name}`;
+  const source = pod ?? name!;
+  const lines = logLinesFor(source);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Disposition': `attachment; filename="${ns}_${identifier}.log"`,
+  });
+  res.end(lines.join('\n') + '\n');
 }
 
 const PORT = 8081;
