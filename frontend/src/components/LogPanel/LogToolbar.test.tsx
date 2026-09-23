@@ -35,15 +35,14 @@ beforeEach(() => {
     jsonLogging: false,
     jsonFormats: {},
     lines: [],
-    selectedPodFilter: null,
     selectedContainerFilter: null,
     startTime: 0,
     endTime: 0,
   });
 });
 
-describe('LogToolbar — pod and container filters', () => {
-  it('does not show either filter when all lines come from one pod/container', () => {
+describe('LogToolbar — container filter', () => {
+  it('does not show the filter when all lines come from one container', () => {
     useLogStore.setState({
       lines: [
         '2026-05-20T10:00:00Z [default/my-pod/app] a',
@@ -51,11 +50,10 @@ describe('LogToolbar — pod and container filters', () => {
       ],
     });
     renderToolbar();
-    expect(screen.queryByLabelText('Filter by pod')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Filter by container')).not.toBeInTheDocument();
   });
 
-  it('shows a container filter when lines span multiple containers, defaulting to all containers', () => {
+  it('shows the filter when lines span multiple containers, defaulting to all containers', () => {
     useLogStore.setState({
       lines: [
         '2026-05-20T10:00:00Z [default/my-pod/app] a',
@@ -66,7 +64,7 @@ describe('LogToolbar — pod and container filters', () => {
     expect(screen.getByText('All containers')).toBeInTheDocument();
   });
 
-  it('shows a pod filter when lines span multiple pods, defaulting to all pods', () => {
+  it('does not show a pod filter, even when lines span multiple pods', () => {
     useLogStore.setState({
       lines: [
         '2026-05-20T10:00:00Z [default/pod-a/app] a',
@@ -74,7 +72,7 @@ describe('LogToolbar — pod and container filters', () => {
       ],
     });
     renderToolbar({ kind: 'Deployment', name: 'web-app' });
-    expect(screen.getByText('All pods')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter by pod')).not.toBeInTheDocument();
   });
 
   it('selecting a container updates the store', () => {
@@ -91,22 +89,6 @@ describe('LogToolbar — pod and container filters', () => {
     fireEvent.click(listbox.getByText('sidecar'));
 
     expect(useLogStore.getState().selectedContainerFilter).toBe('sidecar');
-  });
-
-  it('selecting a pod updates the store', () => {
-    useLogStore.setState({
-      lines: [
-        '2026-05-20T10:00:00Z [default/pod-a/app] a',
-        '2026-05-20T10:00:01Z [default/pod-b/app] b',
-      ],
-    });
-    renderToolbar({ kind: 'Deployment', name: 'web-app' });
-
-    fireEvent.mouseDown(screen.getByLabelText('Filter by pod'));
-    const listbox = within(screen.getByRole('listbox'));
-    fireEvent.click(listbox.getByText('pod-b'));
-
-    expect(useLogStore.getState().selectedPodFilter).toBe('pod-b');
   });
 });
 
@@ -130,9 +112,10 @@ describe('LogToolbar — search mode toggle', () => {
 });
 
 describe('LogToolbar — download button', () => {
-  it('downloads by kind and name when no pod filter is selected', () => {
+  it('downloads by the selected workload kind and name, honoring the container filter and time range', () => {
+    useLogStore.setState({ selectedContainerFilter: 'sidecar', startTime: 1000, endTime: 2000 });
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    renderToolbar({ namespace: 'default', kind: 'Deployment', name: 'web-app' });
+    renderToolbar({ namespace: 'default', kind: 'Pod', name: 'web-app-abc' });
 
     fireEvent.click(screen.getByLabelText('Download logs'));
 
@@ -140,22 +123,8 @@ describe('LogToolbar — download button', () => {
     const url = openSpy.mock.calls[0][0] as string;
     expect(url).toContain('/download?');
     expect(url).toContain('ns=default');
-    expect(url).toContain('kind=Deployment');
-    expect(url).toContain('name=web-app');
-    expect(url).not.toContain('pod=');
-    openSpy.mockRestore();
-  });
-
-  it('downloads by pod when a pod filter is selected, honoring the container filter and time range', () => {
-    useLogStore.setState({ selectedPodFilter: 'web-app-abc', selectedContainerFilter: 'sidecar', startTime: 1000, endTime: 2000 });
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    renderToolbar({ namespace: 'default', kind: 'Deployment', name: 'web-app' });
-
-    fireEvent.click(screen.getByLabelText('Download logs'));
-
-    const url = openSpy.mock.calls[0][0] as string;
-    expect(url).toContain('pod=web-app-abc');
-    expect(url).not.toContain('kind=');
+    expect(url).toContain('kind=Pod');
+    expect(url).toContain('name=web-app-abc');
     expect(url).toContain('container=sidecar');
     expect(url).toContain('from=1000');
     expect(url).toContain('to=2000');

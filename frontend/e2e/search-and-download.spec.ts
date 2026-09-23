@@ -34,9 +34,11 @@ test.describe('Server-side search', () => {
     await expect(resultRow).toBeVisible();
     await resultRow.click();
 
-    // Back in page mode, with the log toolbar's page-search field visible again.
+    // Back in page mode, with the log toolbar's page-search field visible again,
+    // scoped to the hit's own pod (kind "Pod") rather than the Deployment.
     await expect(page.getByPlaceholder('Search…')).toBeVisible();
     await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app' })).toBeVisible();
+    await expect(page).toHaveURL(/\/ns\/default\/Pod\//);
   });
 });
 

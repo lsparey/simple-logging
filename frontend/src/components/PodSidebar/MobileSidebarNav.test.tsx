@@ -11,16 +11,21 @@ vi.mock('../../hooks/useNamespaces.js', () => ({
 vi.mock('../../hooks/useWorkloadsByNamespace.js', () => ({
   useWorkloadsByNamespace: vi.fn(),
 }));
+vi.mock('../../hooks/usePodsByNamespace.js', () => ({
+  usePodsByNamespace: vi.fn(),
+}));
 vi.mock('../../hooks/useIndexList.js', () => ({
   useIndexList: vi.fn(),
 }));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
 import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
+import { usePodsByNamespace } from '../../hooks/usePodsByNamespace.js';
 import { useIndexList } from '../../hooks/useIndexList.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
 const mockUseWorkloadsByNamespace = vi.mocked(useWorkloadsByNamespace);
+const mockUsePodsByNamespace = vi.mocked(usePodsByNamespace);
 const mockUseIndexList = vi.mocked(useIndexList);
 
 const theme = createTheme();
@@ -42,6 +47,7 @@ beforeEach(() => {
     loading: false,
     error: null,
   });
+  mockUsePodsByNamespace.mockReturnValue({ podsByNamespace: {}, loading: false, error: null });
   mockUseIndexList.mockReturnValue({
     indexes: [{ key: 'idx1' }],
     loading: false,
@@ -67,32 +73,25 @@ describe('MobileSidebarNav', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
     expect(screen.getByRole('button', { name: 'Indexes' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Workloads' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Deployments' })).not.toBeInTheDocument();
     expect(screen.queryByText('default')).not.toBeInTheDocument();
   });
 
-  it('tapping Workloads opens a kind picker before any namespace is shown', () => {
+  it('tapping Workloads opens the namespace tree', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
 
-    expect(screen.getByText('Deployments')).toBeInTheDocument();
-    expect(screen.getByText('StatefulSets')).toBeInTheDocument();
-    expect(screen.getByText('DaemonSets')).toBeInTheDocument();
-    expect(screen.getByText('Jobs')).toBeInTheDocument();
-    expect(screen.getByText('CronJobs')).toBeInTheDocument();
-    expect(screen.getByText('Pods')).toBeInTheDocument();
-    expect(screen.queryByText('default')).not.toBeInTheDocument();
+    expect(screen.getByText('default')).toBeInTheDocument();
   });
 
-  it('drills from the kind picker into namespaces and a workload, closing the overlay once selected', async () => {
+  it('drills from the namespace tree into a kind and a workload, closing the overlay once selected', async () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
-    fireEvent.click(screen.getByText('Deployments'));
-    await waitFor(() => expect(screen.getByText('default')).toBeInTheDocument());
-
     fireEvent.click(screen.getByText('default'));
+    await waitFor(() => expect(screen.getByText('Deployments')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Deployments'));
     await waitFor(() => expect(screen.getByText('web-app')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('web-app'));
@@ -102,18 +101,14 @@ describe('MobileSidebarNav', () => {
     expect(useLogStore.getState().selectedWorkloadName).toBe('web-app');
   });
 
-  it('the back arrow from a kind\'s namespace list returns to the kind picker, not straight to the icons', async () => {
+  it('the back arrow from the Workloads drawer closes it back to the icons', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
-    fireEvent.click(screen.getByText('Deployments'));
-    await waitFor(() => expect(screen.getByText('default')).toBeInTheDocument());
+    expect(screen.getByText('default')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-
     expect(screen.queryByText('default')).not.toBeInTheDocument();
-    expect(screen.getByText('Deployments')).toBeInTheDocument();
-    expect(screen.getByText('Pods')).toBeInTheDocument();
   });
 
   it('opens the overlay for Indexes without immediately closing it', async () => {
