@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListLogFilesRequest, ListLogFilesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse } from "./log_service_pb.js";
+import { CreateIndexRequest, CreateIndexResponse, DeleteIndexRequest, DeleteIndexResponse, GetDeploymentLogsRequest, GetDeploymentLogsResponse, GetIndexLogsRequest, GetIndexLogsResponse, GetLogsRequest, GetLogsResponse, GetWorkloadLogsRequest, GetWorkloadLogsResponse, ListDeploymentsRequest, ListDeploymentsResponse, ListIndexesRequest, ListIndexesResponse, ListIndexValuesRequest, ListIndexValuesResponse, ListLogFilesRequest, ListLogFilesResponse, ListNamespacesRequest, ListNamespacesResponse, ListPodsRequest, ListPodsResponse, ListWorkloadsRequest, ListWorkloadsResponse, StreamDeploymentLogsRequest, StreamDeploymentLogsResponse, StreamLogsRequest, StreamLogsResponse, StreamWorkloadLogsRequest, StreamWorkloadLogsResponse } from "./log_service_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -66,6 +66,9 @@ export const LogService = {
      * ListDeployments returns all deployments (groups of pods sharing the same
      * deployment name) within a namespace for which log files exist.
      *
+     * Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
+     * thin wrapper for one release before removal.
+     *
      * @generated from rpc simplelog.v1.LogService.ListDeployments
      */
     listDeployments: {
@@ -77,6 +80,9 @@ export const LogService = {
     /**
      * GetDeploymentLogs returns a paginated, optionally time-filtered page of
      * log lines merged from all pods belonging to a deployment, sorted by time.
+     *
+     * Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
+     * a thin wrapper for one release before removal.
      *
      * @generated from rpc simplelog.v1.LogService.GetDeploymentLogs
      */
@@ -91,12 +97,56 @@ export const LogService = {
      * merged log lines in real time. The stream stays open until the client
      * cancels it.
      *
+     * Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
+     * as a thin wrapper for one release before removal.
+     *
      * @generated from rpc simplelog.v1.LogService.StreamDeploymentLogs
      */
     streamDeploymentLogs: {
       name: "StreamDeploymentLogs",
       I: StreamDeploymentLogsRequest,
       O: StreamDeploymentLogsResponse,
+      kind: MethodKind.ServerStreaming,
+    },
+    /**
+     * ListWorkloads returns every workload (a group of pods sharing the same
+     * owner, resolved from each pod's ownerReferences) within a namespace:
+     * Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
+     * created by a CronJob run is listed under both its own Job entry and its
+     * CronJob's entry.
+     *
+     * @generated from rpc simplelog.v1.LogService.ListWorkloads
+     */
+    listWorkloads: {
+      name: "ListWorkloads",
+      I: ListWorkloadsRequest,
+      O: ListWorkloadsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetWorkloadLogs returns a paginated, optionally time-filtered page of log
+     * lines merged from every pod and container belonging to a workload,
+     * sorted by time.
+     *
+     * @generated from rpc simplelog.v1.LogService.GetWorkloadLogs
+     */
+    getWorkloadLogs: {
+      name: "GetWorkloadLogs",
+      I: GetWorkloadLogsRequest,
+      O: GetWorkloadLogsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * StreamWorkloadLogs tails all active pods for a workload and streams
+     * merged log lines in real time. The stream stays open until the client
+     * cancels it.
+     *
+     * @generated from rpc simplelog.v1.LogService.StreamWorkloadLogs
+     */
+    streamWorkloadLogs: {
+      name: "StreamWorkloadLogs",
+      I: StreamWorkloadLogsRequest,
+      O: StreamWorkloadLogsResponse,
       kind: MethodKind.ServerStreaming,
     },
     /**
