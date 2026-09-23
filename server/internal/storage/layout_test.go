@@ -84,3 +84,61 @@ func TestRecordContainerSeen_PreservesEarliestFirstSeen(t *testing.T) {
 		t.Errorf("LastSeen = %v, want %v", meta.LastSeen, late)
 	}
 }
+
+func TestRecordOwner_RoundTrips(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := RecordOwner(dir, "ns", "pod", "Deployment", "web-app", ""); err != nil {
+		t.Fatalf("RecordOwner: %v", err)
+	}
+
+	meta, err := ReadPodMeta(dir, "ns", "pod")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if meta.OwnerKind != "Deployment" || meta.OwnerName != "web-app" {
+		t.Errorf("owner = (%q, %q), want (Deployment, web-app)", meta.OwnerKind, meta.OwnerName)
+	}
+	if meta.CronJobName != "" {
+		t.Errorf("CronJobName = %q, want empty", meta.CronJobName)
+	}
+}
+
+func TestRecordOwner_SetsCronJobName(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := RecordOwner(dir, "ns", "pod", "Job", "backup-2893471000", "backup"); err != nil {
+		t.Fatalf("RecordOwner: %v", err)
+	}
+
+	meta, err := ReadPodMeta(dir, "ns", "pod")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if meta.OwnerKind != "Job" || meta.OwnerName != "backup-2893471000" || meta.CronJobName != "backup" {
+		t.Errorf("meta = %+v, want OwnerKind=Job OwnerName=backup-2893471000 CronJobName=backup", meta)
+	}
+}
+
+func TestRecordOwner_DoesNotClobberContainersOrTimestamps(t *testing.T) {
+	dir := t.TempDir()
+	seenAt := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+
+	if err := recordContainerSeen(dir, "ns", "pod", "app", seenAt); err != nil {
+		t.Fatalf("recordContainerSeen: %v", err)
+	}
+	if err := RecordOwner(dir, "ns", "pod", "Deployment", "web-app", ""); err != nil {
+		t.Fatalf("RecordOwner: %v", err)
+	}
+
+	meta, err := ReadPodMeta(dir, "ns", "pod")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if len(meta.Containers) != 1 || meta.Containers[0] != "app" {
+		t.Errorf("Containers = %v, want [app] (RecordOwner must not clobber it)", meta.Containers)
+	}
+	if !meta.FirstSeen.Equal(seenAt) {
+		t.Errorf("FirstSeen = %v, want %v (RecordOwner must not clobber it)", meta.FirstSeen, seenAt)
+	}
+}

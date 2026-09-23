@@ -24,6 +24,20 @@ type PodMeta struct {
 	Containers []string  `json:"containers"`
 	FirstSeen  time.Time `json:"firstSeen"`
 	LastSeen   time.Time `json:"lastSeen"`
+
+	// OwnerKind/OwnerName identify the workload that owns this pod (e.g.
+	// "Deployment"/"web-app", "StatefulSet"/"cache", "Job"/"backup-28934710",
+	// or "Pod"/<pod name> for an unowned bare pod), resolved from the pod's
+	// ownerReferences at collection time. Persisted here (rather than kept
+	// only in memory) so grouping survives pod deletion and collector
+	// restarts.
+	OwnerKind string `json:"ownerKind,omitempty"`
+	OwnerName string `json:"ownerName,omitempty"`
+	// CronJobName is set when OwnerKind is "Job" and the job's name matches
+	// the pattern Kubernetes generates for a CronJob run
+	// ("<cronjob>-<10-digit unix seconds>"), so the pod can also be grouped
+	// under its CronJob.
+	CronJobName string `json:"cronJobName,omitempty"`
 }
 
 // PodDir returns <logsRoot>/<namespace>/<pod>.
@@ -179,6 +193,26 @@ func recordContainerSeen(logsRoot, namespace, pod, container string, at time.Tim
 		meta.Containers = append(meta.Containers, container)
 		sort.Strings(meta.Containers)
 	}
+	return WritePodMeta(logsRoot, meta)
+}
+
+// RecordOwner updates a pod's meta.json with the workload that owns it,
+// creating the record if needed. Unlike container/segment info, ownership is
+// a pod-level fact, so callers write it once per pod rather than once per
+// container.
+func RecordOwner(logsRoot, namespace, pod, ownerKind, ownerName, cronJobName string) error {
+	metaMu.Lock()
+	defer metaMu.Unlock()
+
+	meta, err := ReadPodMeta(logsRoot, namespace, pod)
+	if err != nil {
+		return err
+	}
+	meta.Namespace = namespace
+	meta.Pod = pod
+	meta.OwnerKind = ownerKind
+	meta.OwnerName = ownerName
+	meta.CronJobName = cronJobName
 	return WritePodMeta(logsRoot, meta)
 }
 

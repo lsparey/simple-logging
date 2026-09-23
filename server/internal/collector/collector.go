@@ -214,6 +214,8 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 	}
 	c.mu.Unlock()
 
+	c.recordOwner(pod)
+
 	for _, item := range items {
 		// Immediately probe the stored log file so the JSON-logging flag is
 		// available before the live stream delivers its first batch of
@@ -413,6 +415,27 @@ func (c *Collector) trackDeployment(pod *corev1.Pod) {
 	}
 	c.deploymentPods[depKey][pod.Name] = struct{}{}
 	c.podDeployment[podMapKey] = deploymentName
+}
+
+// recordOwner resolves the workload that owns pod from its ownerReferences
+// and persists it to the pod's meta.json (see storage.RecordOwner), so
+// grouping survives pod deletion and collector restarts. It is a disk write,
+// so callers must not hold c.mu across it.
+func (c *Collector) recordOwner(pod *corev1.Pod) {
+	kind, name := resolveOwner(pod)
+	var cronJob string
+	if kind == "Job" {
+		if cj, ok := inferCronJobName(name); ok {
+			cronJob = cj
+		}
+	}
+	if err := storage.RecordOwner(c.logsRoot, pod.Namespace, pod.Name, kind, name, cronJob); err != nil {
+		c.log.Warn("failed to record pod owner",
+			zap.String("namespace", pod.Namespace),
+			zap.String("pod", pod.Name),
+			zap.Error(err),
+		)
+	}
 }
 
 // runStream is the entry point for each per-container goroutine. It creates
