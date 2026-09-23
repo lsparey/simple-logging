@@ -24,21 +24,21 @@
  *     position kept, so visible start ≈ index 200 → reversedPageNum = 1)
  */
 import { test, expect } from '@playwright/test';
-import { selectDeployment, selectPod, scrollLogListToTop } from './helpers.js';
+import { selectWorkload, scrollLogListToTop } from './helpers.js';
 
 // ---------------------------------------------------------------------------
-// Deployment view
+// Deployment-kind workload
 // ---------------------------------------------------------------------------
 
-test.describe('Paging — deployment view', () => {
+test.describe('Paging — Deployment-kind workload', () => {
   test('initial load shows the most recent logs (2024-01-15)', async ({ page }) => {
-    await selectDeployment(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'web-app');
     // All visible lines should come from the last page (2024-01-15).
     await expect(page.getByText(/2024-01-15T.*from web-app/).first()).toBeVisible();
   });
 
   test('initial load does NOT show the oldest logs (2024-01-13)', async ({ page }) => {
-    await selectDeployment(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'web-app');
     // Wait for the page to settle before asserting absence.
     await expect(page.getByText(/burst 1 from web-app/).first()).toBeVisible();
     // Line 1 from day 1 is well outside the last 200 lines.
@@ -46,21 +46,21 @@ test.describe('Paging — deployment view', () => {
   });
 
   test('page chip shows "Page 1 / 1" on initial load', async ({ page }) => {
-    await selectDeployment(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'web-app');
     await expect(page.getByText(/burst 1 from web-app/).first()).toBeVisible();
     // 200 lines loaded → totalPages = 1.
     await expect(page.getByText(/Page 1 \/ 1/)).toBeVisible();
   });
 
   test('"scroll for older" indicator is shown when older pages exist', async ({ page }) => {
-    await selectDeployment(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'web-app');
     await expect(page.getByText(/burst 1 from web-app/).first()).toBeVisible();
     // prevPageToken is set → hasOlderLogs → chip appears.
     await expect(page.getByText('↑ Scroll for older')).toBeVisible();
   });
 
   test('loading older updates the page chip and preserves latest lines', async ({ page }) => {
-    await selectDeployment(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'web-app');
     // Wait for initial load and the settling period (LogList suppresses near-top
     // triggers for 150 ms after the initial scroll-to-bottom).
     await expect(page.getByText('↑ Scroll for older')).toBeVisible();
@@ -81,7 +81,7 @@ test.describe('Paging — deployment view', () => {
   });
 
   test('"scroll for older" chip remains visible after loading one older page', async ({ page }) => {
-    await selectDeployment(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'web-app');
     await expect(page.getByText('↑ Scroll for older')).toBeVisible();
     await page.waitForTimeout(300);
     await scrollLogListToTop(page);
@@ -93,29 +93,29 @@ test.describe('Paging — deployment view', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Pod view
+// Pod-kind workload
 // ---------------------------------------------------------------------------
 
-test.describe('Paging — pod view', () => {
+test.describe('Paging — Pod-kind workload', () => {
   test('initial load shows the most recent logs (2024-01-15)', async ({ page }) => {
-    await selectPod(page, 'default', 'web-app-6d8c7f');
-    await expect(page.getByText(/2024-01-15T.*from web-app-6d8c7f/).first()).toBeVisible();
+    await selectWorkload(page, 'default', 'standalone-pod');
+    await expect(page.getByText(/2024-01-15T.*from standalone-pod/).first()).toBeVisible();
   });
 
   test('initial load does NOT show the oldest logs (2024-01-13)', async ({ page }) => {
-    await selectPod(page, 'default', 'web-app-6d8c7f');
-    await expect(page.getByText(/burst 1 from web-app-6d8c7f/).first()).toBeVisible();
-    await expect(page.getByText('log entry 1 from web-app-6d8c7f')).not.toBeVisible();
+    await selectWorkload(page, 'default', 'standalone-pod');
+    await expect(page.getByText(/burst 1 from standalone-pod/).first()).toBeVisible();
+    await expect(page.getByText('log entry 1 from standalone-pod')).not.toBeVisible();
   });
 
   test('"scroll for older" indicator is shown when older pages exist', async ({ page }) => {
-    await selectPod(page, 'default', 'web-app-6d8c7f');
-    await expect(page.getByText(/burst 1 from web-app-6d8c7f/).first()).toBeVisible();
+    await selectWorkload(page, 'default', 'standalone-pod');
+    await expect(page.getByText(/burst 1 from standalone-pod/).first()).toBeVisible();
     await expect(page.getByText('↑ Scroll for older')).toBeVisible();
   });
 
   test('loading older updates the page chip', async ({ page }) => {
-    await selectPod(page, 'default', 'web-app-6d8c7f');
+    await selectWorkload(page, 'default', 'standalone-pod');
     await expect(page.getByText('↑ Scroll for older')).toBeVisible();
     await page.waitForTimeout(300);
 
