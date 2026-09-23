@@ -9,30 +9,27 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import FolderIcon from '@mui/icons-material/Folder';
 import List from '@mui/material/List';
 import { useNavigate } from 'react-router-dom';
-import { usePodList } from '../../hooks/usePodList.js';
-import { useDeploymentList } from '../../hooks/useDeploymentList.js';
+import { useWorkloadList } from '../../hooks/useWorkloadList.js';
 import { useLogStore } from '../../store/logStore.js';
-import PodNode from './PodNode.js';
-import DeploymentNode from './DeploymentNode.js';
+import WorkloadNode from './WorkloadNode.js';
 
 interface Props {
   namespace: string;
-  viewMode: 'pods' | 'deployments';
+  viewMode: 'workloads';
   onLeafSelect?: () => void;
 }
 
-export default function NamespaceNode({ namespace, viewMode, onLeafSelect }: Props) {
+export default function NamespaceNode({ namespace, onLeafSelect }: Props) {
   const selectedNamespace = useLogStore((s) => s.selectedNamespace);
   const [open, setOpen] = useState(() => selectedNamespace === namespace);
-  const { pods } = usePodList(open && viewMode === 'pods' ? namespace : null);
-  const { deployments } = useDeploymentList(open && viewMode === 'deployments' ? namespace : null);
+  const { workloads } = useWorkloadList(open ? namespace : null);
   const navigate = useNavigate();
 
   function handleClick() {
     const next = !open;
     setOpen(next);
     if (next) {
-      navigate(`/${viewMode === 'pods' ? 'pod' : 'deployment'}/${encodeURIComponent(namespace)}`);
+      navigate(`/ns/${encodeURIComponent(namespace)}`);
     }
   }
 
@@ -52,9 +49,9 @@ export default function NamespaceNode({ namespace, viewMode, onLeafSelect }: Pro
       </ListItem>
       <Collapse in={open} unmountOnExit>
         <List disablePadding>
-          {viewMode === 'pods'
-            ? pods.map((p) => <PodNode key={p.name} pod={p} onSelect={onLeafSelect} />)
-            : deployments.map((d) => <DeploymentNode key={d.name} deployment={d} onSelect={onLeafSelect} />)}
+          {workloads.map((w) => (
+            <WorkloadNode key={`${w.kind}/${w.name}`} workload={w} onSelect={onLeafSelect} />
+          ))}
         </List>
       </Collapse>
     </>

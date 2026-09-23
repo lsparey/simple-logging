@@ -4,18 +4,16 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import LogToolbar from './LogToolbar.js';
 import LogList from './LogList.js';
-import { useLogHistory } from '../../hooks/useLogHistory.js';
-import { useLogStream } from '../../hooks/useLogStream.js';
-import { useDeploymentLogHistory } from '../../hooks/useDeploymentLogHistory.js';
-import { useDeploymentLogStream } from '../../hooks/useDeploymentLogStream.js';
+import { useWorkloadLogHistory } from '../../hooks/useWorkloadLogHistory.js';
+import { useWorkloadLogStream } from '../../hooks/useWorkloadLogStream.js';
 import { useLogStore, useFilteredLines, makeFormatKey } from '../../store/logStore.js';
 import { logClient } from '../../grpc/client.js';
 
 export default function LogPanel() {
   const {
     selectedNamespace: namespace,
-    selectedPod: pod,
-    selectedDeployment: deployment,
+    selectedWorkloadKind: kind,
+    selectedWorkloadName: name,
     selectionKey,
     mode,
     prevPageToken,
@@ -37,24 +35,16 @@ export default function LogPanel() {
   // Always start from the beginning for the initial/filter-driven load.
   const filters = { startTime, endTime, pageToken: '' };
 
-  // Pod-mode hooks (disabled when a deployment is selected)
-  useLogHistory(
-    !deployment && !liveEnabled ? namespace : null,
-    !deployment && !liveEnabled ? pod : null,
+  useWorkloadLogHistory(
+    !liveEnabled ? namespace : null,
+    !liveEnabled ? kind : null,
+    !liveEnabled ? name : null,
     filters,
   );
-  useLogStream(namespace, !deployment ? pod : null, liveEnabled);
-
-  // Deployment-mode hooks (disabled when a pod is selected)
-  useDeploymentLogHistory(
-    deployment && !liveEnabled ? namespace : null,
-    deployment && !liveEnabled ? deployment : null,
-    filters,
-  );
-  useDeploymentLogStream(namespace, deployment && liveEnabled ? deployment : null, liveEnabled);
+  useWorkloadLogStream(namespace, kind, name, liveEnabled);
 
   const filteredLines = useFilteredLines();
-  const jsonFormat = namespace ? (jsonFormats[makeFormatKey(namespace, pod, deployment)] ?? null) : null;
+  const jsonFormat = namespace && kind && name ? (jsonFormats[makeFormatKey(namespace, kind, name)] ?? null) : null;
 
   const handleLiveToggle = useCallback((on: boolean) => {
     setLiveEnabled(on);
@@ -75,49 +65,35 @@ export default function LogPanel() {
       setIsFetchingMore,
     } = useLogStore.getState();
     if (!token || fetching) return;
-    if (!namespace || (!pod && !deployment)) return;
+    if (!namespace || !kind || !name) return;
     setIsFetchingMore(true);
     try {
-      if (deployment) {
-        const resp = await logClient.getDeploymentLogs({
-          namespace,
-          deployment,
-          startTime: BigInt(st),
-          endTime: BigInt(et),
-          pageSize: 200,
-          pageToken: token,
-        });
-        setPrependKey((k) => k + 1);
-        setPrependCount(resp.lines.length);
-        useLogStore.getState().prependLines(resp.lines);
-        useLogStore.getState().setPaginationTokens(resp.prevPageToken, useLogStore.getState().nextPageToken);
-      } else if (pod) {
-        const resp = await logClient.getLogs({
-          namespace,
-          pod,
-          startTime: BigInt(st),
-          endTime: BigInt(et),
-          pageSize: 200,
-          pageToken: token,
-        });
-        setPrependKey((k) => k + 1);
-        setPrependCount(resp.lines.length);
-        useLogStore.getState().prependLines(resp.lines);
-        useLogStore.getState().setPaginationTokens(resp.prevPageToken, useLogStore.getState().nextPageToken);
-      }
+      const resp = await logClient.getWorkloadLogs({
+        namespace,
+        kind,
+        name,
+        startTime: BigInt(st),
+        endTime: BigInt(et),
+        pageSize: 200,
+        pageToken: token,
+      });
+      setPrependKey((k) => k + 1);
+      setPrependCount(resp.lines.length);
+      useLogStore.getState().prependLines(resp.lines);
+      useLogStore.getState().setPaginationTokens(resp.prevPageToken, useLogStore.getState().nextPageToken);
     } catch {
       // ignore fetch errors for load-older
     } finally {
       useLogStore.getState().setIsFetchingMore(false);
     }
-  }, [namespace, pod, deployment]);
+  }, [namespace, kind, name]);
 
   // Stable scroll callbacks so LogList's handleRowsRendered doesn't recreate
   // (and re-trigger react-window's onRowsRendered effect) on every render.
   const handleScrollUp = useCallback(() => setAutoScroll(false), []);
   const handleScrollBottom = useCallback(() => setAutoScroll(true), []);
 
-  if (!namespace || (!pod && !deployment)) {
+  if (!namespace || !kind || !name) {
     return (
       <Box
         sx={{
@@ -128,7 +104,7 @@ export default function LogPanel() {
           color: 'text.disabled',
         }}
       >
-        <Typography>Select a pod or deployment from the sidebar to view logs.</Typography>
+        <Typography>Select a workload from the sidebar to view logs.</Typography>
       </Box>
     );
   }
@@ -137,8 +113,8 @@ export default function LogPanel() {
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <LogToolbar
         namespace={namespace}
-        pod={pod ?? undefined}
-        deployment={deployment ?? undefined}
+        kind={kind}
+        name={name}
         liveEnabled={liveEnabled}
         onLiveToggle={handleLiveToggle}
       />

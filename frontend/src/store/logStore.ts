@@ -10,23 +10,25 @@ export interface JsonFormat {
 }
 
 interface LogStore {
-  // Pod selection
+  // Workload selection: a workload is (namespace, kind, name), e.g.
+  // ("default", "Deployment", "web-app") or ("default", "Pod", "standalone").
+  // Every pod belongs to exactly one workload (a bare pod is its own
+  // singleton "Pod"-kind workload), so this is the one selection concept the
+  // log view needs.
   selectedNamespace: string | null;
-  selectedPod: string | null;
-  setSelectedPod: (namespace: string, pod: string, jsonLogging?: boolean, containers?: string[]) => void;
+  selectedWorkloadKind: string | null;
+  selectedWorkloadName: string | null;
+  setSelectedWorkload: (namespace: string, kind: string, name: string, jsonLogging?: boolean) => void;
 
-  // Containers collected for the selected pod (empty/single-entry for every
-  // pod today; multi-container collection is a later phase). selectedContainer
-  // is null when showing all containers merged.
-  selectedPodContainers: string[];
-  selectedContainer: string | null;
-  setSelectedContainer: (container: string | null) => void;
+  // Client-side filters over the merged workload log view, applied to
+  // already-fetched lines by parsing each line's "[ns/pod/container]" tag.
+  // null means "no filter" (show every pod/container).
+  selectedPodFilter: string | null;
+  setSelectedPodFilter: (pod: string | null) => void;
+  selectedContainerFilter: string | null;
+  setSelectedContainerFilter: (container: string | null) => void;
 
-  // Deployment selection (mutually exclusive with pod selection)
-  selectedDeployment: string | null;
-  setSelectedDeployment: (namespace: string, deployment: string, jsonLogging?: boolean) => void;
-
-  // Index selection (mutually exclusive with pod/deployment selection)
+  // Index selection (mutually exclusive with workload selection)
   selectedIndexKey: string | null;
   selectedIndexValue: string;
   enterIndexMode: () => void;
@@ -36,7 +38,7 @@ interface LogStore {
   indexListVersion: number;
   refreshIndexList: () => void;
 
-  // Whether the currently selected pod/deployment uses JSON log formatting
+  // Whether the currently selected workload/index uses JSON log formatting
   jsonLogging: boolean;
   // Update jsonLogging without changing the current selection (used by live polling)
   setJsonLogging: (v: boolean) => void;
@@ -80,7 +82,7 @@ interface LogStore {
   darkMode: boolean;
   toggleDarkMode: () => void;
 
-  // JSON log format configuration (per pod, deployment, or index)
+  // JSON log format configuration (per workload or index)
   jsonFormats: Record<string, JsonFormat>;
   setJsonFormat: (key: string, format: JsonFormat | null) => void;
 }
@@ -92,80 +94,59 @@ try {
   if (storedJsonFormats) initialJsonFormats = JSON.parse(storedJsonFormats) as Record<string, JsonFormat>;
 } catch { /* ignore */ }
 
+// Fields reset by every selection change (workload, index, or leaving both).
+const RESET_ON_SELECT = {
+  lines: [] as string[],
+  prevPageToken: '',
+  nextPageToken: '',
+  searchText: '',
+  startTime: 0,
+  endTime: 0,
+  visibleTimestamp: 0,
+};
+
 export const useLogStore = create<LogStore>((set) => ({
   selectedNamespace: null,
-  selectedPod: null,
+  selectedWorkloadKind: null,
+  selectedWorkloadName: null,
   selectionKey: 0,
   jsonLogging: false,
 
-  setSelectedPod: (namespace, pod, jsonLogging = false, containers = []) =>
+  setSelectedWorkload: (namespace, kind, name, jsonLogging = false) =>
     set((s) => ({
+      ...RESET_ON_SELECT,
       selectedNamespace: namespace,
-      selectedPod: pod,
-      selectedDeployment: null,
-      selectedIndexKey: null,
-      selectedIndexValue: '',
-      selectedPodContainers: containers,
-      selectedContainer: null,
-      jsonLogging,
-      mode: 'loading',
-      lines: [],
-      prevPageToken: '',
-      nextPageToken: '',
-      searchText: '',
-      startTime: 0,
-      endTime: 0,
-      visibleTimestamp: 0,
-      selectionKey: s.selectionKey + 1,
-    })),
-
-  selectedPodContainers: [],
-  selectedContainer: null,
-  setSelectedContainer: (container) => set({ selectedContainer: container }),
-
-  selectedDeployment: null,
-  setSelectedDeployment: (namespace, deployment, jsonLogging = false) =>
-    set((s) => ({
-      selectedNamespace: namespace,
-      selectedPod: null,
-      selectedPodContainers: [],
-      selectedContainer: null,
-      selectedDeployment: deployment,
+      selectedWorkloadKind: kind,
+      selectedWorkloadName: name,
+      selectedPodFilter: null,
+      selectedContainerFilter: null,
       selectedIndexKey: null,
       selectedIndexValue: '',
       jsonLogging,
       mode: 'loading',
-      lines: [],
-      prevPageToken: '',
-      nextPageToken: '',
-      searchText: '',
-      startTime: 0,
-      endTime: 0,
-      visibleTimestamp: 0,
       selectionKey: s.selectionKey + 1,
     })),
+
+  selectedPodFilter: null,
+  setSelectedPodFilter: (pod) => set({ selectedPodFilter: pod }),
+  selectedContainerFilter: null,
+  setSelectedContainerFilter: (container) => set({ selectedContainerFilter: container }),
 
   selectedIndexKey: null,
   selectedIndexValue: '',
   indexListVersion: 0,
   enterIndexMode: () =>
     set((s) => ({
+      ...RESET_ON_SELECT,
       selectedNamespace: null,
-      selectedPod: null,
-      selectedPodContainers: [],
-      selectedContainer: null,
-      selectedDeployment: null,
+      selectedWorkloadKind: null,
+      selectedWorkloadName: null,
+      selectedPodFilter: null,
+      selectedContainerFilter: null,
       selectedIndexKey: '',
       selectedIndexValue: '',
       jsonLogging: false,
       mode: 'idle',
-      lines: [],
-      prevPageToken: '',
-      nextPageToken: '',
-      searchText: '',
-      startTime: 0,
-      endTime: 0,
-      visibleTimestamp: 0,
       selectionKey: s.selectionKey + 1,
     })),
   leaveIndexMode: () =>
@@ -180,22 +161,16 @@ export const useLogStore = create<LogStore>((set) => ({
     }),
   setSelectedIndex: (key) =>
     set((s) => ({
+      ...RESET_ON_SELECT,
       selectedNamespace: null,
-      selectedPod: null,
-      selectedPodContainers: [],
-      selectedContainer: null,
-      selectedDeployment: null,
+      selectedWorkloadKind: null,
+      selectedWorkloadName: null,
+      selectedPodFilter: null,
+      selectedContainerFilter: null,
       selectedIndexKey: key,
       selectedIndexValue: '',
       jsonLogging: false,
       mode: 'idle',
-      lines: [],
-      prevPageToken: '',
-      nextPageToken: '',
-      searchText: '',
-      startTime: 0,
-      endTime: 0,
-      visibleTimestamp: 0,
       selectionKey: s.selectionKey + 1,
     })),
   setSelectedIndexValue: (value) =>
@@ -266,43 +241,54 @@ export const useLogStore = create<LogStore>((set) => ({
 }));
 
 /** Build the per-resource key used to store jsonFormats entries. */
-export function makeFormatKey(
-  namespace: string,
-  pod?: string | null,
-  deployment?: string | null,
-): string {
-  if (pod) return `pod:${namespace}/${pod}`;
-  if (deployment) return `deployment:${namespace}/${deployment}`;
-  return '';
+export function makeFormatKey(namespace: string, kind: string, name: string): string {
+  return `workload:${namespace}/${kind}/${name}`;
 }
 
 export function makeIndexFormatKey(indexKey: string): string {
   return `index:${indexKey}`;
 }
 
-/** Extracts the container name from a line's "[ns/pod/container]" tag, or null. */
-export function lineContainer(line: string): string | null {
+/** Extracts the (pod, container) pair from a line's "[ns/pod/container]" tag. */
+function lineTag(line: string): { pod: string; container: string } | null {
   const start = line.indexOf('[');
   const end = line.indexOf(']', start);
   if (start < 0 || end < 0) return null;
   const parts = line.slice(start + 1, end).split('/');
-  return parts.length === 3 ? parts[2] : null;
+  return parts.length === 3 ? { pod: parts[1], container: parts[2] } : null;
 }
 
-/** Derived: lines filtered by current searchText and selectedContainer */
+/** Extracts the pod name from a line's "[ns/pod/container]" tag, or null. */
+export function linePod(line: string): string | null {
+  return lineTag(line)?.pod ?? null;
+}
+
+/** Extracts the container name from a line's "[ns/pod/container]" tag, or null. */
+export function lineContainer(line: string): string | null {
+  return lineTag(line)?.container ?? null;
+}
+
+/** Derived: lines filtered by current searchText, selectedPodFilter and selectedContainerFilter */
 export function useFilteredLines(): string[] {
   const lines = useLogStore((s) => s.lines);
   const searchText = useLogStore((s) => s.searchText);
-  const selectedContainer = useLogStore((s) => s.selectedContainer);
+  const podFilter = useLogStore((s) => s.selectedPodFilter);
+  const containerFilter = useLogStore((s) => s.selectedContainerFilter);
   return useMemo(() => {
     let result = lines;
-    if (selectedContainer) {
-      result = result.filter((l) => lineContainer(l) === selectedContainer);
+    if (podFilter || containerFilter) {
+      result = result.filter((l) => {
+        const tag = lineTag(l);
+        if (!tag) return false;
+        if (podFilter && tag.pod !== podFilter) return false;
+        if (containerFilter && tag.container !== containerFilter) return false;
+        return true;
+      });
     }
     if (searchText) {
       const lower = searchText.toLowerCase();
       result = result.filter((l) => l.toLowerCase().includes(lower));
     }
     return result;
-  }, [lines, searchText, selectedContainer]);
+  }, [lines, searchText, podFilter, containerFilter]);
 }

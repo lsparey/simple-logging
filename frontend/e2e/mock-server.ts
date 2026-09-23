@@ -18,23 +18,23 @@ import { LogService } from '../src/gen/simplelog/v1/log_service_pb.js';
 
 const NAMESPACES = ['default', 'kube-system'];
 
-const PODS: Record<string, Array<{ name: string; namespace: string; active: boolean }>> = {
-  default: [
-    { name: 'web-app-6d8c7f', namespace: 'default', active: true },
-    { name: 'api-server-5b4c9e', namespace: 'default', active: false },
-  ],
-  'kube-system': [
-    { name: 'coredns-7d4f8b', namespace: 'kube-system', active: true },
-  ],
-};
+interface WorkloadFixture {
+  kind: string;
+  name: string;
+  namespace: string;
+  active: boolean;
+  jsonLogging: boolean;
+  pods: string[];
+}
 
-const DEPLOYMENTS: Record<string, Array<{ name: string; namespace: string; active: boolean }>> = {
+const WORKLOADS: Record<string, WorkloadFixture[]> = {
   default: [
-    { name: 'web-app', namespace: 'default', active: true },
-    { name: 'api-server', namespace: 'default', active: false },
+    { kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-6d8c7f'] },
+    { kind: 'Deployment', name: 'api-server', namespace: 'default', active: false, jsonLogging: false, pods: ['api-server-5b4c9e'] },
+    { kind: 'Pod', name: 'standalone-pod', namespace: 'default', active: true, jsonLogging: false, pods: ['standalone-pod'] },
   ],
   'kube-system': [
-    { name: 'coredns', namespace: 'kube-system', active: true },
+    { kind: 'Deployment', name: 'coredns', namespace: 'kube-system', active: true, jsonLogging: false, pods: ['coredns-7d4f8b'] },
   ],
 };
 
@@ -177,40 +177,21 @@ function routes(router: ConnectRouter) {
       return { namespaces: NAMESPACES };
     },
 
-    listPods(req) {
-      return { pods: PODS[req.namespace] ?? [] };
+    listWorkloads(req) {
+      return { workloads: WORKLOADS[req.namespace] ?? [] };
     },
 
-    getLogs(req) {
-      return getPage(logLinesFor(req.pod), {
+    getWorkloadLogs(req) {
+      return getPage(logLinesFor(req.name), {
         loadLastPage: req.loadLastPage,
         pageToken: req.pageToken,
         pageSize: req.pageSize,
       });
     },
 
-    async *streamLogs(req) {
+    async *streamWorkloadLogs(req) {
       for (let i = 0; i < 5; i++) {
-        yield { line: `2024-01-15T10:00:0${i}Z INFO live line ${i + 1} from ${req.pod}` };
-        await new Promise<void>((resolve) => setTimeout(resolve, 200));
-      }
-    },
-
-    listDeployments(req) {
-      return { deployments: DEPLOYMENTS[req.namespace] ?? [] };
-    },
-
-    getDeploymentLogs(req) {
-      return getPage(logLinesFor(req.deployment), {
-        loadLastPage: req.loadLastPage,
-        pageToken: req.pageToken,
-        pageSize: req.pageSize,
-      });
-    },
-
-    async *streamDeploymentLogs(req) {
-      for (let i = 0; i < 5; i++) {
-        yield { line: `2024-01-15T10:00:0${i}Z INFO live deployment line ${i + 1} from ${req.deployment}` };
+        yield { line: `2024-01-15T10:00:0${i}Z INFO live workload line ${i + 1} from ${req.name}` };
         await new Promise<void>((resolve) => setTimeout(resolve, 200));
       }
     },

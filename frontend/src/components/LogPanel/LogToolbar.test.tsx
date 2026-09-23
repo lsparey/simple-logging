@@ -19,43 +19,64 @@ beforeEach(() => {
     jsonLogging: false,
     jsonFormats: {},
     lines: [],
-    selectedPodContainers: [],
-    selectedContainer: null,
+    selectedPodFilter: null,
+    selectedContainerFilter: null,
   });
 });
 
-describe('LogToolbar — container filter', () => {
-  it('does not show a container filter for a single-container pod', () => {
-    useLogStore.setState({ selectedPodContainers: ['app'] });
+describe('LogToolbar — pod and container filters', () => {
+  it('does not show either filter when all lines come from one pod/container', () => {
+    useLogStore.setState({
+      lines: [
+        '2026-05-20T10:00:00Z [default/my-pod/app] a',
+        '2026-05-20T10:00:01Z [default/my-pod/app] b',
+      ],
+    });
     render(
-      <LogToolbar namespace="default" pod="my-pod" liveEnabled={false} onLiveToggle={() => {}} />,
+      <LogToolbar namespace="default" kind="Pod" name="my-pod" liveEnabled={false} onLiveToggle={() => {}} />,
       { wrapper: Wrapper },
     );
+    expect(screen.queryByLabelText('Filter by pod')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Filter by container')).not.toBeInTheDocument();
   });
 
-  it('shows a container filter for a multi-container pod, defaulting to all containers', () => {
-    useLogStore.setState({ selectedPodContainers: ['app', 'sidecar'] });
+  it('shows a container filter when lines span multiple containers, defaulting to all containers', () => {
+    useLogStore.setState({
+      lines: [
+        '2026-05-20T10:00:00Z [default/my-pod/app] a',
+        '2026-05-20T10:00:01Z [default/my-pod/sidecar] b',
+      ],
+    });
     render(
-      <LogToolbar namespace="default" pod="my-pod" liveEnabled={false} onLiveToggle={() => {}} />,
+      <LogToolbar namespace="default" kind="Pod" name="my-pod" liveEnabled={false} onLiveToggle={() => {}} />,
       { wrapper: Wrapper },
     );
     expect(screen.getByText('All containers')).toBeInTheDocument();
   });
 
-  it('does not show a container filter in deployment mode', () => {
-    useLogStore.setState({ selectedPodContainers: ['app', 'sidecar'] });
+  it('shows a pod filter when lines span multiple pods, defaulting to all pods', () => {
+    useLogStore.setState({
+      lines: [
+        '2026-05-20T10:00:00Z [default/pod-a/app] a',
+        '2026-05-20T10:00:01Z [default/pod-b/app] b',
+      ],
+    });
     render(
-      <LogToolbar namespace="default" deployment="my-deploy" liveEnabled={false} onLiveToggle={() => {}} />,
+      <LogToolbar namespace="default" kind="Deployment" name="web-app" liveEnabled={false} onLiveToggle={() => {}} />,
       { wrapper: Wrapper },
     );
-    expect(screen.queryByLabelText('Filter by container')).not.toBeInTheDocument();
+    expect(screen.getByText('All pods')).toBeInTheDocument();
   });
 
   it('selecting a container updates the store', () => {
-    useLogStore.setState({ selectedPodContainers: ['app', 'sidecar'] });
+    useLogStore.setState({
+      lines: [
+        '2026-05-20T10:00:00Z [default/my-pod/app] a',
+        '2026-05-20T10:00:01Z [default/my-pod/sidecar] b',
+      ],
+    });
     render(
-      <LogToolbar namespace="default" pod="my-pod" liveEnabled={false} onLiveToggle={() => {}} />,
+      <LogToolbar namespace="default" kind="Pod" name="my-pod" liveEnabled={false} onLiveToggle={() => {}} />,
       { wrapper: Wrapper },
     );
 
@@ -63,6 +84,25 @@ describe('LogToolbar — container filter', () => {
     const listbox = within(screen.getByRole('listbox'));
     fireEvent.click(listbox.getByText('sidecar'));
 
-    expect(useLogStore.getState().selectedContainer).toBe('sidecar');
+    expect(useLogStore.getState().selectedContainerFilter).toBe('sidecar');
+  });
+
+  it('selecting a pod updates the store', () => {
+    useLogStore.setState({
+      lines: [
+        '2026-05-20T10:00:00Z [default/pod-a/app] a',
+        '2026-05-20T10:00:01Z [default/pod-b/app] b',
+      ],
+    });
+    render(
+      <LogToolbar namespace="default" kind="Deployment" name="web-app" liveEnabled={false} onLiveToggle={() => {}} />,
+      { wrapper: Wrapper },
+    );
+
+    fireEvent.mouseDown(screen.getByLabelText('Filter by pod'));
+    const listbox = within(screen.getByRole('listbox'));
+    fireEvent.click(listbox.getByText('pod-b'));
+
+    expect(useLogStore.getState().selectedPodFilter).toBe('pod-b');
   });
 });

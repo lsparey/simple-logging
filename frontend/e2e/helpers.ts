@@ -1,19 +1,11 @@
 import type { Page } from '@playwright/test';
 
-/** Navigate to the app, switch to deployments view, and click a deployment. */
-export async function selectDeployment(page: Page, namespace: string, deployment: string) {
+/** Navigate to the app, open the workloads view, expand a namespace, and click a workload. */
+export async function selectWorkload(page: Page, namespace: string, name: string) {
   await page.goto('/');
-  await page.getByText('Deployments').click();
+  await page.getByText('Workloads').click();
   await page.getByText(namespace).click();
-  await page.getByText(deployment).first().click();
-}
-
-/** Navigate to the app, switch to pods view, and click a pod. */
-export async function selectPod(page: Page, namespace: string, pod: string) {
-  await page.goto('/');
-  await page.getByText('Pods').click();
-  await page.getByText(namespace).click();
-  await page.getByText(pod).click();
+  await page.getByText(name).first().click();
 }
 
 /**
