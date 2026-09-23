@@ -61,15 +61,33 @@ beforeEach(() => {
 });
 
 describe('MobileSidebarNav', () => {
-  it('shows no namespace content until a bottom icon is tapped', () => {
+  it('shows only the Indexes and Workloads bottom icons', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
+    expect(screen.getByRole('button', { name: 'Indexes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Workloads' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Deployments' })).not.toBeInTheDocument();
     expect(screen.queryByText('default')).not.toBeInTheDocument();
   });
 
-  it('opens the overlay to drill into a namespace, and closes it once a workload is picked', async () => {
+  it('tapping Workloads opens a kind picker before any namespace is shown', () => {
     render(<MobileSidebarNav />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
+
+    expect(screen.getByText('Deployments')).toBeInTheDocument();
+    expect(screen.getByText('StatefulSets')).toBeInTheDocument();
+    expect(screen.getByText('DaemonSets')).toBeInTheDocument();
+    expect(screen.getByText('Jobs')).toBeInTheDocument();
+    expect(screen.getByText('CronJobs')).toBeInTheDocument();
+    expect(screen.getByText('Pods')).toBeInTheDocument();
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
+  });
+
+  it('drills from the kind picker into namespaces and a workload, closing the overlay once selected', async () => {
+    render(<MobileSidebarNav />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
+    fireEvent.click(screen.getByText('Deployments'));
     await waitFor(() => expect(screen.getByText('default')).toBeInTheDocument());
 
     fireEvent.click(screen.getByText('default'));
@@ -80,6 +98,20 @@ describe('MobileSidebarNav', () => {
     await waitFor(() => expect(screen.queryByText('default')).not.toBeInTheDocument());
     expect(useLogStore.getState().selectedWorkloadKind).toBe('Deployment');
     expect(useLogStore.getState().selectedWorkloadName).toBe('web-app');
+  });
+
+  it('the back arrow from a kind\'s namespace list returns to the kind picker, not straight to the icons', async () => {
+    render(<MobileSidebarNav />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workloads' }));
+    fireEvent.click(screen.getByText('Deployments'));
+    await waitFor(() => expect(screen.getByText('default')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(screen.queryByText('default')).not.toBeInTheDocument();
+    expect(screen.getByText('Deployments')).toBeInTheDocument();
+    expect(screen.getByText('Pods')).toBeInTheDocument();
   });
 
   it('opens the overlay for Indexes without immediately closing it', async () => {
