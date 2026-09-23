@@ -292,6 +292,75 @@ func TestStreamWorkloadLogs_NotFound(t *testing.T) {
 	}
 }
 
+func TestStreamWorkloadLogs_NamespaceWideTailsEveryPod(t *testing.T) {
+	dir := t.TempDir()
+	writeLogFile(t, dir, "default", "cache-0", []string{
+		"2026-05-20T10:00:00Z [default/cache-0/app] existing cache line",
+	})
+	recordOwner(t, dir, "default", "cache-0", "StatefulSet", "cache", "")
+	writeLogFile(t, dir, "default", "web-app-abc", []string{
+		"2026-05-20T10:00:00Z [default/web-app-abc/app] existing web line",
+	})
+
+	checker := &fakeChecker{active: map[string]bool{"default/cache-0": true, "default/web-app-abc": true}}
+	svc := NewLogService(dir, checker, checker)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream := newFakeStreamWorkloadLogsServer(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{Namespace: "default"}, stream)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+
+	appendLine(t, fmt.Sprintf("%s/default/cache-0/app/2026-05-20.log", dir), "2026-05-20T10:00:01Z [default/cache-0/app] new cache line")
+	appendLine(t, fmt.Sprintf("%s/default/web-app-abc/app/2026-05-20.log", dir), "2026-05-20T10:00:01Z [default/web-app-abc/app] new web line")
+
+	seen := map[string]bool{}
+	for len(seen) < 2 {
+		select {
+		case line := <-stream.sendCh:
+			seen[line] = true
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out waiting for both tails, got: %v", seen)
+		}
+	}
+	cancel()
+	<-errCh
+}
+
+func TestStreamWorkloadLogs_NamespaceWideNotFound(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
+	stream := newFakeStreamWorkloadLogsServer(context.Background())
+	err := svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{Namespace: "empty-ns"}, stream)
+	if status.Code(err) != codes.NotFound {
+		t.Errorf("expected NotFound, got %v", err)
+	}
+}
+
+func TestStreamWorkloadLogs_RejectsKindWithoutName(t *testing.T) {
+	dir := t.TempDir()
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
+	stream := newFakeStreamWorkloadLogsServer(context.Background())
+	err := svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{Namespace: "default", Kind: "StatefulSet"}, stream)
+	if status.Code(err) != codes.InvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", err)
+	}
+}
+
+func appendLine(t *testing.T, path, line string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("open for append: %v", err)
+	}
+	defer f.Close()
+	fmt.Fprintln(f, line)
+}
+
 // ── Deprecated deployment wrappers stay correct ─────────────────────────────
 
 func TestStreamDeploymentLogs_ThinWrapperAdaptsMessages(t *testing.T) {

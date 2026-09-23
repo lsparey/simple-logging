@@ -257,12 +257,22 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLog
 
 // StreamWorkloadLogs fans out to a per-pod tail for every currently active
 // pod in the workload and multiplexes their output onto a single stream.
+//
+// Leaving both Kind and Name empty requests a namespace-wide live tail of
+// every pod in the namespace, rather than one workload's pods.
 func (s *LogService) StreamWorkloadLogs(req *pb.StreamWorkloadLogsRequest, stream pb.LogService_StreamWorkloadLogsServer) error {
-	if req.Namespace == "" || req.Kind == "" || req.Name == "" {
-		return status.Error(codes.InvalidArgument, "namespace, kind and name are required")
+	namespaceWide := req.Kind == "" && req.Name == ""
+	if req.Namespace == "" || (!namespaceWide && (req.Kind == "" || req.Name == "")) {
+		return status.Error(codes.InvalidArgument, "namespace is required, and kind and name must both be set or both be empty")
 	}
 
-	pods, err := s.workloadPodsForNamespace(req.Namespace, req.Kind, req.Name)
+	var pods []string
+	var err error
+	if namespaceWide {
+		pods, err = storage.ListPodDirs(s.logsRoot, req.Namespace)
+	} else {
+		pods, err = s.workloadPodsForNamespace(req.Namespace, req.Kind, req.Name)
+	}
 	if err != nil {
 		return err
 	}
@@ -280,6 +290,9 @@ func (s *LogService) StreamWorkloadLogs(req *pb.StreamWorkloadLogsRequest, strea
 		activePods = pods
 	}
 	if len(activePods) == 0 {
+		if namespaceWide {
+			return status.Errorf(codes.NotFound, "no logs found in namespace %s", req.Namespace)
+		}
 		return status.Errorf(codes.NotFound, "no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name)
 	}
 
