@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { logClient } from '../grpc/client.js';
-import type { DeploymentInfo } from '../gen/simplelog/v1/log_service_pb.js';
+import type { WorkloadInfo } from '../gen/simplelog/v1/log_service_pb.js';
 
-export function useDeploymentList(namespace: string | null) {
-  const [deployments, setDeployments] = useState<DeploymentInfo[]>([]);
+export function useWorkloadList(namespace: string | null) {
+  const [workloads, setWorkloads] = useState<WorkloadInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,9 +16,9 @@ export function useDeploymentList(namespace: string | null) {
     async function load() {
       setLoading(true);
       try {
-        const resp = await logClient.listDeployments({ namespace: namespace! });
+        const resp = await logClient.listWorkloads({ namespace: namespace! });
         if (!cancelled) {
-          setDeployments(resp.deployments);
+          setWorkloads(resp.workloads);
           setLoading(false);
         }
       } catch (e) {
@@ -37,5 +37,5 @@ export function useDeploymentList(namespace: string | null) {
     };
   }, [namespace]);
 
-  return { deployments: namespace ? deployments : [], loading: namespace ? loading : false, error };
+  return { workloads: namespace ? workloads : [], loading: namespace ? loading : false, error };
 }

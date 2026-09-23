@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'react';
 import { logClient } from '../grpc/client.js';
 import { useLogStore } from '../store/logStore.js';
 
-export function useDeploymentLogStream(
+export function useWorkloadLogStream(
   namespace: string | null,
-  deployment: string | null,
+  kind: string | null,
+  name: string | null,
   enabled: boolean,
 ) {
   const appendLines = useLogStore((s) => s.appendLines);
@@ -12,7 +13,7 @@ export function useDeploymentLogStream(
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!enabled || !namespace || !deployment) {
+    if (!enabled || !namespace || !kind || !name) {
       abortRef.current?.abort();
       abortRef.current = null;
       return;
@@ -31,8 +32,8 @@ export function useDeploymentLogStream(
 
     (async () => {
       try {
-        const stream = logClient.streamDeploymentLogs(
-          { namespace, deployment },
+        const stream = logClient.streamWorkloadLogs(
+          { namespace, kind, name },
           { signal: controller.signal },
         );
         for await (const msg of stream) {
@@ -63,5 +64,5 @@ export function useDeploymentLogStream(
         rafId = null;
       }
     };
-  }, [enabled, namespace, deployment, appendLines, setMode]);
+  }, [enabled, namespace, kind, name, appendLines, setMode]);
 }

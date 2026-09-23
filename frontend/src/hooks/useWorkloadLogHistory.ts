@@ -8,24 +8,26 @@ interface Filters {
   pageToken: string;
 }
 
-export function useLogHistory(
+export function useWorkloadLogHistory(
   namespace: string | null,
-  pod: string | null,
+  kind: string | null,
+  name: string | null,
   filters: Filters,
 ) {
   const { setLines, setPaginationTokens, setMode } = useLogStore.getState();
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
-    if (!namespace || !pod) return;
+    if (!namespace || !kind || !name) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const resp = await logClient.getLogs(
+      const resp = await logClient.getWorkloadLogs(
         {
           namespace,
-          pod,
+          kind,
+          name,
           startTime: BigInt(filters.startTime),
           endTime: BigInt(filters.endTime),
           pageSize: 200,
@@ -43,7 +45,7 @@ export function useLogHistory(
       if (controller.signal.aborted) return;
       setMode('history');
     }
-  }, [namespace, pod, filters.startTime, filters.endTime, filters.pageToken, setLines, setPaginationTokens, setMode]);
+  }, [namespace, kind, name, filters.startTime, filters.endTime, filters.pageToken, setLines, setPaginationTokens, setMode]);
 
   useEffect(() => {
     load();
