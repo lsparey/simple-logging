@@ -21,14 +21,19 @@ vi.mock('../../hooks/useWorkloadsByNamespace.js', () => ({
 vi.mock('../../hooks/usePodsByNamespace.js', () => ({
   usePodsByNamespace: vi.fn(),
 }));
+vi.mock('../../hooks/useIndexList.js', () => ({
+  useIndexList: vi.fn(),
+}));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
 import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
 import { usePodsByNamespace } from '../../hooks/usePodsByNamespace.js';
+import { useIndexList } from '../../hooks/useIndexList.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
 const mockUseWorkloadsByNamespace = vi.mocked(useWorkloadsByNamespace);
 const mockUsePodsByNamespace = vi.mocked(usePodsByNamespace);
+const mockUseIndexList = vi.mocked(useIndexList);
 
 // Minimal MUI theme wrapper so MUI components render without warnings
 const theme = createTheme();
@@ -56,6 +61,7 @@ beforeEach(() => {
     error: null,
   });
   mockUsePodsByNamespace.mockReturnValue({ podsByNamespace: {}, loading: false, error: null });
+  mockUseIndexList.mockReturnValue({ indexes: [{ key: 'companyUuid' }], loading: false, error: null, reload: vi.fn() });
 
   useLogStore.setState({
     selectedNamespace: null,
@@ -192,15 +198,38 @@ describe('PodSidebar', () => {
     expect(s.selectedWorkloadName).toBe('web-app-abc');
   });
 
-  it('clicking Indexes shows a back arrow and leaves the tree; back returns to it', () => {
+  it('expanding Indexes reveals index keys inline, alongside the namespace tree', async () => {
     mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
     render(<PodSidebar />, { wrapper: Wrapper });
 
     fireEvent.click(screen.getByText('Indexes'));
-    expect(screen.queryByText('default')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    // The namespace tree is still visible — Indexes expanded in place, not a full-screen swap.
+    await waitFor(() => expect(screen.getByText('companyUuid')).toBeInTheDocument());
+    expect(screen.getByText('default')).toBeInTheDocument();
+  });
+
+  it('collapsing Indexes hides its index keys again', async () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
+    render(<PodSidebar />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByText('Indexes'));
+    await waitFor(() => expect(screen.getByText('companyUuid')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('Indexes'));
+    await waitFor(() => expect(screen.queryByText('companyUuid')).not.toBeInTheDocument());
+  });
+
+  it('selecting an index key updates the store without collapsing the namespace tree', async () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
+    render(<PodSidebar />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByText('Indexes'));
+    await waitFor(() => expect(screen.getByText('companyUuid')).toBeInTheDocument());
+
+    act(() => fireEvent.click(screen.getByText('companyUuid')));
+
+    expect(useLogStore.getState().selectedIndexKey).toBe('companyUuid');
     expect(screen.getByText('default')).toBeInTheDocument();
   });
 });

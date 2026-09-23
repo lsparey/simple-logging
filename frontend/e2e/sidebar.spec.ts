@@ -64,12 +64,21 @@ test.describe('PodSidebar', () => {
     await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app-6d8c7f' })).toBeVisible();
   });
 
-  test('clicking Indexes shows a back arrow and hides the namespace tree; back restores it', async ({ page }) => {
+  test('expanding Indexes reveals index keys inline, alongside the namespace tree', async ({ page }) => {
     await page.getByText('Indexes').click();
-    await expect(page.getByText('default')).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
+    await expect(page.getByText('companyUuid')).toBeVisible();
+    // Indexes expanded in place — the namespace tree stays visible too.
+    await expect(page.getByText('default')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Back' }).click();
+    await page.getByText('Indexes').click();
+    await expect(page.getByText('companyUuid')).not.toBeVisible();
+  });
+
+  test('selecting an index key does not collapse the namespace tree', async ({ page }) => {
+    await page.getByText('Indexes').click();
+    await page.getByText('companyUuid').click();
+
+    await expect(page.locator('.MuiChip-root').filter({ hasText: 'companyUuid' })).toBeVisible();
     await expect(page.getByText('default')).toBeVisible();
   });
 });
