@@ -287,7 +287,7 @@ export default function IndexPanel() {
             <LogHistogram />
             <TextField
               size="small"
-              placeholder="Search…"
+              placeholder="Filter…"
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
               sx={{ flex: 1, minWidth: 160 }}

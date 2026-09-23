@@ -7,8 +7,6 @@ import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import Select, { type SelectChangeEvent } from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -17,7 +15,6 @@ import JsonFormatModal from './JsonFormatModal.js';
 import LogHistogram from './LogHistogram.js';
 import { candidateJsonKeys } from '../../utils/jsonKeys.js';
 import { baseUrl } from '../../grpc/client.js';
-import type { SearchMode } from './LogPanel.js';
 
 interface Props {
   namespace: string;
@@ -25,11 +22,9 @@ interface Props {
   name: string;
   liveEnabled: boolean;
   onLiveToggle: (on: boolean) => void;
-  searchMode: SearchMode;
-  onSearchModeChange: (mode: SearchMode) => void;
 }
 
-export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveToggle, searchMode, onSearchModeChange }: Props) {
+export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveToggle }: Props) {
   const {
     searchText,
     setSearchText,
@@ -136,25 +131,13 @@ export default function LogToolbar({ namespace, kind, name, liveEnabled, onLiveT
 
         <LogHistogram />
 
-        <ToggleButtonGroup
+        <TextField
           size="small"
-          exclusive
-          value={searchMode}
-          onChange={(_, value: SearchMode | null) => value && onSearchModeChange(value)}
-        >
-          <ToggleButton value="page">This page</ToggleButton>
-          <ToggleButton value="server">Server</ToggleButton>
-        </ToggleButtonGroup>
-
-        {searchMode === 'page' && (
-          <TextField
-            size="small"
-            placeholder="Search…"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            sx={{ flex: 1, minWidth: 160 }}
-          />
-        )}
+          placeholder="Filter…"
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          sx={{ flex: 1, minWidth: 160 }}
+        />
 
         <Tooltip title="Download logs">
           <IconButton size="small" onClick={handleDownload} aria-label="Download logs">

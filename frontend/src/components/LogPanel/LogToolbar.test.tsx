@@ -21,8 +21,6 @@ function renderToolbar(props: Partial<React.ComponentProps<typeof LogToolbar>> =
       name="my-pod"
       liveEnabled={false}
       onLiveToggle={() => {}}
-      searchMode="page"
-      onSearchModeChange={() => {}}
       {...props}
     />,
     { wrapper: Wrapper },
@@ -92,22 +90,16 @@ describe('LogToolbar — container filter', () => {
   });
 });
 
-describe('LogToolbar — search mode toggle', () => {
-  it('shows the page-search text field in page mode', () => {
-    renderToolbar({ searchMode: 'page' });
-    expect(screen.getByPlaceholderText('Search…')).toBeInTheDocument();
+describe('LogToolbar — filter field', () => {
+  it('shows the client-side filter field', () => {
+    renderToolbar();
+    expect(screen.getByPlaceholderText('Filter…')).toBeInTheDocument();
   });
 
-  it('hides the page-search text field in server mode', () => {
-    renderToolbar({ searchMode: 'server' });
-    expect(screen.queryByPlaceholderText('Search…')).not.toBeInTheDocument();
-  });
-
-  it('clicking the Server toggle notifies the parent', () => {
-    const onSearchModeChange = vi.fn();
-    renderToolbar({ searchMode: 'page', onSearchModeChange });
-    fireEvent.click(screen.getByText('Server'));
-    expect(onSearchModeChange).toHaveBeenCalledWith('server');
+  it('typing updates the store search text', () => {
+    renderToolbar();
+    fireEvent.change(screen.getByPlaceholderText('Filter…'), { target: { value: 'error' } });
+    expect(useLogStore.getState().searchText).toBe('error');
   });
 });
 

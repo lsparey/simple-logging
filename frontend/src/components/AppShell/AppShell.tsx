@@ -10,12 +10,14 @@ import { useTheme } from '@mui/material/styles';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
+import SearchIcon from '@mui/icons-material/Search';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PodSidebar from '../PodSidebar/PodSidebar.js';
 import MobileSidebarNav, { MOBILE_NAV_HEIGHT } from '../PodSidebar/MobileSidebarNav.js';
 import LogPanel from '../LogPanel/LogPanel.js';
 import IndexPanel from '../LogPanel/IndexPanel.js';
 import DataDashboard from '../DataDashboard/DataDashboard.js';
+import SearchPage from '../Search/SearchPage.js';
 import { useLogStore } from '../../store/logStore.js';
 
 const DRAWER_WIDTH = 260;
@@ -25,6 +27,7 @@ export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const dashboardOpen = /^\/dashboard\/?$/.test(location.pathname);
+  const searchOpen = /^\/search\/?$/.test(location.pathname);
 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -43,6 +46,17 @@ export default function AppShell() {
               simple-logging
             </Typography>
           </Box>
+          <Tooltip title="Server-side search">
+            <IconButton
+              aria-label="Open server-side search"
+              color="inherit"
+              onClick={() => navigate('/search')}
+              size="small"
+              sx={{ mr: 0.5 }}
+            >
+              <SearchIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Storage dashboard">
             <IconButton
               aria-label="Open storage dashboard"
@@ -96,9 +110,11 @@ export default function AppShell() {
       >
         {dashboardOpen
           ? <DataDashboard />
-          : selectedIndexKey !== null
-            ? <IndexPanel key={selectionKey} />
-            : <LogPanel key={selectionKey} />}
+          : searchOpen
+            ? <SearchPage />
+            : selectedIndexKey !== null
+              ? <IndexPanel key={selectionKey} />
+              : <LogPanel key={selectionKey} />}
       </Box>
     </Box>
   );

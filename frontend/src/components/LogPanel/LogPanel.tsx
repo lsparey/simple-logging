@@ -1,21 +1,13 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import LogToolbar from './LogToolbar.js';
 import LogList from './LogList.js';
-import SearchPanel, { type JumpTarget } from './SearchPanel.js';
 import { useWorkloadLogHistory } from '../../hooks/useWorkloadLogHistory.js';
 import { useWorkloadLogStream } from '../../hooks/useWorkloadLogStream.js';
 import { useLogStore, useFilteredLines, makeFormatKey } from '../../store/logStore.js';
 import { logClient } from '../../grpc/client.js';
-
-export type SearchMode = 'page' | 'server';
-
-// How far around a search hit's timestamp to load when jumping to context,
-// so the surrounding lines are visible without pulling in unrelated history.
-const JUMP_CONTEXT_WINDOW_MS = 5 * 60 * 1000;
 
 export default function LogPanel() {
   const {
@@ -32,10 +24,8 @@ export default function LogPanel() {
     jsonFormats,
   } = useLogStore();
 
-  const navigate = useNavigate();
   const [liveEnabled, setLiveEnabled] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [searchMode, setSearchMode] = useState<SearchMode>('page');
   // prependKey increments with every loadOlder call; prependCount carries the
   // number of lines added so LogList can adjust scrollTop even when two
   // consecutive fetches return the same count.
@@ -103,33 +93,6 @@ export default function LogPanel() {
   const handleScrollUp = useCallback(() => setAutoScroll(false), []);
   const handleScrollBottom = useCallback(() => setAutoScroll(true), []);
 
-  // Selects the search hit's own pod directly (kind "Pod" resolves any pod
-  // by name regardless of its real owner), filtered to the hit's container
-  // and, if the hit has a timestamp, with the time range narrowed to a
-  // window around it so the surrounding context loads instead of just the
-  // latest page.
-  const handleJumpToContext = useCallback(async (target: JumpTarget) => {
-    let jsonLogging: boolean | undefined;
-    try {
-      const resp = await logClient.listPods({ namespace: target.namespace });
-      jsonLogging = resp.pods.find((p) => p.name === target.pod)?.jsonLogging;
-    } catch {
-      // best-effort: default jsonLogging to false on failure
-    }
-
-    const store = useLogStore.getState();
-    store.setSelectedWorkload(target.namespace, 'Pod', target.pod, jsonLogging);
-    store.setSelectedContainerFilter(target.container);
-    if (target.tsMs !== null) {
-      store.setTimeRange(
-        Math.floor((target.tsMs - JUMP_CONTEXT_WINDOW_MS) / 1000),
-        Math.floor((target.tsMs + JUMP_CONTEXT_WINDOW_MS) / 1000),
-      );
-    }
-    setSearchMode('page');
-    navigate(`/ns/${encodeURIComponent(target.namespace)}/Pod/${encodeURIComponent(target.pod)}`);
-  }, [navigate]);
-
   if (!namespace || !kind || !name) {
     return (
       <Box
@@ -154,13 +117,9 @@ export default function LogPanel() {
         name={name}
         liveEnabled={liveEnabled}
         onLiveToggle={handleLiveToggle}
-        searchMode={searchMode}
-        onSearchModeChange={setSearchMode}
       />
 
-      {searchMode === 'server' ? (
-        <SearchPanel namespace={namespace} kind={kind} name={name} onJumpToContext={handleJumpToContext} />
-      ) : mode === 'loading' ? (
+      {mode === 'loading' ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
           <CircularProgress size={32} />
         </Box>
