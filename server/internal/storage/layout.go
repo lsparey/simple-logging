@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -148,9 +149,20 @@ func WritePodMeta(logsRoot string, meta PodMeta) error {
 	return os.Rename(tmp, filepath.Join(dir, metaFileName))
 }
 
+// metaMu serializes meta.json read-modify-write cycles across the process.
+// Multiple containers of the same pod start their writers concurrently, and
+// meta.json has no on-disk locking of its own (plain write-temp-then-rename),
+// so without this a lost update could silently drop a container from the
+// Containers list or an earlier FirstSeen/LastSeen. Contention is negligible:
+// this only runs at writer construction, not per line.
+var metaMu sync.Mutex
+
 // recordContainerSeen updates a pod's meta.json to note that container has
 // been observed at the given time, creating the record if needed.
 func recordContainerSeen(logsRoot, namespace, pod, container string, at time.Time) error {
+	metaMu.Lock()
+	defer metaMu.Unlock()
+
 	meta, err := ReadPodMeta(logsRoot, namespace, pod)
 	if err != nil {
 		return err

@@ -1,0 +1,86 @@
+package storage
+
+import (
+	"fmt"
+	"sort"
+	"sync"
+	"testing"
+	"time"
+)
+
+// TestNewSegmentWriter_ConcurrentContainersAllRecordedInPodMeta guards against
+// the meta.json lost-update race: multiple containers of the same pod start
+// their writers at roughly the same time (the normal case once the collector
+// streams every container instead of just one), and every one of them must
+// end up in Containers — none silently dropped by an interleaved
+// read-modify-write.
+func TestNewSegmentWriter_ConcurrentContainersAllRecordedInPodMeta(t *testing.T) {
+	dir := t.TempDir()
+	const n = 20
+	containers := make([]string, n)
+	for i := range containers {
+		containers[i] = fmt.Sprintf("container-%02d", i)
+	}
+
+	var wg sync.WaitGroup
+	writers := make([]*SegmentWriter, n)
+	errs := make([]error, n)
+	wg.Add(n)
+	for i, container := range containers {
+		go func(i int, container string) {
+			defer wg.Done()
+			w, err := NewSegmentWriter(dir, "ns", "pod", container)
+			writers[i] = w
+			errs[i] = err
+		}(i, container)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("NewSegmentWriter(%s): %v", containers[i], err)
+		}
+		defer writers[i].Close()
+	}
+
+	meta, err := ReadPodMeta(dir, "ns", "pod")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	got := append([]string(nil), meta.Containers...)
+	sort.Strings(got)
+	want := append([]string(nil), containers...)
+	sort.Strings(want)
+	if len(got) != len(want) {
+		t.Fatalf("meta.Containers = %v (len %d), want all %d containers: %v", got, len(got), len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("meta.Containers = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestRecordContainerSeen_PreservesEarliestFirstSeen(t *testing.T) {
+	dir := t.TempDir()
+	early := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	late := time.Date(2026, 5, 20, 0, 0, 0, 0, time.UTC)
+
+	if err := recordContainerSeen(dir, "ns", "pod", "app", early); err != nil {
+		t.Fatalf("recordContainerSeen (early): %v", err)
+	}
+	if err := recordContainerSeen(dir, "ns", "pod", "sidecar", late); err != nil {
+		t.Fatalf("recordContainerSeen (late): %v", err)
+	}
+
+	meta, err := ReadPodMeta(dir, "ns", "pod")
+	if err != nil {
+		t.Fatalf("ReadPodMeta: %v", err)
+	}
+	if !meta.FirstSeen.Equal(early) {
+		t.Errorf("FirstSeen = %v, want %v (should not move forward)", meta.FirstSeen, early)
+	}
+	if !meta.LastSeen.Equal(late) {
+		t.Errorf("LastSeen = %v, want %v", meta.LastSeen, late)
+	}
+}
