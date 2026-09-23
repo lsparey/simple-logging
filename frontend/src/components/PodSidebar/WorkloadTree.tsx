@@ -24,7 +24,9 @@ function podAsSidebarWorkload(pod: PodInfo): SidebarWorkload {
 
 /**
  * The namespace -> workload kind -> workload accordion shared by the desktop
- * sidebar and the mobile "Workloads" drawer.
+ * sidebar and the mobile "Workloads" drawer. Renders inline content only
+ * (no outer scroll container), so it composes into a caller-provided
+ * scrolling region alongside other tree nodes (e.g. IndexesNode).
  */
 export default function WorkloadTree({ onLeafSelect }: Props) {
   const { namespaces, loading: namespacesLoading, error: namespacesError } = useNamespaces();
@@ -43,7 +45,7 @@ export default function WorkloadTree({ onLeafSelect }: Props) {
   const error = namespacesError ?? groupedError ?? podsError;
 
   return (
-    <Box sx={{ overflow: 'auto', flex: 1 }}>
+    <>
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
           <CircularProgress size={20} />
@@ -64,6 +66,6 @@ export default function WorkloadTree({ onLeafSelect }: Props) {
           <NamespaceNode key={ns} namespace={ns} workloads={workloadsByNamespace[ns] ?? []} onLeafSelect={onLeafSelect} />
         ))}
       </List>
-    </Box>
+    </>
   );
 }

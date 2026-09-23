@@ -34,7 +34,7 @@ function DrawerPane({ label, onBack, children }: { label: string; onBack: () => 
           </ListItemButton>
         </ListItem>
       </List>
-      {children}
+      <Box sx={{ overflow: 'auto', flex: 1 }}>{children}</Box>
     </Box>
   );
 }
