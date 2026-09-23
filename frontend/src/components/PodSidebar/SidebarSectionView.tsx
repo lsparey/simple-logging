@@ -8,6 +8,7 @@ import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNamespaces } from '../../hooks/useNamespaces.js';
+import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
 import NamespaceNode from './NamespaceNode.js';
 import IndexSidebar from './IndexSidebar.js';
 import { SIDEBAR_SECTIONS, type SidebarSection } from './sidebarSections.js';
@@ -18,9 +19,26 @@ interface Props {
   onLeafSelect?: () => void;
 }
 
+// Stable reference so the indexes branch doesn't pass a fresh `[]` literal
+// to useWorkloadsByNamespace on every render.
+const NO_NAMESPACES: string[] = [];
+
 export default function SidebarSectionView({ section, onBack, onLeafSelect }: Props) {
-  const { namespaces, loading, error } = useNamespaces();
+  const { namespaces, loading: namespacesLoading, error: namespacesError } = useNamespaces();
   const label = SIDEBAR_SECTIONS.find((s) => s.key === section)?.label ?? '';
+
+  // Fetched eagerly (not lazily per-expand) so namespaces with nothing of
+  // this kind can be hidden from the list up front, instead of only being
+  // discovered empty after the user expands them.
+  const workloadKind = section === 'indexes' ? null : section;
+  const { workloadsByNamespace, loading: workloadsLoading, error: workloadsError } = useWorkloadsByNamespace(
+    workloadKind ? namespaces : NO_NAMESPACES,
+    workloadKind ?? '',
+  );
+  const namespacesWithItems = namespaces.filter((ns) => (workloadsByNamespace[ns]?.length ?? 0) > 0);
+
+  const loading = namespacesLoading || (workloadKind !== null && workloadsLoading);
+  const error = namespacesError ?? (workloadKind !== null ? workloadsError : null);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -49,9 +67,20 @@ export default function SidebarSectionView({ section, onBack, onLeafSelect }: Pr
               {error}
             </Typography>
           )}
+          {!loading && !error && namespacesWithItems.length === 0 && (
+            <Typography variant="body2" color="text.disabled" sx={{ px: 2, py: 1 }}>
+              No {label}
+            </Typography>
+          )}
           <List disablePadding>
-            {namespaces.map((ns) => (
-              <NamespaceNode key={`${ns}-${section}`} namespace={ns} viewMode={section} onLeafSelect={onLeafSelect} />
+            {namespacesWithItems.map((ns) => (
+              <NamespaceNode
+                key={`${ns}-${section}`}
+                namespace={ns}
+                viewMode={section}
+                workloads={workloadsByNamespace[ns] ?? []}
+                onLeafSelect={onLeafSelect}
+              />
             ))}
           </List>
         </Box>

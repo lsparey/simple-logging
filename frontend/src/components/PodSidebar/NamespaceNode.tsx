@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
@@ -9,24 +9,22 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import FolderIcon from '@mui/icons-material/Folder';
 import List from '@mui/material/List';
 import { useNavigate } from 'react-router-dom';
-import { useWorkloadList } from '../../hooks/useWorkloadList.js';
 import { useLogStore } from '../../store/logStore.js';
 import WorkloadNode from './WorkloadNode.js';
+import type { WorkloadInfo } from '../../gen/simplelog/v1/log_service_pb.js';
 import type { WorkloadKind } from './sidebarSections.js';
 
 interface Props {
   namespace: string;
   viewMode: WorkloadKind;
+  workloads: WorkloadInfo[];
   onLeafSelect?: () => void;
 }
 
-export default function NamespaceNode({ namespace, viewMode, onLeafSelect }: Props) {
+export default function NamespaceNode({ namespace, viewMode, workloads, onLeafSelect }: Props) {
   const selectedNamespace = useLogStore((s) => s.selectedNamespace);
   const [open, setOpen] = useState(() => selectedNamespace === namespace);
-  const { workloads } = useWorkloadList(open ? namespace : null);
   const navigate = useNavigate();
-
-  const kindWorkloads = useMemo(() => workloads.filter((w) => w.kind === viewMode), [workloads, viewMode]);
 
   function handleClick() {
     const next = !open;
@@ -52,7 +50,7 @@ export default function NamespaceNode({ namespace, viewMode, onLeafSelect }: Pro
       </ListItem>
       <Collapse in={open} unmountOnExit>
         <List disablePadding>
-          {kindWorkloads.map((w) => (
+          {workloads.map((w) => (
             <WorkloadNode key={`${w.kind}/${w.name}`} workload={w} onSelect={onLeafSelect} />
           ))}
         </List>
