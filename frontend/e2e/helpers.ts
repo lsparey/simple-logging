@@ -1,9 +1,16 @@
 import type { Page } from '@playwright/test';
+import { WORKLOAD_KIND_SECTIONS, type WorkloadKind } from '../src/components/PodSidebar/sidebarSections.js';
 
-/** Navigate to the app, open the workloads view, expand a namespace, and click a workload. */
-export async function selectWorkload(page: Page, namespace: string, name: string) {
+function kindSectionLabel(kind: WorkloadKind): string {
+  const section = WORKLOAD_KIND_SECTIONS.find((s) => s.key === kind);
+  if (!section) throw new Error(`unknown workload kind: ${kind}`);
+  return section.label;
+}
+
+/** Navigate to the app, open a workload kind's section, expand a namespace, and click a workload. */
+export async function selectWorkload(page: Page, namespace: string, kind: WorkloadKind, name: string) {
   await page.goto('/');
-  await page.getByText('Workloads').click();
+  await page.getByText(kindSectionLabel(kind)).click();
   await page.getByText(namespace).click();
   await page.getByText(name).first().click();
 }

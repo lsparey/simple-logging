@@ -6,29 +6,39 @@ test.describe('PodSidebar', () => {
   });
 
   test('shows the section menu with no namespaces until a section is chosen', async ({ page }) => {
-    await expect(page.getByText('Workloads')).toBeVisible();
     await expect(page.getByText('Indexes')).toBeVisible();
+    await expect(page.getByText('Deployments')).toBeVisible();
+    await expect(page.getByText('StatefulSets')).toBeVisible();
+    await expect(page.getByText('DaemonSets')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Jobs', exact: true })).toBeVisible();
+    await expect(page.getByText('CronJobs')).toBeVisible();
+    await expect(page.getByText('Pods')).toBeVisible();
     await expect(page.getByText('default')).not.toBeVisible();
   });
 
-  test('shows namespaces from the API after choosing Workloads', async ({ page }) => {
-    await page.getByText('Workloads').click();
+  test('shows namespaces from the API after choosing a workload kind', async ({ page }) => {
+    await page.getByText('Deployments').click();
     await expect(page.getByText('default')).toBeVisible();
     await expect(page.getByText('kube-system')).toBeVisible();
   });
 
-  test('expands a namespace to show its workloads, tagged by kind', async ({ page }) => {
-    await page.getByText('Workloads').click();
+  test('expanding a namespace under Deployments shows only Deployment-kind workloads', async ({ page }) => {
+    await page.getByText('Deployments').click();
     await page.getByText('default').click();
     await expect(page.getByText('web-app')).toBeVisible();
     await expect(page.getByText('api-server')).toBeVisible();
+    await expect(page.getByText('standalone-pod')).not.toBeVisible();
+  });
+
+  test('expanding a namespace under Pods shows only Pod-kind workloads', async ({ page }) => {
+    await page.getByText('Pods').click();
+    await page.getByText('default').click();
     await expect(page.getByText('standalone-pod')).toBeVisible();
-    await expect(page.getByText('Deploy').first()).toBeVisible();
-    await expect(page.getByText('Pod').first()).toBeVisible();
+    await expect(page.getByText('web-app')).not.toBeVisible();
   });
 
   test('collapses the namespace list on a second click', async ({ page }) => {
-    await page.getByText('Workloads').click();
+    await page.getByText('Deployments').click();
     await page.getByText('default').click();
     await expect(page.getByText('web-app')).toBeVisible();
 
@@ -37,16 +47,17 @@ test.describe('PodSidebar', () => {
   });
 
   test('the back arrow returns to the section menu', async ({ page }) => {
-    await page.getByText('Workloads').click();
+    await page.getByText('Deployments').click();
     await expect(page.getByText('default')).toBeVisible();
 
     await page.getByRole('button', { name: 'Back' }).click();
     await expect(page.getByText('default')).not.toBeVisible();
-    await expect(page.getByText('Workloads')).toBeVisible();
+    await expect(page.getByText('Deployments')).toBeVisible();
+    await expect(page.getByText('Pods')).toBeVisible();
   });
 
   test('selecting a Deployment-kind workload shows the log panel toolbar header', async ({ page }) => {
-    await page.getByText('Workloads').click();
+    await page.getByText('Deployments').click();
     await page.getByText('default').click();
     await page.getByText('web-app').first().click();
 
@@ -55,7 +66,7 @@ test.describe('PodSidebar', () => {
   });
 
   test('selecting a Pod-kind workload shows the log panel toolbar header', async ({ page }) => {
-    await page.getByText('Workloads').click();
+    await page.getByText('Pods').click();
     await page.getByText('default').click();
     await page.getByText('standalone-pod').click();
 
@@ -64,20 +75,25 @@ test.describe('PodSidebar', () => {
 });
 
 test.describe('MobileSidebarNav', () => {
-  test('the bottom icons are visible and no namespaces show until one is tapped', async ({ page }) => {
+  test('only the Indexes and Workloads icons are visible, with nothing expanded yet', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
 
     await expect(page.getByRole('button', { name: 'Workloads' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Indexes' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Deployments' })).not.toBeVisible();
     await expect(page.getByText('default')).not.toBeVisible();
   });
 
-  test('tapping an icon pops up the namespace list, and selecting collapses it back to the icons', async ({ page }) => {
+  test('tapping Workloads opens a kind picker, then drills into namespaces and a workload', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
 
     await page.getByRole('button', { name: 'Workloads' }).click();
+    await expect(page.getByText('Deployments')).toBeVisible();
+    await expect(page.getByText('default')).not.toBeVisible();
+
+    await page.getByText('Deployments').click();
     await expect(page.getByText('default')).toBeVisible();
 
     await page.getByText('default').click();

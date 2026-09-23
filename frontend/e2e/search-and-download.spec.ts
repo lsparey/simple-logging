@@ -3,7 +3,7 @@ import { selectWorkload } from './helpers.js';
 
 test.describe('Server-side search', () => {
   test('switching to Server mode hides the page-search field and shows search controls', async ({ page }) => {
-    await selectWorkload(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'Deployment', 'web-app');
     await expect(page.getByPlaceholder('Search…')).toBeVisible();
 
     await page.getByRole('button', { name: 'Server', exact: true }).click();
@@ -13,7 +13,7 @@ test.describe('Server-side search', () => {
   });
 
   test('running a search streams and highlights matching results', async ({ page }) => {
-    await selectWorkload(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'Deployment', 'web-app');
     await page.getByRole('button', { name: 'Server', exact: true }).click();
 
     await page.getByPlaceholder('Search server-side…').fill('burst 5');
@@ -24,7 +24,7 @@ test.describe('Server-side search', () => {
   });
 
   test('jumping to context switches back to page mode filtered to that pod', async ({ page }) => {
-    await selectWorkload(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'Deployment', 'web-app');
     await page.getByRole('button', { name: 'Server', exact: true }).click();
 
     await page.getByPlaceholder('Search server-side…').fill('burst 5');
@@ -42,7 +42,7 @@ test.describe('Server-side search', () => {
 
 test.describe('Log download', () => {
   test('the download button triggers a file download scoped to the current workload', async ({ page }) => {
-    await selectWorkload(page, 'default', 'web-app');
+    await selectWorkload(page, 'default', 'Deployment', 'web-app');
 
     const downloadPromise = page.context().waitForEvent('download');
     await page.getByLabel('Download logs').click();
