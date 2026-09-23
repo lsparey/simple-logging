@@ -16,9 +16,23 @@ test.describe('Server-side search', () => {
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
   });
 
+  test('"All" is the top option for namespace and workload kind', async ({ page }) => {
+    await page.getByLabel('Namespace').click();
+    const namespaceOptions = page.getByRole('listbox').getByRole('option');
+    await expect(namespaceOptions.first()).toHaveText('All');
+    await page.keyboard.press('Escape');
+
+    await page.getByLabel('Workload kind').click();
+    const kindOptions = page.getByRole('listbox').getByRole('option');
+    await expect(kindOptions.first()).toHaveText('All');
+    await page.keyboard.press('Escape');
+  });
+
   test('running a scoped search streams and highlights matching results', async ({ page }) => {
-    await page.getByLabel('Namespace').fill('default');
-    await page.getByLabel('Workload kind').fill('Deployment');
+    await page.getByLabel('Namespace').click();
+    await page.getByRole('option', { name: 'default' }).click();
+    await page.getByLabel('Workload kind').click();
+    await page.getByRole('option', { name: 'Deployments' }).click();
     await page.getByLabel('Workload name').fill('web-app');
     await page.getByPlaceholder('Query…').fill('burst 5');
     await page.getByRole('button', { name: 'Search', exact: true }).click();
@@ -27,9 +41,22 @@ test.describe('Server-side search', () => {
     await expect(mark).toBeVisible();
   });
 
+  test('the workload name field suggests names for the selected namespace and kind', async ({ page }) => {
+    await page.getByLabel('Namespace').click();
+    await page.getByRole('option', { name: 'default' }).click();
+    await page.getByLabel('Workload kind').click();
+    await page.getByRole('option', { name: 'Deployments' }).click();
+
+    await page.getByLabel('Workload name').click();
+    await expect(page.getByRole('option', { name: 'web-app' })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'api-server' })).toBeVisible();
+  });
+
   test('jumping to context navigates to the hit pod, scoped by kind Pod', async ({ page }) => {
-    await page.getByLabel('Namespace').fill('default');
-    await page.getByLabel('Workload kind').fill('Deployment');
+    await page.getByLabel('Namespace').click();
+    await page.getByRole('option', { name: 'default' }).click();
+    await page.getByLabel('Workload kind').click();
+    await page.getByRole('option', { name: 'Deployments' }).click();
     await page.getByLabel('Workload name').fill('web-app');
     await page.getByPlaceholder('Query…').fill('burst 5');
     await page.getByRole('button', { name: 'Search', exact: true }).click();

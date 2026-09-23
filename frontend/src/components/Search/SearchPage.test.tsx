@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -10,11 +10,15 @@ vi.mock('../../grpc/client.js', () => ({
   logClient: {
     searchLogs: vi.fn(),
     listPods: vi.fn(),
+    listNamespaces: vi.fn(),
+    listWorkloads: vi.fn(),
   },
 }));
 
 const searchLogs = vi.mocked(logClient.searchLogs);
 const listPods = vi.mocked(logClient.listPods);
+const listNamespaces = vi.mocked(logClient.listNamespaces);
+const listWorkloads = vi.mocked(logClient.listWorkloads);
 
 const theme = createTheme();
 function Wrapper({ children }: { children: React.ReactNode }) {
@@ -37,6 +41,10 @@ beforeEach(() => {
   searchLogs.mockReset();
   listPods.mockReset();
   listPods.mockResolvedValue({ pods: [] });
+  listNamespaces.mockReset();
+  listNamespaces.mockResolvedValue({ namespaces: ['default', 'kube-system'] });
+  listWorkloads.mockReset();
+  listWorkloads.mockResolvedValue({ workloads: [] });
   useLogStore.setState({
     selectedNamespace: null,
     selectedWorkloadKind: null,
@@ -72,12 +80,29 @@ describe('SearchPage', () => {
     });
   });
 
-  it('scopes the search to the entered namespace/kind/name', async () => {
+  it('shows "All" as the top option for namespace and workload kind', () => {
+    render(<SearchPage />, { wrapper: Wrapper });
+
+    fireEvent.mouseDown(screen.getByLabelText('Namespace'));
+    const namespaceOptions = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(namespaceOptions[0]).toHaveTextContent('All');
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+
+    fireEvent.mouseDown(screen.getByLabelText('Workload kind'));
+    const kindOptions = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(kindOptions[0]).toHaveTextContent('All');
+  });
+
+  it('scopes the search to the selected namespace/kind and typed name', async () => {
     searchLogs.mockReturnValue(asyncIterableOf([]) as ReturnType<typeof logClient.searchLogs>);
     render(<SearchPage />, { wrapper: Wrapper });
 
-    fireEvent.change(screen.getByLabelText('Namespace'), { target: { value: 'default' } });
-    fireEvent.change(screen.getByLabelText('Workload kind'), { target: { value: 'Deployment' } });
+    fireEvent.mouseDown(screen.getByLabelText('Namespace'));
+    fireEvent.click(await within(screen.getByRole('listbox')).findByText('default'));
+
+    fireEvent.mouseDown(screen.getByLabelText('Workload kind'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Deployments'));
+
     fireEvent.change(screen.getByLabelText('Workload name'), { target: { value: 'web-app' } });
     fireEvent.change(screen.getByPlaceholderText('Query…'), { target: { value: 'error' } });
     fireEvent.click(screen.getByRole('button', { name: 'Search' }));
@@ -88,6 +113,28 @@ describe('SearchPage', () => {
       workloadKind: 'Deployment',
       workloadName: 'web-app',
     });
+  });
+
+  it('suggests workload names for the selected namespace and kind', async () => {
+    listWorkloads.mockResolvedValue({
+      workloads: [
+        { kind: 'Deployment', name: 'web-app', namespace: 'default', active: true, jsonLogging: false, pods: ['web-app-abc'] },
+        { kind: 'StatefulSet', name: 'cache', namespace: 'default', active: true, jsonLogging: false, pods: ['cache-0'] },
+      ],
+    });
+    render(<SearchPage />, { wrapper: Wrapper });
+
+    fireEvent.mouseDown(screen.getByLabelText('Namespace'));
+    fireEvent.click(await within(screen.getByRole('listbox')).findByText('default'));
+    fireEvent.mouseDown(screen.getByLabelText('Workload kind'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByText('Deployments'));
+
+    fireEvent.mouseDown(screen.getByLabelText('Workload name'));
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'web-app' })).toBeInTheDocument();
+    });
+    // Filtered to Deployment kind, so the StatefulSet "cache" isn't offered.
+    expect(screen.queryByRole('option', { name: 'cache' })).not.toBeInTheDocument();
   });
 
   it('renders streamed results with a namespace/pod/container chip and a truncated notice', async () => {
