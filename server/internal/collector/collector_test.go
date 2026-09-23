@@ -577,3 +577,124 @@ func TestCollector_WriteFailureDropsLinesButKeepsStreaming(t *testing.T) {
 		t.Fatal("expected the line to be written once the writer recovered")
 	}
 }
+
+// makeMultiContainerPod returns a pod with the given container names, in order.
+func makeMultiContainerPod(namespace, name string, containers ...string) *corev1.Pod {
+	pod := makePod(namespace, name)
+	pod.Spec.Containers = nil
+	for _, c := range containers {
+		pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{Name: c})
+	}
+	return pod
+}
+
+func TestCollector_MultiContainer_CollectsAllContainers(t *testing.T) {
+	logsRoot := t.TempDir()
+	nodeLogs := t.TempDir()
+
+	pod := makeMultiContainerPod("default", "multi-pod", "app", "sidecar")
+	for _, container := range []string{"app", "sidecar"} {
+		containerDir := filepath.Join(nodeLogs, "default_multi-pod_uid-1", container)
+		if err := os.MkdirAll(containerDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		criLine := fmt.Sprintf("2026-01-01T00:00:00.000000000Z stdout F hello from %s\n", container)
+		if err := os.WriteFile(filepath.Join(containerDir, "0.log"), []byte(criLine), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop())
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	if !waitFor(t, 5*time.Second, func() bool {
+		return countLines(t, logsRoot, "default", "multi-pod", "hello from app") == 1 &&
+			countLines(t, logsRoot, "default", "multi-pod", "hello from sidecar") == 1
+	}) {
+		t.Fatal("expected both containers to be collected independently")
+	}
+
+	containers, err := storage.ListContainers(logsRoot, "default", "multi-pod")
+	if err != nil {
+		t.Fatalf("ListContainers: %v", err)
+	}
+	if want := []string{"app", "sidecar"}; len(containers) != 2 || containers[0] != want[0] || containers[1] != want[1] {
+		t.Errorf("ListContainers = %v, want %v", containers, want)
+	}
+}
+
+func TestCollector_MultiContainer_IsActiveUntilAllContainersStop(t *testing.T) {
+	logsRoot := t.TempDir()
+	nodeLogs := t.TempDir()
+
+	pod := makeMultiContainerPod("default", "multi-pod", "app", "sidecar")
+	for _, container := range []string{"app", "sidecar"} {
+		containerDir := filepath.Join(nodeLogs, "default_multi-pod_uid-1", container)
+		if err := os.MkdirAll(containerDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(containerDir, "0.log"), nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop())
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	if !coll.IsActive("default", "multi-pod") {
+		t.Fatal("expected pod to be active immediately after OnAdd (any container running)")
+	}
+
+	coll.OnDelete(pod)
+	if coll.IsActive("default", "multi-pod") {
+		t.Error("expected pod to be inactive once every container's stream has stopped")
+	}
+}
+
+func TestCollector_MultiContainer_JsonLoggingReflectsDefaultContainerOnly(t *testing.T) {
+	logsRoot := t.TempDir()
+	nodeLogs := t.TempDir()
+	pod := makeMultiContainerPod("default", "multi-pod", "app", "sidecar")
+
+	appDir := filepath.Join(nodeLogs, "default_multi-pod_uid-1", "app")
+	sidecarDir := filepath.Join(nodeLogs, "default_multi-pod_uid-1", "sidecar")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(sidecarDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// The default container ("app", first in the pod spec) logs JSON; the
+	// sidecar logs plain text.
+	var appLines, sidecarLines strings.Builder
+	for i := 0; i < jsonRequiredMatches; i++ {
+		fmt.Fprintf(&appLines, "2026-01-01T00:00:%02d.000000000Z stdout F {\"level\":\"info\",\"n\":%d}\n", i, i)
+	}
+	for i := 0; i < jsonProbeLines; i++ {
+		fmt.Fprintf(&sidecarLines, "2026-01-01T00:00:%02d.000000000Z stdout F plain text line %d\n", i, i)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "0.log"), []byte(appLines.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sidecarDir, "0.log"), []byte(sidecarLines.String()), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop())
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	if !waitFor(t, 5*time.Second, func() bool { return coll.IsJsonLogging("default", "multi-pod") }) {
+		t.Fatal("expected pod to be detected as JSON logging based on its default container")
+	}
+
+	// Give the sidecar's (plain-text) probe time to also decide; it must not
+	// overwrite the pod-level flag the default container's probe set.
+	time.Sleep(100 * time.Millisecond)
+	if !coll.IsJsonLogging("default", "multi-pod") {
+		t.Error("sidecar's plain-text probe must not overwrite the default container's JSON flag")
+	}
+}

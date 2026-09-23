@@ -67,12 +67,23 @@ type podKey struct {
 	name      string
 }
 
+// containerKey identifies one container's log stream within a pod. A pod's
+// non-init containers each get an independent stream; init containers are
+// out of scope (they normally run to completion before steady-state logging
+// matters).
+type containerKey struct {
+	namespace string
+	pod       string
+	container string
+}
+
 type activeStream struct {
 	cancel context.CancelFunc
 }
 
-// Collector manages one log-streaming goroutine per pod. It is safe for
-// concurrent use from the PodWatcher callbacks.
+// Collector manages one log-streaming goroutine per (pod, container) pair —
+// every non-init container in a pod is streamed independently. It is safe
+// for concurrent use from the PodWatcher callbacks.
 type Collector struct {
 	cs       kubernetes.Interface
 	logsRoot string
@@ -95,7 +106,11 @@ type Collector struct {
 
 	mu      sync.Mutex
 	wg      sync.WaitGroup
-	streams map[podKey]*activeStream
+	streams map[containerKey]*activeStream
+	// activeContainerCount is a ref count of running container streams per
+	// pod, kept in step with streams so IsActive stays O(1) instead of
+	// scanning every stream in the cluster on each call.
+	activeContainerCount map[podKey]int
 
 	// deploymentPods maps "namespace/deployment" -> set of pod names.
 	deploymentPods map[string]map[string]struct{}
@@ -134,17 +149,18 @@ func New(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger
 // NewWithIndexes creates a Collector with a shared index manager.
 func NewWithIndexes(cs kubernetes.Interface, logsRoot, nodeLogsRoot string, log *zap.Logger, indexManager *indexes.Manager, opts ...Option) *Collector {
 	c := &Collector{
-		cs:             cs,
-		logsRoot:       logsRoot,
-		nodeLogsRoot:   nodeLogsRoot,
-		log:            log,
-		apiMinBackoff:  apiStreamMinBackoff,
-		apiMaxBackoff:  apiStreamMaxBackoff,
-		streams:        make(map[podKey]*activeStream),
-		deploymentPods: make(map[string]map[string]struct{}),
-		podDeployment:  make(map[string]string),
-		jsonLogging:    make(map[podKey]bool),
-		indexes:        indexManager,
+		cs:                   cs,
+		logsRoot:             logsRoot,
+		nodeLogsRoot:         nodeLogsRoot,
+		log:                  log,
+		apiMinBackoff:        apiStreamMinBackoff,
+		apiMaxBackoff:        apiStreamMaxBackoff,
+		streams:              make(map[containerKey]*activeStream),
+		activeContainerCount: make(map[podKey]int),
+		deploymentPods:       make(map[string]map[string]struct{}),
+		podDeployment:        make(map[string]string),
+		jsonLogging:          make(map[podKey]bool),
+		indexes:              indexManager,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -165,32 +181,66 @@ func (c *Collector) usesFileTail(pod *corev1.Pod) bool {
 	return pod.Spec.NodeName == c.nodeName
 }
 
-// OnAdd is called by the PodWatcher when a pod starts or transitions to Running.
-// If a stream is already running for that pod (restart scenario), the old stream
-// is cancelled before a new one begins.
+// OnAdd is called by the PodWatcher when a pod starts or transitions to
+// Running. It starts one stream per non-init container. If a stream is
+// already running for a given container (restart scenario — the pod was
+// recreated under the same name), that container's old stream is cancelled
+// before its new one begins; other containers are unaffected.
 func (c *Collector) OnAdd(pod *corev1.Pod) {
-	key := podKey{namespace: pod.Namespace, name: pod.Name}
+	pk := podKey{namespace: pod.Namespace, name: pod.Name}
+	containers := collectableContainers(pod)
+
+	type startItem struct {
+		container string
+		ctx       context.Context
+		isRestart bool
+	}
 
 	c.mu.Lock()
-	isRestart := false
-	if existing, ok := c.streams[key]; ok {
-		existing.cancel()
-		isRestart = true
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	c.streams[key] = &activeStream{cancel: cancel}
 	c.trackDeployment(pod)
+	items := make([]startItem, 0, len(containers))
+	for _, containerName := range containers {
+		ck := containerKey{namespace: pod.Namespace, pod: pod.Name, container: containerName}
+		isRestart := false
+		if existing, ok := c.streams[ck]; ok {
+			existing.cancel()
+			isRestart = true
+		} else {
+			c.activeContainerCount[pk]++
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		c.streams[ck] = &activeStream{cancel: cancel}
+		items = append(items, startItem{container: containerName, ctx: ctx, isRestart: isRestart})
+	}
 	c.mu.Unlock()
 
-	// Immediately probe the stored log file so the JSON-logging flag is available
-	// before the live stream delivers its first batch of lines.
-	c.detectJsonFromFile(pod.Namespace, pod.Name, defaultContainer(pod))
+	for _, item := range items {
+		// Immediately probe the stored log file so the JSON-logging flag is
+		// available before the live stream delivers its first batch of
+		// lines. Only the default container feeds the pod-level flag (see
+		// isDefaultContainer in runFileTail/streamAPIOnce), so there is
+		// nothing useful to probe for the others.
+		if item.container == defaultContainer(pod) {
+			c.detectJsonFromFile(pod.Namespace, pod.Name, item.container)
+		}
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		c.runStream(ctx, pod, isRestart)
-	}()
+		c.wg.Add(1)
+		go func(item startItem) {
+			defer c.wg.Done()
+			c.runStream(item.ctx, pod, item.container, item.isRestart)
+		}(item)
+	}
+}
+
+// collectableContainers returns the names of a pod's non-init containers.
+// pod.Spec.Containers already excludes init containers (a separate slice),
+// so they are out of scope with no extra filtering.
+func collectableContainers(pod *corev1.Pod) []string {
+	names := make([]string, 0, len(pod.Spec.Containers))
+	for _, container := range pod.Spec.Containers {
+		names = append(names, container.Name)
+	}
+	return names
 }
 
 // detectJsonFromFile scans the first jsonProbeLines non-empty lines of the
@@ -241,19 +291,27 @@ func (c *Collector) Close() {
 }
 
 // OnDelete is called by the PodWatcher when a pod is deleted.
-// It cancels the running stream goroutine if one exists and prunes the pod
-// from all tracking maps so they don't grow unbounded over the collector's
-// lifetime.
+// It cancels every running container stream for the pod and prunes it from
+// all tracking maps so they don't grow unbounded over the collector's lifetime.
 func (c *Collector) OnDelete(pod *corev1.Pod) {
-	key := podKey{namespace: pod.Namespace, name: pod.Name}
+	pk := podKey{namespace: pod.Namespace, name: pod.Name}
 
 	c.mu.Lock()
-	existing, ok := c.streams[key]
-	if ok {
-		existing.cancel()
-		delete(c.streams, key)
+	stopped := 0
+	for _, containerName := range collectableContainers(pod) {
+		ck := containerKey{namespace: pod.Namespace, pod: pod.Name, container: containerName}
+		if existing, ok := c.streams[ck]; ok {
+			existing.cancel()
+			delete(c.streams, ck)
+			stopped++
+		}
 	}
-	delete(c.jsonLogging, key)
+	if stopped > 0 {
+		if c.activeContainerCount[pk] -= stopped; c.activeContainerCount[pk] <= 0 {
+			delete(c.activeContainerCount, pk)
+		}
+	}
+	delete(c.jsonLogging, pk)
 
 	podMapKey := pod.Namespace + "/" + pod.Name
 	if depName, tracked := c.podDeployment[podMapKey]; tracked {
@@ -268,20 +326,20 @@ func (c *Collector) OnDelete(pod *corev1.Pod) {
 	}
 	c.mu.Unlock()
 
-	if ok {
-		c.log.Info("stopped log stream",
+	if stopped > 0 {
+		c.log.Info("stopped log streams",
 			zap.String("namespace", pod.Namespace),
 			zap.String("pod", pod.Name),
+			zap.Int("containers", stopped),
 		)
 	}
 }
 
-// IsActive reports whether a pod is currently being streamed.
+// IsActive reports whether a pod currently has at least one container being streamed.
 func (c *Collector) IsActive(namespace, pod string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	_, ok := c.streams[podKey{namespace: namespace, name: pod}]
-	return ok
+	return c.activeContainerCount[podKey{namespace: namespace, name: pod}] > 0
 }
 
 // IsJsonLogging reports whether the given pod's log output has been detected
@@ -357,11 +415,10 @@ func (c *Collector) trackDeployment(pod *corev1.Pod) {
 	c.podDeployment[podMapKey] = deploymentName
 }
 
-// runStream is the entry point for the per-pod goroutine. It creates the
-// storage writer, writes a restart separator if needed, then dispatches to
-// either runFileTail (node-local file) or runAPIStream (Kubernetes log API).
-func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bool) {
-	containerName := defaultContainer(pod)
+// runStream is the entry point for each per-container goroutine. It creates
+// the storage writer, writes a restart separator if needed, then dispatches
+// to either runFileTail (node-local file) or runAPIStream (Kubernetes log API).
+func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, containerName string, isRestart bool) {
 	fileTail := c.usesFileTail(pod)
 	source := "api"
 	if fileTail {
@@ -423,6 +480,11 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, isRestart bo
 //	CRI:    <RFC3339Nano> <stream> <flag> <content>
 //	Docker: {"log":"<content>\n","stream":"stdout","time":"..."}
 func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.SegmentWriter, log *zap.Logger) {
+	// PodInfo.json_logging is a single pod-level flag, so only the default
+	// container's probe feeds it — otherwise whichever container's probe
+	// decided most recently would arbitrarily win.
+	isDefaultContainer := containerName == defaultContainer(pod)
+
 	containerDir := filepath.Join(c.nodeLogsRoot,
 		fmt.Sprintf("%s_%s_%s", pod.Namespace, pod.Name, string(pod.UID)),
 		containerName)
@@ -573,7 +635,9 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 			if !jsonDecided {
 				if decided, isJSON := probe.observe(logContent); decided {
 					jsonDecided = true
-					c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
+					if isDefaultContainer {
+						c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
+					}
 				}
 			}
 
@@ -759,6 +823,10 @@ func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, container
 // it ends. It returns the wall-clock time of the last line written (zero if
 // none) and a non-nil error if the stream failed to open or ended abnormally.
 func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containerName string, writer *storage.SegmentWriter, log *zap.Logger, since *metav1.Time, probe *jsonProbe, jsonDecided *bool) (time.Time, error) {
+	// PodInfo.json_logging is a single pod-level flag, so only the default
+	// container's probe feeds it (see runFileTail).
+	isDefaultContainer := containerName == defaultContainer(pod)
+
 	logOpts := &corev1.PodLogOptions{
 		Container:  containerName,
 		Follow:     true,
@@ -796,7 +864,9 @@ func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containe
 		if !*jsonDecided {
 			if decided, isJSON := probe.observe(content); decided {
 				*jsonDecided = true
-				c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
+				if isDefaultContainer {
+					c.setJsonLogging(pod.Namespace, pod.Name, isJSON)
+				}
 			}
 		}
 
