@@ -6,11 +6,11 @@ import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { WorkloadInfo } from '../../gen/simplelog/v1/log_service_pb.js';
+import type { SidebarWorkload } from './sidebarSections.js';
 import { useLogStore } from '../../store/logStore.js';
 
 interface Props {
-  workload: WorkloadInfo;
+  workload: SidebarWorkload;
   onSelect?: () => void;
 }
 

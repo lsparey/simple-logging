@@ -11,13 +11,12 @@ import List from '@mui/material/List';
 import { useNavigate } from 'react-router-dom';
 import { useLogStore } from '../../store/logStore.js';
 import WorkloadNode from './WorkloadNode.js';
-import type { WorkloadInfo } from '../../gen/simplelog/v1/log_service_pb.js';
-import type { WorkloadKind } from './sidebarSections.js';
+import type { SidebarWorkload, WorkloadKind } from './sidebarSections.js';
 
 interface Props {
   namespace: string;
   viewMode: WorkloadKind;
-  workloads: WorkloadInfo[];
+  workloads: SidebarWorkload[];
   onLeafSelect?: () => void;
 }
 

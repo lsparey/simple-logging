@@ -9,6 +9,20 @@ import type { SvgIconComponent } from '@mui/icons-material';
 
 export type WorkloadKind = 'Deployment' | 'StatefulSet' | 'DaemonSet' | 'Job' | 'CronJob' | 'Pod';
 
+/**
+ * The subset of WorkloadInfo (or a synthesized per-pod equivalent, for the
+ * Pods section) that the sidebar's NamespaceNode/WorkloadNode need to render
+ * a row and select it.
+ */
+export interface SidebarWorkload {
+  kind: string;
+  name: string;
+  namespace: string;
+  active: boolean;
+  jsonLogging: boolean;
+  pods: string[];
+}
+
 export const WORKLOAD_KIND_SECTIONS: { key: WorkloadKind; label: string; Icon: SvgIconComponent }[] = [
   { key: 'Deployment', label: 'Deployments', Icon: LayersIcon },
   { key: 'StatefulSet', label: 'StatefulSets', Icon: StorageIcon },
