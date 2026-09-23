@@ -123,7 +123,7 @@ describe('IndexPanel JSON formatting', () => {
     expect(screen.getByText(`${selectedValue.slice(0, 29)}...`)).toBeInTheDocument();
     expect(screen.queryByText('companyUuid')).not.toBeInTheDocument();
     expect(screen.getByTestId('log-histogram')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search…')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Filter…')).toBeInTheDocument();
   });
 
   it('shows a back button for logs and returns to the index values', () => {

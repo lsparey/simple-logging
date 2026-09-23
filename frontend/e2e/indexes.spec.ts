@@ -37,7 +37,7 @@ test.describe('Indexes', () => {
     await expect(company2).toBeVisible();
     await expect(company2.getByText('1')).toBeVisible();
     await expect(page.getByText(/log messages?/)).not.toBeVisible();
-    await expect(page.getByPlaceholder('Search…')).not.toBeVisible();
+    await expect(page.getByPlaceholder('Filter…')).not.toBeVisible();
 
     await company1.click();
     await expect(page.getByText('indexed web request')).toBeVisible();
@@ -47,7 +47,7 @@ test.describe('Indexes', () => {
     await expect(page.getByRole('button', { name: 'Go' })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Back to index values' })).toBeVisible();
     await expect(page.locator('.MuiChip-root').filter({ hasText: 'company-1' })).toBeVisible();
-    await expect(page.getByPlaceholder('Search…')).toBeVisible();
+    await expect(page.getByPlaceholder('Filter…')).toBeVisible();
   });
 
   test('manual autocomplete value search renders matching log messages', async ({ page }) => {
@@ -62,7 +62,7 @@ test.describe('Indexes', () => {
     await expect(page.getByLabel('Value', { exact: true })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Go' })).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Back to index values' })).toBeVisible();
-    await expect(page.getByPlaceholder('Search…')).toBeVisible();
+    await expect(page.getByPlaceholder('Filter…')).toBeVisible();
     expect(pageErrors).toEqual([]);
   });
 

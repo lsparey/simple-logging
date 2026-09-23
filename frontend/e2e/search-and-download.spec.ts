@@ -2,43 +2,53 @@ import { test, expect } from '@playwright/test';
 import { selectWorkload } from './helpers.js';
 
 test.describe('Server-side search', () => {
-  test('switching to Server mode hides the page-search field and shows search controls', async ({ page }) => {
-    await selectWorkload(page, 'default', 'Deployment', 'web-app');
-    await expect(page.getByPlaceholder('Search…')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Server', exact: true }).click();
-    await expect(page.getByPlaceholder('Search…')).not.toBeVisible();
-    await expect(page.getByPlaceholder('Search server-side…')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Search' })).toBeVisible();
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Open server-side search' }).click();
   });
 
-  test('running a search streams and highlights matching results', async ({ page }) => {
-    await selectWorkload(page, 'default', 'Deployment', 'web-app');
-    await page.getByRole('button', { name: 'Server', exact: true }).click();
+  test('opens as a standalone page with scope and query controls', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Search' })).toBeVisible();
+    await expect(page.getByLabel('Namespace')).toBeVisible();
+    await expect(page.getByLabel('Workload kind')).toBeVisible();
+    await expect(page.getByLabel('Workload name')).toBeVisible();
+    await expect(page.getByPlaceholder('Query…')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeVisible();
+  });
 
-    await page.getByPlaceholder('Search server-side…').fill('burst 5');
-    await page.getByRole('button', { name: 'Search' }).click();
+  test('running a scoped search streams and highlights matching results', async ({ page }) => {
+    await page.getByLabel('Namespace').fill('default');
+    await page.getByLabel('Workload kind').fill('Deployment');
+    await page.getByLabel('Workload name').fill('web-app');
+    await page.getByPlaceholder('Query…').fill('burst 5');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
 
     const mark = page.locator('mark', { hasText: 'burst 5' }).first();
     await expect(mark).toBeVisible();
   });
 
-  test('jumping to context switches back to page mode filtered to that pod', async ({ page }) => {
-    await selectWorkload(page, 'default', 'Deployment', 'web-app');
-    await page.getByRole('button', { name: 'Server', exact: true }).click();
-
-    await page.getByPlaceholder('Search server-side…').fill('burst 5');
-    await page.getByRole('button', { name: 'Search' }).click();
+  test('jumping to context navigates to the hit pod, scoped by kind Pod', async ({ page }) => {
+    await page.getByLabel('Namespace').fill('default');
+    await page.getByLabel('Workload kind').fill('Deployment');
+    await page.getByLabel('Workload name').fill('web-app');
+    await page.getByPlaceholder('Query…').fill('burst 5');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
 
     const resultRow = page.locator('mark', { hasText: 'burst 5' }).first();
     await expect(resultRow).toBeVisible();
     await resultRow.click();
 
-    // Back in page mode, with the log toolbar's page-search field visible again,
-    // scoped to the hit's own pod (kind "Pod") rather than the Deployment.
-    await expect(page.getByPlaceholder('Search…')).toBeVisible();
-    await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app' })).toBeVisible();
     await expect(page).toHaveURL(/\/ns\/default\/Pod\//);
+    // Wait for the search page itself to unmount before checking for the log
+    // toolbar's chip: while both are momentarily present (React hasn't
+    // re-rendered yet even though the URL already changed), a locator
+    // matching the shared MuiChip-root class picks up the many still-mounted
+    // search result chips too, which fails as a strict-mode violation rather
+    // than something toBeVisible()'s usual retrying can wait out.
+    await expect(page.getByRole('heading', { name: 'Search' })).not.toBeVisible();
+    await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app' })).toBeVisible();
+    // Back on the regular log page (the client-side filter field, not the search page's query field).
+    await expect(page.getByPlaceholder('Filter…')).toBeVisible();
   });
 });
 

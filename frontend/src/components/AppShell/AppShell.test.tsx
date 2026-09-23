@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { MemoryRouter } from 'react-router-dom';
@@ -20,6 +20,9 @@ vi.mock('../LogPanel/IndexPanel.js', () => ({
 }));
 vi.mock('../DataDashboard/DataDashboard.js', () => ({
   default: () => <div>data dashboard</div>,
+}));
+vi.mock('../Search/SearchPage.js', () => ({
+  default: () => <div>search page</div>,
 }));
 
 const theme = createTheme();
@@ -75,5 +78,18 @@ describe('AppShell — sidebar layout', () => {
     mockViewport(true);
     renderAppShell();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
+  });
+});
+
+describe('AppShell — server-side search entry point', () => {
+  it('shows a top-right icon that opens the search page', () => {
+    mockViewport(false);
+    renderAppShell();
+    expect(screen.getByText('log panel')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open server-side search' }));
+
+    expect(screen.getByText('search page')).toBeInTheDocument();
+    expect(screen.queryByText('log panel')).not.toBeInTheDocument();
   });
 });

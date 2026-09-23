@@ -24,7 +24,7 @@ test.describe('LogPanel — Deployment-kind workload', () => {
     await expect(page.getByText(/burst 1 from web-app/).first()).toBeVisible();
 
     // Filter to a specific burst line; normal "log entry" lines should vanish.
-    await page.getByPlaceholder('Search…').fill('burst 5 from web-app');
+    await page.getByPlaceholder('Filter…').fill('burst 5 from web-app');
 
     await expect(page.getByText(/burst 5 from web-app/).first()).toBeVisible();
     // A normal entry line from the same page should no longer be visible.
@@ -33,10 +33,10 @@ test.describe('LogPanel — Deployment-kind workload', () => {
 
   test('clearing the search filter restores all lines', async ({ page }) => {
     await selectWorkload(page, 'default', 'Deployment', 'web-app');
-    await page.getByPlaceholder('Search…').fill('burst 5 from web-app');
+    await page.getByPlaceholder('Filter…').fill('burst 5 from web-app');
     await expect(page.getByText(/burst 5 from web-app/).first()).toBeVisible();
 
-    await page.getByPlaceholder('Search…').clear();
+    await page.getByPlaceholder('Filter…').clear();
     // Normal entry lines should reappear once the filter is cleared.
     await expect(page.getByText(/log entry 1961 from web-app/).first()).toBeVisible();
   });
