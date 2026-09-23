@@ -17,12 +17,17 @@ vi.mock('../../hooks/useNamespaces.js', () => ({
 vi.mock('../../hooks/useWorkloadsByNamespace.js', () => ({
   useWorkloadsByNamespace: vi.fn(),
 }));
+vi.mock('../../hooks/usePodsByNamespace.js', () => ({
+  usePodsByNamespace: vi.fn(),
+}));
 
 import { useNamespaces } from '../../hooks/useNamespaces.js';
 import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
+import { usePodsByNamespace } from '../../hooks/usePodsByNamespace.js';
 
 const mockUseNamespaces = vi.mocked(useNamespaces);
 const mockUseWorkloadsByNamespace = vi.mocked(useWorkloadsByNamespace);
+const mockUsePodsByNamespace = vi.mocked(usePodsByNamespace);
 
 // Minimal MUI theme wrapper so MUI components render without warnings
 const theme = createTheme();
@@ -50,6 +55,7 @@ beforeEach(() => {
     loading: false,
     error: null,
   });
+  mockUsePodsByNamespace.mockReturnValue({ podsByNamespace: {}, loading: false, error: null });
 
   // Reset store selection state
   useLogStore.setState({
@@ -139,6 +145,53 @@ describe('PodSidebar', () => {
     fireEvent.click(screen.getByText('CronJobs'));
     expect(screen.getByText('No CronJobs')).toBeInTheDocument();
     expect(screen.queryByText('default')).not.toBeInTheDocument();
+  });
+
+  it('the Pods section lists every pod, including ones owned by a Deployment', async () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
+    mockUsePodsByNamespace.mockReturnValue({
+      podsByNamespace: {
+        default: [
+          { name: 'web-app-abc', namespace: 'default', active: true, jsonLogging: false, containers: ['app'] },
+          { name: 'standalone-pod', namespace: 'default', active: true, jsonLogging: false, containers: ['app'] },
+        ],
+      },
+      loading: false,
+      error: null,
+    });
+    render(<PodSidebar />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByText('Pods'));
+    fireEvent.click(screen.getByText('default'));
+
+    // web-app-abc is owned by the web-app Deployment (and so also appears
+    // under Deployments), but Pods lists it individually regardless.
+    await waitFor(() => {
+      expect(screen.getByText('web-app-abc')).toBeInTheDocument();
+      expect(screen.getByText('standalone-pod')).toBeInTheDocument();
+    });
+  });
+
+  it('selecting a pod under Pods selects it by kind Pod, not its owner', async () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: ['default'], loading: false, error: null });
+    mockUsePodsByNamespace.mockReturnValue({
+      podsByNamespace: {
+        default: [{ name: 'web-app-abc', namespace: 'default', active: true, jsonLogging: false, containers: ['app'] }],
+      },
+      loading: false,
+      error: null,
+    });
+    render(<PodSidebar />, { wrapper: Wrapper });
+
+    fireEvent.click(screen.getByText('Pods'));
+    fireEvent.click(screen.getByText('default'));
+    await waitFor(() => expect(screen.getByText('web-app-abc')).toBeInTheDocument());
+
+    act(() => fireEvent.click(screen.getByText('web-app-abc')));
+
+    const s = useLogStore.getState();
+    expect(s.selectedWorkloadKind).toBe('Pod');
+    expect(s.selectedWorkloadName).toBe('web-app-abc');
   });
 
   it('shows a back button and the section label after choosing a section, and returns to the menu', () => {

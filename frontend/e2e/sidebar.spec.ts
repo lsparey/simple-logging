@@ -30,24 +30,26 @@ test.describe('PodSidebar', () => {
     await expect(page.getByText('standalone-pod')).not.toBeVisible();
   });
 
-  test('expanding a namespace under Pods shows only Pod-kind workloads', async ({ page }) => {
+  test('the Pods section lists every pod, including ones owned by a Deployment', async ({ page }) => {
     await page.getByText('Pods').click();
     await page.getByText('default').click();
+    // standalone-pod has no owner; web-app-6d8c7f is owned by the web-app
+    // Deployment. Both are individual pods, so both show up here.
     await expect(page.getByText('standalone-pod')).toBeVisible();
-    await expect(page.getByText('web-app')).not.toBeVisible();
+    await expect(page.getByText('web-app-6d8c7f')).toBeVisible();
   });
 
   test('hides namespaces that have nothing of the chosen kind', async ({ page }) => {
-    // kube-system only has a Deployment in the fixture, so it should not
-    // appear at all under Pods (default has standalone-pod).
-    await page.getByText('Pods').click();
+    // kube-system has no StatefulSet in the fixture, so it should not
+    // appear at all under StatefulSets (default has "cache").
+    await page.getByText('StatefulSets').click();
     await expect(page.getByText('default')).toBeVisible();
     await expect(page.getByText('kube-system')).not.toBeVisible();
   });
 
   test('shows "No <Kind>" when nothing in any namespace matches the chosen kind', async ({ page }) => {
-    await page.getByText('StatefulSets').click();
-    await expect(page.getByText('No StatefulSets')).toBeVisible();
+    await page.getByText('DaemonSets').click();
+    await expect(page.getByText('No DaemonSets')).toBeVisible();
     await expect(page.getByText('default')).not.toBeVisible();
     await expect(page.getByText('kube-system')).not.toBeVisible();
   });
@@ -86,6 +88,15 @@ test.describe('PodSidebar', () => {
     await page.getByText('standalone-pod').click();
 
     await expect(page.locator('.MuiChip-root').filter({ hasText: 'standalone-pod' })).toBeVisible();
+  });
+
+  test('selecting a Deployment-owned pod under Pods scopes the log view to that pod alone', async ({ page }) => {
+    await page.getByText('Pods').click();
+    await page.getByText('default').click();
+    await page.getByText('web-app-6d8c7f').click();
+
+    // The toolbar shows the pod's own name, not the owning Deployment's.
+    await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app-6d8c7f' })).toBeVisible();
   });
 });
 
