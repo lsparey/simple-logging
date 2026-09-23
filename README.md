@@ -9,7 +9,8 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 ## Features
 
 - **Live log streaming** — real-time log tailing from all pods across all namespaces via a gRPC-Web API
-- **Persisted log storage** — logs are written to a PersistentVolumeClaim (one file per pod) and deleted once a pod's file has been idle for 30 days (see [retention](#retention) below)
+- **Every container** — every non-init container in a pod is collected independently, including sidecars
+- **Persisted log storage** — logs are written to a PersistentVolumeClaim, one segment per container per day, and deleted once they're older than 30 days (see [retention](#retention) below)
 - **Automatic pod discovery** — new pods are detected and streamed as soon as they start
 - **Multi-node from a single replica** — pods on the local node are tailed straight from disk; pods on other nodes are streamed via the Kubernetes API, so no DaemonSet is needed
 - **Single helm install** — deploy the full stack with one `helm install` command
@@ -119,7 +120,7 @@ helm install simple-logging simple-logging/simple-logging \
 
 ### `api`
 
-The collector opens one persistent HTTP streaming connection per pod via the Kubernetes log API (`client-go` `GetLogs` with `follow=true`). A shared Informer watches for pod add/delete events so new pods are picked up automatically, and dropped streams are reopened with backoff.
+The collector opens one persistent HTTP streaming connection per container via the Kubernetes log API (`client-go` `GetLogs` with `follow=true`). A shared Informer watches for pod add/delete events so new pods are picked up automatically, and dropped streams are reopened with backoff.
 
 **Recommended for:** clusters where `hostPath` volumes are not permitted by security policy, so neither `hybrid` nor `fileTail` can mount the node's log directory.
 
