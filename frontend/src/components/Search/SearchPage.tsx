@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
+import Autocomplete from '@mui/material/Autocomplete';
 import Button from '@mui/material/Button';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select, { type SelectChangeEvent } from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -12,6 +17,10 @@ import Alert from '@mui/material/Alert';
 import { logClient } from '../../grpc/client.js';
 import type { SearchLogsResponse } from '../../gen/simplelog/v1/log_service_pb.js';
 import { useLogStore } from '../../store/logStore.js';
+import { useNamespaces } from '../../hooks/useNamespaces.js';
+import { useWorkloadsByNamespace } from '../../hooks/useWorkloadsByNamespace.js';
+import { usePodsByNamespace } from '../../hooks/usePodsByNamespace.js';
+import { WORKLOAD_KIND_SECTIONS } from '../PodSidebar/sidebarSections.js';
 import { highlightMatches } from '../../utils/highlightMatches.js';
 import { formatDateTime } from '../../utils/formatDateTime.js';
 
@@ -41,6 +50,27 @@ export default function SearchPage() {
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const { namespaces } = useNamespaces();
+  const nameScope = namespace ? [namespace] : namespaces;
+  // Kind "Pod" means "every pod" (see usePodsByNamespace), not the narrower
+  // ListWorkloads kind "Pod" of genuinely unowned pods, so name suggestions
+  // for it come from a different source than every other kind.
+  const { workloadsByNamespace } = useWorkloadsByNamespace(
+    workloadKind !== 'Pod' ? nameScope : [],
+    workloadKind || undefined,
+  );
+  const { podsByNamespace } = usePodsByNamespace(workloadKind === 'Pod' ? nameScope : []);
+  const nameOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const workloads of Object.values(workloadsByNamespace)) {
+      for (const w of workloads) set.add(w.name);
+    }
+    for (const pods of Object.values(podsByNamespace)) {
+      for (const p of pods) set.add(p.name);
+    }
+    return Array.from(set).sort();
+  }, [workloadsByNamespace, podsByNamespace]);
 
   const runSearch = useCallback(async () => {
     if (!query) return;
@@ -124,29 +154,44 @@ export default function SearchPage() {
           borderColor: 'divider',
         }}
       >
-        <TextField
+        <FormControl size="small" sx={{ width: 160 }}>
+          <InputLabel shrink>Namespace</InputLabel>
+          <Select
+            label="Namespace"
+            displayEmpty
+            value={namespace}
+            onChange={(e: SelectChangeEvent) => { setNamespace(e.target.value); setWorkloadName(''); }}
+            inputProps={{ 'aria-label': 'Namespace' }}
+          >
+            <MenuItem value="">All</MenuItem>
+            {namespaces.map((ns) => (
+              <MenuItem key={ns} value={ns}>{ns}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <FormControl size="small" sx={{ width: 160 }}>
+          <InputLabel shrink>Workload kind</InputLabel>
+          <Select
+            label="Workload kind"
+            displayEmpty
+            value={workloadKind}
+            onChange={(e: SelectChangeEvent) => { setWorkloadKind(e.target.value); setWorkloadName(''); }}
+            inputProps={{ 'aria-label': 'Workload kind' }}
+          >
+            <MenuItem value="">All</MenuItem>
+            {WORKLOAD_KIND_SECTIONS.map(({ key, label }) => (
+              <MenuItem key={key} value={key}>{label}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Autocomplete
+          freeSolo
           size="small"
-          label="Namespace"
-          placeholder="All"
-          value={namespace}
-          onChange={(e) => setNamespace(e.target.value)}
-          sx={{ width: 160 }}
-        />
-        <TextField
-          size="small"
-          label="Workload kind"
-          placeholder="Any"
-          value={workloadKind}
-          onChange={(e) => setWorkloadKind(e.target.value)}
-          sx={{ width: 160 }}
-        />
-        <TextField
-          size="small"
-          label="Workload name"
-          placeholder="Any"
+          options={nameOptions}
           value={workloadName}
-          onChange={(e) => setWorkloadName(e.target.value)}
-          sx={{ width: 160 }}
+          onInputChange={(_, value) => setWorkloadName(value)}
+          renderInput={(params) => <TextField {...params} label="Workload name" />}
+          sx={{ width: 200 }}
         />
         <TextField
           size="small"
