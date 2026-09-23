@@ -48,7 +48,7 @@ func TestServerIntegration_ListNamespaces(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "default"), 0755)
 	os.MkdirAll(filepath.Join(dir, "monitoring"), 0755)
 
-	client := newInProcessServer(t, NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{}))
+	client := newInProcessServer(t, NewLogService(dir, &fakeChecker{}, &fakeChecker{}))
 
 	resp, err := client.ListNamespaces(context.Background(), &pb.ListNamespacesRequest{})
 	if err != nil {
@@ -74,7 +74,7 @@ func TestServerIntegration_GetLogs_EndToEnd(t *testing.T) {
 	}
 	writeLogFile(t, dir, "default", "pod", lines)
 
-	client := newInProcessServer(t, NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{}))
+	client := newInProcessServer(t, NewLogService(dir, &fakeChecker{}, &fakeChecker{}))
 
 	resp, err := client.GetLogs(context.Background(), &pb.GetLogsRequest{
 		Namespace: "default",
@@ -91,7 +91,7 @@ func TestServerIntegration_GetLogs_EndToEnd(t *testing.T) {
 // Ensure NewServer compiles and wires correctly (smoke test).
 func TestNewServer_Smoke(t *testing.T) {
 	dir := t.TempDir()
-	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 	srv := NewServer(0, svc, false, zap.NewNop())
 	if srv == nil {
 		t.Fatal("expected non-nil Server")
@@ -100,7 +100,7 @@ func TestNewServer_Smoke(t *testing.T) {
 
 func TestServer_CorsPreflight(t *testing.T) {
 	dir := t.TempDir()
-	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{}, noopDeploymentMapper{})
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 	srv := NewServer(0, svc, false, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodOptions, "/simplelog.v1.LogService/ListNamespaces", nil)
