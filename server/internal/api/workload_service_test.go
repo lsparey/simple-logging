@@ -184,6 +184,29 @@ func TestGetWorkloadLogs_MergesAcrossPodsForNonDeploymentKind(t *testing.T) {
 	}
 }
 
+func TestGetWorkloadLogs_KindPodSelectsOneOwnedPodDirectly(t *testing.T) {
+	dir := t.TempDir()
+	writeLogFile(t, dir, "default", "web-app-abc12-xyz89", []string{
+		"2026-05-20T10:00:00Z [default/web-app-abc12-xyz89/app] from replica 1",
+	})
+	recordOwner(t, dir, "default", "web-app-abc12-xyz89", "Deployment", "web-app", "")
+	writeLogFile(t, dir, "default", "web-app-abc12-uvw34", []string{
+		"2026-05-20T10:00:01Z [default/web-app-abc12-uvw34/app] from replica 2",
+	})
+	recordOwner(t, dir, "default", "web-app-abc12-uvw34", "Deployment", "web-app", "")
+
+	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
+	resp, err := svc.GetWorkloadLogs(context.Background(), &pb.GetWorkloadLogsRequest{
+		Namespace: "default", Kind: "Pod", Name: "web-app-abc12-xyz89",
+	})
+	if err != nil {
+		t.Fatalf("GetWorkloadLogs: %v", err)
+	}
+	if len(resp.Lines) != 1 || !strings.Contains(resp.Lines[0], "replica 1") {
+		t.Errorf("expected only web-app-abc12-xyz89's own line, got %v", resp.Lines)
+	}
+}
+
 func TestGetWorkloadLogs_NotFoundForUnknownWorkload(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})

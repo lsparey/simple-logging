@@ -21,14 +21,31 @@ import (
 // (kind, name), sorted alphabetically. A pod owned by a CronJob-created Job
 // matches both its own "Job" entry and its "CronJob" entry.
 //
+// kind "Pod" is special-cased to match name against the pod's own name
+// directly, regardless of its real owner: it means "this one pod's logs",
+// the individual-pod counterpart to the other kinds' owner-based grouping
+// (used by the sidebar's Pods section, which lists every pod, not just
+// unowned ones — most real pods have an owner, so restricting "Pod" to
+// bare/unowned pods here would make that section mostly empty).
+//
 // A pod the collector hasn't (re-)observed since upgrading to a version that
-// records ownership has no OwnerKind yet and is not returned by any workload
-// lookup until it is; this self-heals as the informer's initial list resyncs
-// every currently-running pod.
+// records ownership has no OwnerKind yet and is not returned by any
+// owner-based lookup until it is; this self-heals as the informer's initial
+// list resyncs every currently-running pod. It is unaffected by kind "Pod"
+// lookups, which don't consult OwnerKind at all.
 func (s *LogService) workloadPodsForNamespace(namespace, kind, name string) ([]string, error) {
 	podNames, err := storage.ListPodDirs(s.logsRoot, namespace)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
+	}
+
+	if kind == "Pod" {
+		for _, podName := range podNames {
+			if podName == name {
+				return []string{podName}, nil
+			}
+		}
+		return nil, nil
 	}
 
 	var pods []string
