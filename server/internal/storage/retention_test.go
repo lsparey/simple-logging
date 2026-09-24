@@ -204,3 +204,26 @@ func TestNextDailySweep(t *testing.T) {
 		}
 	}
 }
+
+func TestRetentionManager_KeepsMetaOfActivePodsWithNoSegmentsLeft(t *testing.T) {
+	dir := t.TempDir()
+	oldDate := time.Now().UTC().AddDate(0, 0, -40).Format("2006-01-02")
+	writeSegment(t, dir, "ns", "quiet", "app", oldDate)
+	writeSegment(t, dir, "ns", "gone", "app", oldDate)
+	for _, pod := range []string{"quiet", "gone"} {
+		if err := RecordOwner(dir, "ns", pod, "Deployment", "web", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.SetActiveChecker(func(_, pod string) bool { return pod == "quiet" })
+	rm.sweep()
+
+	if meta, err := ReadPodMeta(dir, "ns", "quiet"); err != nil || meta.OwnerName != "web" {
+		t.Errorf("active pod's meta.json should survive with its owner, got %+v, %v", meta, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ns", "gone")); !os.IsNotExist(err) {
+		t.Error("an inactive pod with no segments left should be removed entirely")
+	}
+}

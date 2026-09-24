@@ -23,6 +23,15 @@ type RetentionManager struct {
 	log            *zap.Logger
 	compactIndexes func() error
 	metrics        *metrics.Metrics
+	isActive       func(namespace, pod string) bool
+}
+
+// SetActiveChecker tells retention which pods are still being collected.
+// A running pod whose segments have all expired (it has been quiet for the
+// whole retention window) keeps its meta.json, which is only written when
+// its stream starts and records the pod's owning workload.
+func (r *RetentionManager) SetActiveChecker(isActive func(namespace, pod string) bool) {
+	r.isActive = isActive
 }
 
 // SetMetrics makes retention count the segments it deletes in m.
@@ -142,7 +151,8 @@ func (r *RetentionManager) sweepSegments(cutoffDate time.Time) int {
 				continue // legacy <pod>.log file, handled by sweepLegacyFiles
 			}
 			podDir := filepath.Join(nsDir, podEntry.Name())
-			deleted += r.sweepPodDirLocked(podDir, cutoffDate)
+			active := r.isActive != nil && r.isActive(nsEntry.Name(), podEntry.Name())
+			deleted += r.sweepPodDirLocked(podDir, cutoffDate, active)
 		}
 
 		removeIfEmpty(nsDir, r.log)
@@ -153,9 +163,10 @@ func (r *RetentionManager) sweepSegments(cutoffDate time.Time) int {
 }
 
 // sweepPodDirLocked deletes expired segments under one pod directory and
-// removes now-empty container directories, meta.json and the pod directory
-// itself if no container has any segments left.
-func (r *RetentionManager) sweepPodDirLocked(podDir string, cutoffDate time.Time) int {
+// removes now-empty container directories, and meta.json and the pod
+// directory itself if no container has any segments left and the pod isn't
+// active.
+func (r *RetentionManager) sweepPodDirLocked(podDir string, cutoffDate time.Time, active bool) int {
 	deleted := 0
 	containers, err := os.ReadDir(podDir)
 	if err != nil {
@@ -210,7 +221,7 @@ func (r *RetentionManager) sweepPodDirLocked(podDir string, cutoffDate time.Time
 		}
 	}
 
-	if !anyContainerLeft {
+	if !anyContainerLeft && !active {
 		_ = os.Remove(filepath.Join(podDir, metaFileName))
 		if err := os.Remove(podDir); err != nil && !os.IsNotExist(err) {
 			r.log.Warn("failed to remove empty pod dir", zap.String("path", podDir), zap.Error(err))

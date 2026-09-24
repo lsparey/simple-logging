@@ -27,7 +27,8 @@ type Config struct {
 	// Empty (the default) disables CORS.
 	CORSAllowedOrigins []string
 
-	// RetentionDays is how many days a log file is kept after its last write.
+	// RetentionDays is how many whole UTC days of log segments are kept
+	// before today's; older days' segments are deleted.
 	RetentionDays int
 
 	// RetentionCheckInterval is how often the retention manager runs.

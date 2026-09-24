@@ -336,13 +336,3 @@ func TestStreamWorkloadLogs_RejectsKindWithoutName(t *testing.T) {
 		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
-
-func appendLine(t *testing.T, path, line string) {
-	t.Helper()
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Fatalf("open for append: %v", err)
-	}
-	defer f.Close()
-	fmt.Fprintln(f, line)
-}

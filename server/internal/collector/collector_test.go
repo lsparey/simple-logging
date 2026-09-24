@@ -815,3 +815,57 @@ func TestCollector_FileTail_StaticPodUsesMirrorAnnotationForLogDir(t *testing.T)
 		t.Fatal("expected the static pod's log to be tailed from its static-UID directory")
 	}
 }
+
+func TestCollectableContainers_IncludesNativeSidecarsOnly(t *testing.T) {
+	always := corev1.ContainerRestartPolicyAlways
+	pod := makeMultiContainerPod("default", "p", "app")
+	pod.Spec.InitContainers = []corev1.Container{
+		{Name: "migrate"}, // ordinary init container
+		{Name: "istio-proxy", RestartPolicy: &always}, // native sidecar
+	}
+	got := collectableContainers(pod)
+	if strings.Join(got, ",") != "istio-proxy,app" {
+		t.Errorf("collectableContainers = %v, want [istio-proxy app]", got)
+	}
+
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "istio-proxy", RestartCount: 3}}
+	if n := containerRestartCount(pod, "istio-proxy"); n != 3 {
+		t.Errorf("native sidecar restart count = %d, want 3 (from InitContainerStatuses)", n)
+	}
+}
+
+func TestCollector_RestartSeparatorHasTheStoredLinePrefix(t *testing.T) {
+	logsRoot := t.TempDir()
+	coll := New(fake.NewSimpleClientset(), logsRoot, "", zap.NewNop())
+	t.Cleanup(coll.Close)
+
+	pod := makePod("default", "my-pod")
+	coll.OnAdd(pod)
+	if !waitFor(t, 5*time.Second, func() bool { return countLines(t, logsRoot, "default", "my-pod", "fake logs") >= 1 }) {
+		t.Fatal("expected the first stream to write")
+	}
+	restarted := makePod("default", "my-pod")
+	restarted.UID = "uid-2"
+	coll.OnAdd(restarted)
+
+	if !waitFor(t, 5*time.Second, func() bool { return countLines(t, logsRoot, "default", "my-pod", "--- pod restarted at") >= 1 }) {
+		t.Fatal("expected a restart separator")
+	}
+	segments, _ := storage.ListSegments(logsRoot, "default", "my-pod", "app")
+	data, err := os.ReadFile(filepath.Join(storage.ContainerDir(logsRoot, "default", "my-pod", "app"), segments[len(segments)-1]+".log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.Contains(line, "--- pod restarted at") {
+			continue
+		}
+		ts, _, found := strings.Cut(line, " [default/my-pod/app] --- pod restarted at")
+		if !found {
+			t.Fatalf("separator lacks the [ns/pod/container] prefix: %q", line)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, ts); err != nil {
+			t.Errorf("separator doesn't start with a timestamp: %q", line)
+		}
+	}
+}

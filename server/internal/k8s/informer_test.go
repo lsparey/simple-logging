@@ -129,7 +129,7 @@ func TestPodWatcher_AddsPendingPodOnceItStartsRunning(t *testing.T) {
 	}
 }
 
-func TestPodWatcher_IgnoresUpdatesThatAreNotPendingToRunning(t *testing.T) {
+func TestPodWatcher_IgnoresUpdatesThatDontLeavePending(t *testing.T) {
 	pod := makePod("steady", corev1.PodRunning)
 	cs := fake.NewClientset(pod)
 	rec := &recorder{}
@@ -224,5 +224,21 @@ func TestNewClientset_FailsOutsideACluster(t *testing.T) {
 	t.Setenv("KUBERNETES_SERVICE_PORT", "")
 	if _, err := NewClientset(); err == nil {
 		t.Error("expected an error without in-cluster config")
+	}
+}
+
+func TestPodWatcher_AddsPodThatGoesStraightFromPendingToSucceeded(t *testing.T) {
+	pod := makePod("quick-job", corev1.PodPending)
+	cs := fake.NewClientset(pod)
+	rec := &recorder{}
+	startWatcher(t, cs, rec)
+
+	done := pod.DeepCopy()
+	done.Status.Phase = corev1.PodSucceeded
+	if _, err := cs.CoreV1().Pods("default").UpdateStatus(context.Background(), done, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("UpdateStatus: %v", err)
+	}
+	if !eventually(t, func() bool { return len(rec.addedNames()) == 1 }) {
+		t.Fatal("a pod that finished before it was seen Running should still be added")
 	}
 }

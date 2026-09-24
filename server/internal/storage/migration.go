@@ -123,7 +123,7 @@ func detectLegacyContainer(path string) (string, error) {
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
+	scanner := NewLineScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
 		start := strings.IndexByte(line, '[')

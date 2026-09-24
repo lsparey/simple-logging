@@ -86,9 +86,12 @@ func NewServer(opts ServerOptions, log *zap.Logger) *Server {
 
 	var handler http.Handler = mux
 	if opts.Auth != nil {
-		// Probes and Prometheus scrapes can't answer a login prompt. /metrics
-		// only exists when opts.Metrics is set.
-		handler = opts.Auth.Middleware(handler, "/healthz", "/readyz", "/metrics")
+		// Probes and Prometheus scrapes can't answer a login prompt.
+		open := []string{"/healthz", "/readyz"}
+		if opts.Metrics != nil {
+			open = append(open, "/metrics")
+		}
+		handler = opts.Auth.Middleware(handler, open...)
 	}
 	// CORS wraps auth, so browser preflights (which never carry
 	// credentials) are answered before the credentials check.

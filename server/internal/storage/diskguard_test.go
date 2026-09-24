@@ -151,3 +151,42 @@ func TestDiskUsedPercent_ReturnsSaneValue(t *testing.T) {
 		t.Errorf("DiskUsedPercent = %d, want a value in [0, 100]", percent)
 	}
 }
+
+func TestDiskGuard_SkipsSegmentsAWriterHasOpen(t *testing.T) {
+	dir := t.TempDir()
+	oldest := writeSegment(t, dir, "ns", "pod", "app", "2026-05-17")
+	next := writeSegment(t, dir, "ns", "pod", "other", "2026-05-18")
+
+	// A writer with the oldest segment open, as for a quiet container whose
+	// last line was that day.
+	w, err := NewSegmentWriter(dir, "ns", "pod", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	if !w.Write(time.Date(2026, 5, 17, 12, 0, 0, 0, time.UTC), "line") {
+		t.Fatal("write failed")
+	}
+
+	compacted := false
+	g := NewDiskGuard(dir, 90, 80, time.Hour, zap.NewNop())
+	g.SetIndexCompactor(func() error { compacted = true; return nil })
+	usage := []int{95, 70}
+	call := 0
+	g.usedPercent = func(string) (int, error) {
+		v := usage[min(call, len(usage)-1)]
+		call++
+		return v, nil
+	}
+	g.check()
+
+	if _, err := os.Stat(oldest); err != nil {
+		t.Error("the open segment was deleted")
+	}
+	if _, err := os.Stat(next); !os.IsNotExist(err) {
+		t.Error("expected the oldest closed segment to be deleted instead")
+	}
+	if !compacted {
+		t.Error("expected indexes to be compacted after deleting a segment")
+	}
+}

@@ -41,6 +41,33 @@ type SegmentWriter struct {
 
 	unhealthyUntil time.Time
 	writeBackoff   time.Duration
+
+	// dropped counts lines dropped since the last successful write, and
+	// onDropStateChange (optional, see SetDropStateHook) is told when the
+	// writer starts and stops dropping.
+	dropped           int64
+	onDropStateChange func(dropping bool, dropped int64, err error)
+}
+
+// SetDropStateHook registers hook to be called when the writer starts
+// dropping lines (dropping=true, with the error that caused it) and when it
+// recovers (dropping=false, with how many lines were dropped meanwhile). It
+// is called with the writer's lock held, so it must not call back into w.
+func (w *SegmentWriter) SetDropStateHook(hook func(dropping bool, dropped int64, err error)) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.onDropStateChange = hook
+}
+
+// openSegments is the set of segment paths some SegmentWriter currently has
+// open, so the disk guard can leave them alone: deleting an open file frees
+// no space until it's closed, and lines written to it meanwhile are lost.
+var openSegments sync.Map // path -> struct{}
+
+// isOpenSegment reports whether a SegmentWriter has path open.
+func isOpenSegment(path string) bool {
+	_, open := openSegments.Load(path)
+	return open
 }
 
 // NewSegmentWriter opens a writer for namespace/pod/container. It does not
@@ -91,13 +118,15 @@ func (w *SegmentWriter) WriteWithLocation(lineTS time.Time, line string) (segmen
 
 	now := time.Now()
 	if now.Before(w.unhealthyUntil) {
+		w.dropped++
 		return "", 0, 0, false
 	}
 
+	line = CapLine(line)
 	date := lineTS.UTC().Format(segmentDateForm)
 	if w.f == nil || date != w.segmentDate {
 		if err := w.rollToLocked(date); err != nil {
-			w.markUnhealthyLocked(now)
+			w.markUnhealthyLocked(now, err)
 			return "", 0, 0, false
 		}
 	}
@@ -112,19 +141,26 @@ func (w *SegmentWriter) WriteWithLocation(lineTS time.Time, line string) (segmen
 	}
 	if err != nil {
 		// Force a reopen on the next attempt — the fd may be in a bad state.
-		_ = w.f.Close()
-		w.f = nil
-		w.markUnhealthyLocked(now)
+		_ = w.closeFileLocked()
+		w.markUnhealthyLocked(now, err)
 		return "", 0, 0, false
 	}
 
+	if w.writeBackoff > 0 && w.onDropStateChange != nil {
+		w.onDropStateChange(false, w.dropped, nil)
+	}
+	w.dropped = 0
 	w.writeBackoff = 0
 	return w.segmentDate, off, uint32(written - 1), true
 }
 
 // markUnhealthyLocked starts or extends the write backoff window. mu must be
 // held by the caller.
-func (w *SegmentWriter) markUnhealthyLocked(now time.Time) {
+func (w *SegmentWriter) markUnhealthyLocked(now time.Time, err error) {
+	w.dropped++
+	if w.writeBackoff == 0 && w.onDropStateChange != nil {
+		w.onDropStateChange(true, w.dropped, err)
+	}
 	if w.writeBackoff < minWriteBackoff {
 		w.writeBackoff = minWriteBackoff
 	}
@@ -150,8 +186,7 @@ func (w *SegmentWriter) rollToLocked(date string) error {
 		// handle, or the next attempt would double-close it and fail every
 		// time regardless of whether the real problem cleared.
 		syncErr := w.f.Sync()
-		closeErr := w.f.Close()
-		w.f = nil
+		closeErr := w.closeFileLocked()
 		if syncErr != nil {
 			return fmt.Errorf("sync previous segment: %w", syncErr)
 		}
@@ -172,6 +207,7 @@ func (w *SegmentWriter) rollToLocked(date string) error {
 	}
 
 	w.f = f
+	openSegments.Store(path, struct{}{})
 	w.segmentDate = date
 	w.hadExistingContent = true
 	return nil
@@ -195,7 +231,16 @@ func (w *SegmentWriter) Close() error {
 		return nil
 	}
 	if err := w.f.Sync(); err != nil {
+		_ = w.closeFileLocked()
 		return fmt.Errorf("sync segment: %w", err)
 	}
-	return w.f.Close()
+	return w.closeFileLocked()
+}
+
+// closeFileLocked closes the open segment and forgets it. mu must be held.
+func (w *SegmentWriter) closeFileLocked() error {
+	openSegments.Delete(w.f.Name())
+	err := w.f.Close()
+	w.f = nil
+	return err
 }

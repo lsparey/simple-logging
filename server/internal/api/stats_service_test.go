@@ -106,7 +106,9 @@ func TestServer_MetricsRouteOnlyWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestServer_BasicAuth(t *testing.T) {
+// loadTestHTPasswd returns basic auth accepting alice / secret.
+func loadTestHTPasswd(t *testing.T) *auth.Basic {
+	t.Helper()
 	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatal(err)
@@ -119,6 +121,11 @@ func TestServer_BasicAuth(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return basic
+}
+
+func TestServer_BasicAuth(t *testing.T) {
+	basic := loadTestHTPasswd(t)
 
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "default"), 0755)
