@@ -2,6 +2,26 @@ apiVersion: v1
 entries:
   simple-logging:
   - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-09-24T21:43:40.067784561Z"
+    description: Collects Kubernetes pod logs, stores them on a PVC, and serves the
+      web UI and the log API (gRPC, gRPC-Web and Connect) from a single non-root binary
+      on one port.
+    digest: 95fa68fd23a64aeb5615ffe91e7b3e24e0a4a5b3a6b2aed369693182b7baf472
+    home: https://github.com/lsparey/simple-logging
+    icon: https://raw.githubusercontent.com/lsparey/simple-logging/main/frontend/public/logo.svg
+    keywords:
+    - logging
+    - logs
+    - kubernetes
+    name: simple-logging
+    sources:
+    - https://github.com/lsparey/simple-logging
+    type: application
+    urls:
+    - https://github.com/lsparey/simple-logging/releases/download/simple-logging-1.0.0/simple-logging-1.0.0.tgz
+    version: 1.0.0
+  - apiVersion: v2
     appVersion: 0.14.1
     created: "2026-09-24T12:07:05.561576347Z"
     description: Collects Kubernetes pod logs, stores them on a PVC, and serves the
@@ -229,4 +249,4 @@ entries:
     urls:
     - https://github.com/lsparey/simple-logging/releases/download/simple-logging-0.2.0/simple-logging-0.2.0.tgz
     version: 0.2.0
-generated: "2026-09-24T12:07:05.561633964Z"
+generated: "2026-09-24T21:43:40.067892624Z"
