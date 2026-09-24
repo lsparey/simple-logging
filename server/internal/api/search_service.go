@@ -186,6 +186,8 @@ func (s *LogService) SearchLogs(ctx context.Context, r *connect.Request[pb.Searc
 		end = time.UnixMilli(req.EndTimeUnixMs)
 	}
 
+	defer s.metrics.SearchStarted()()
+
 	targets, err := s.searchTargets(req)
 	if err != nil {
 		return err
@@ -232,7 +234,7 @@ func (s *LogService) SearchLogs(ctx context.Context, r *connect.Request[pb.Searc
 				if searchDone(ctx, stopCh) {
 					return
 				}
-				scanSearchJob(ctx, stopCh, job, matches, start, end, resultCh)
+				s.metrics.SearchScanned(scanSearchJob(ctx, stopCh, job, matches, start, end, resultCh))
 			}
 		}()
 	}
@@ -298,11 +300,12 @@ func searchDone(ctx context.Context, stopCh <-chan struct{}) bool {
 }
 
 // scanSearchJob scans one segment file for matching lines, sending each to
-// resultCh until the file is exhausted or stopCh/ctx signals cancellation.
-func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, matches searchMatcher, start, end time.Time, resultCh chan<- *pb.SearchLogsResponse) {
+// resultCh until the file is exhausted or stopCh/ctx signals cancellation. It
+// returns the number of bytes read.
+func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, matches searchMatcher, start, end time.Time, resultCh chan<- *pb.SearchLogsResponse) (scanned int64) {
 	f, err := os.Open(job.path)
 	if err != nil {
-		return // segment vanished (retention race) — skip it
+		return 0 // segment vanished (retention race) — skip it
 	}
 	defer f.Close()
 
@@ -310,9 +313,10 @@ func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, m
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		if searchDone(ctx, stopCh) {
-			return
+			return scanned
 		}
 		line := scanner.Text()
+		scanned += int64(len(line)) + 1
 		ts := parseLineTimestamp(line)
 		if !start.IsZero() && ts.Before(start) {
 			continue
@@ -331,9 +335,10 @@ func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, m
 			Container: job.container,
 		}:
 		case <-stopCh:
-			return
+			return scanned
 		case <-ctx.Done():
-			return
+			return scanned
 		}
 	}
+	return scanned
 }

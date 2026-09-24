@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/lsparey/simple-logging/internal/metrics"
 )
 
 // DiskGuard is a safety net against LOGS_ROOT filling up. Retention is the
@@ -27,6 +29,13 @@ type DiskGuard struct {
 
 	// usedPercent is DiskUsedPercent by default; overridable in tests.
 	usedPercent func(path string) (int, error)
+
+	metrics *metrics.Metrics
+}
+
+// SetMetrics makes the guard count the segments it deletes in m.
+func (g *DiskGuard) SetMetrics(m *metrics.Metrics) {
+	g.metrics = m
 }
 
 // NewDiskGuard creates a DiskGuard for logsRoot.
@@ -89,6 +98,7 @@ func (g *DiskGuard) check() {
 	}
 
 	deleted := 0
+	defer func() { g.metrics.SegmentsDeleted(metrics.ReasonDiskGuard, deleted) }()
 	for _, seg := range segments {
 		if usedPercent < g.lowWaterPercent {
 			break
@@ -205,15 +215,29 @@ func cleanupEmptyDirsAbove(segmentPath string, log *zap.Logger) {
 // in use, using the same available-space accounting as `df` (i.e. blocks
 // reserved for privileged processes count as used).
 func DiskUsedPercent(path string) (int, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
+	used, total, err := diskUsage(path)
+	if err != nil || total == 0 {
 		return 0, err
 	}
-	total := uint64(stat.Blocks) * uint64(stat.Bsize)
-	if total == 0 {
-		return 0, nil
-	}
-	available := uint64(stat.Bavail) * uint64(stat.Bsize)
-	used := total - available
 	return int(used * 100 / total), nil
+}
+
+// DiskUsageRatio reports the fraction (0–1) of path's filesystem in use, with
+// the same accounting as DiskUsedPercent but without rounding to a percent.
+func DiskUsageRatio(path string) (float64, error) {
+	used, total, err := diskUsage(path)
+	if err != nil || total == 0 {
+		return 0, err
+	}
+	return float64(used) / float64(total), nil
+}
+
+func diskUsage(path string) (used, total uint64, err error) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, 0, err
+	}
+	total = uint64(stat.Blocks) * uint64(stat.Bsize)
+	available := uint64(stat.Bavail) * uint64(stat.Bsize)
+	return total - available, total, nil
 }

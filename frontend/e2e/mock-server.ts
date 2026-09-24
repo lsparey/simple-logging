@@ -223,6 +223,18 @@ function routes(router: ConnectRouter) {
       };
     },
 
+    getStats() {
+      return {
+        startedAtUnixMs: 1780912800000n,
+        streamsActiveFile: 4n,
+        streamsActiveApi: 1n,
+        linesWrittenTotal: 1200n,
+        bytesWrittenTotal: 98304n,
+        linesDroppedTotal: 0n,
+        apiReconnectsTotal: 2n,
+      };
+    },
+
     listIndexes() {
       return { indexes: INDEXES };
     },

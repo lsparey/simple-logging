@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/lsparey/simple-logging/internal/indexes"
+	"github.com/lsparey/simple-logging/internal/metrics"
 	"github.com/lsparey/simple-logging/internal/storage"
 )
 
@@ -120,6 +121,8 @@ type Collector struct {
 	// droppedLines counts log lines dropped because a write to storage
 	// failed. See writeLogLine.
 	droppedLines atomic.Int64
+
+	metrics *metrics.Metrics
 }
 
 // Option configures optional Collector behaviour.
@@ -131,6 +134,12 @@ type Option func(*Collector)
 // Kubernetes log API. An empty name leaves the behaviour unchanged.
 func WithNodeName(name string) Option {
 	return func(c *Collector) { c.nodeName = name }
+}
+
+// WithMetrics makes the collector record stream, write and reconnect
+// counts in m.
+func WithMetrics(m *metrics.Metrics) Option {
+	return func(c *Collector) { c.metrics = m }
 }
 
 // New creates a Collector that writes pod logs to files under logsRoot.
@@ -366,9 +375,9 @@ func (c *Collector) recordOwner(pod *corev1.Pod) {
 // to either runFileTail (node-local file) or runAPIStream (Kubernetes log API).
 func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, containerName string, isRestart bool) {
 	fileTail := c.usesFileTail(pod)
-	source := "api"
+	source := metrics.SourceAPI
 	if fileTail {
-		source = "file"
+		source = metrics.SourceFile
 	}
 	log := c.log.With(
 		zap.String("namespace", pod.Namespace),
@@ -388,6 +397,9 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, containerNam
 			log.Warn("failed to close log file", zap.Error(cerr))
 		}
 	}()
+
+	c.metrics.StreamStarted(source)
+	defer c.metrics.StreamStopped(source)
 
 	// Write a separator line when a pod restarts so log consumers can identify
 	// the boundary between distinct container lifecycles.
@@ -761,6 +773,7 @@ func (c *Collector) runAPIStream(ctx context.Context, pod *corev1.Pod, container
 			return
 		case <-time.After(backoff):
 		}
+		c.metrics.APIReconnect()
 		backoff = min(backoff*2, c.apiMaxBackoff)
 	}
 }
@@ -877,8 +890,10 @@ func (c *Collector) writeLogLine(writer *storage.SegmentWriter, namespace, pod, 
 	segment, offset, length, ok := writer.WriteWithLocation(lineTS, line)
 	if !ok {
 		c.droppedLines.Add(1)
+		c.metrics.LineDropped()
 		return
 	}
+	c.metrics.LineWritten(namespace, int(length)+1)
 	if c.indexes != nil {
 		c.indexes.ObserveLineAt(namespace, pod, container, segment, offset, length, line)
 	}

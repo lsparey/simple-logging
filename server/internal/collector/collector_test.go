@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/lsparey/simple-logging/internal/metrics"
 	"github.com/lsparey/simple-logging/internal/storage"
 
 	"go.uber.org/zap"
@@ -413,7 +414,8 @@ func TestAPIStream_ReconnectsWhilePodRunning(t *testing.T) {
 	pod := makePod("default", "running-pod")
 	pod.Status.Phase = corev1.PodRunning
 
-	coll := New(fake.NewSimpleClientset(pod), logsRoot, "", zap.NewNop())
+	m := metrics.New(nil)
+	coll := New(fake.NewSimpleClientset(pod), logsRoot, "", zap.NewNop(), WithMetrics(m))
 	coll.apiMinBackoff, coll.apiMaxBackoff = 5*time.Millisecond, 20*time.Millisecond
 	t.Cleanup(coll.Close)
 	coll.OnAdd(pod)
@@ -422,6 +424,22 @@ func TestAPIStream_ReconnectsWhilePodRunning(t *testing.T) {
 		return countLines(t, logsRoot, "default", "running-pod", "fake logs") >= 3
 	}) {
 		t.Fatal("expected the API stream to be reopened while the pod is still running")
+	}
+
+	stats := m.Snapshot()
+	if stats.APIReconnects < 2 {
+		t.Errorf("APIReconnects: got %d, want at least 2", stats.APIReconnects)
+	}
+	if stats.StreamsActiveAPI != 1 || stats.StreamsActiveFile != 0 {
+		t.Errorf("streams active: got api=%d file=%d, want 1 and 0", stats.StreamsActiveAPI, stats.StreamsActiveFile)
+	}
+	if stats.LinesWritten < 3 {
+		t.Errorf("LinesWritten: got %d, want at least 3", stats.LinesWritten)
+	}
+
+	coll.Close()
+	if got := m.Snapshot().StreamsActiveAPI; got != 0 {
+		t.Errorf("StreamsActiveAPI after Close: got %d, want 0", got)
 	}
 }
 
@@ -541,7 +559,8 @@ func TestCollector_WriteFailureDropsLinesButKeepsStreaming(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop(), WithNodeName("node-a"))
+	m := metrics.New(nil)
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop(), WithNodeName("node-a"), WithMetrics(m))
 	t.Cleanup(coll.Close)
 	coll.OnAdd(pod)
 
@@ -549,6 +568,9 @@ func TestCollector_WriteFailureDropsLinesButKeepsStreaming(t *testing.T) {
 		return coll.DroppedLines() >= 1
 	}) {
 		t.Fatal("expected the failed write to be counted as dropped")
+	}
+	if stats := m.Snapshot(); stats.LinesDropped < 1 || stats.StreamsActiveFile != 1 {
+		t.Errorf("expected a dropped line and one active file stream in metrics, got %+v", stats)
 	}
 	if !coll.IsActive("default", "blocked-pod") {
 		t.Error("expected the stream to remain active after a write failure")
@@ -575,6 +597,9 @@ func TestCollector_WriteFailureDropsLinesButKeepsStreaming(t *testing.T) {
 		return countLines(t, logsRoot, "default", "blocked-pod", "should succeed") >= 1
 	}) {
 		t.Fatal("expected the line to be written once the writer recovered")
+	}
+	if got := m.Snapshot().LinesWritten; got < 1 {
+		t.Errorf("LinesWritten after recovery: got %d, want at least 1", got)
 	}
 }
 

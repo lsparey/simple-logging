@@ -13,10 +13,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/lsparey/simple-logging/internal/api"
+	"github.com/lsparey/simple-logging/internal/auth"
 	"github.com/lsparey/simple-logging/internal/collector"
 	"github.com/lsparey/simple-logging/internal/config"
 	"github.com/lsparey/simple-logging/internal/indexes"
 	"github.com/lsparey/simple-logging/internal/k8s"
+	"github.com/lsparey/simple-logging/internal/metrics"
 	"github.com/lsparey/simple-logging/internal/storage"
 	"github.com/lsparey/simple-logging/internal/ui"
 )
@@ -56,6 +58,8 @@ func main() {
 		zap.String("node_name", cfg.NodeName),
 		zap.Int("disk_high_water_percent", cfg.DiskHighWaterPercent),
 		zap.Int("disk_low_water_percent", cfg.DiskLowWaterPercent),
+		zap.Bool("metrics_enabled", cfg.MetricsEnabled),
+		zap.Bool("basic_auth_enabled", cfg.AuthHTPasswdFile != ""),
 	)
 
 	if cfg.PPROFPort > 0 {
@@ -71,16 +75,34 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// ── HTTP server ───────────────────────────────────────────────────────────
-	// Listens straight away so /healthz answers (and the liveness probe
-	// passes) during a long migration; /readyz and the API answer 503 until
-	// SetService is called below.
-	srv := api.NewServer(api.ServerOptions{
+	// ── Self-metrics ──────────────────────────────────────────────────────────
+	// Always recorded (the UI's data dashboard reads them via GetStats), but
+	// only served at /metrics when METRICS_ENABLED is set.
+	m := metrics.New(func() (float64, error) { return storage.DiskUsageRatio(cfg.LogsRoot) })
+
+	serverOpts := api.ServerOptions{
 		Port:               cfg.Port,
 		UI:                 ui.FS(),
 		APIURL:             cfg.APIURL,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
-	}, log)
+	}
+	if cfg.MetricsEnabled {
+		serverOpts.Metrics = m.Handler()
+	}
+	if cfg.AuthHTPasswdFile != "" {
+		basic, err := auth.LoadHTPasswd(cfg.AuthHTPasswdFile)
+		if err != nil {
+			log.Fatal("failed to load basic auth htpasswd file", zap.Error(err))
+		}
+		log.Info("basic auth enabled", zap.Int("users", basic.Users()))
+		serverOpts.Auth = basic
+	}
+
+	// ── HTTP server ───────────────────────────────────────────────────────────
+	// Listens straight away so /healthz answers (and the liveness probe
+	// passes) during a long migration; /readyz and the API answer 503 until
+	// SetService is called below.
+	srv := api.NewServer(serverOpts, log)
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- srv.Start() }()
 
@@ -115,7 +137,7 @@ func main() {
 	// ── Phase 5/6: Log Collector, Indexes & FileWriter ───────────────────────
 	indexManager := indexes.NewManager(cfg.LogsRoot)
 	coll := collector.NewWithIndexes(cs, cfg.LogsRoot, cfg.NodeLogsRoot, log, indexManager,
-		collector.WithNodeName(cfg.NodeName))
+		collector.WithNodeName(cfg.NodeName), collector.WithMetrics(m))
 
 	watcher, err := k8s.NewPodWatcher(cs, k8s.PodEventHandler{
 		OnAdd:    coll.OnAdd,
@@ -137,17 +159,20 @@ func main() {
 	// ── Phase 7: Retention Manager ─────────────────────────────────
 	retention := storage.NewRetentionManager(cfg.LogsRoot, cfg.RetentionDays, cfg.RetentionCheckInterval, log)
 	retention.SetIndexCompactor(indexManager.Compact)
+	retention.SetMetrics(m)
 	go retention.Run(ctx)
 
 	// Disk guard: a safety net for when retention alone doesn't keep LOGS_ROOT
 	// usage down, checked far more often than retention runs since a full
 	// disk can happen much faster than a day.
 	diskGuard := storage.NewDiskGuard(cfg.LogsRoot, cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent, diskGuardCheckInterval, log)
+	diskGuard.SetMetrics(m)
 	go diskGuard.Run(ctx)
 
 	// ── LogService API ────────────────────────────────────────────────────────
 	svc := api.NewLogServiceWithIndexes(cfg.LogsRoot, coll, coll, indexManager)
 	svc.SetDiskWaterMarks(cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent)
+	svc.SetMetrics(m)
 	srv.SetService(svc)
 
 	select {

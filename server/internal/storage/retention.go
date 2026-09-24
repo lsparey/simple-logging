@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/lsparey/simple-logging/internal/metrics"
 )
 
 // RetentionManager periodically deletes log segments older than the
@@ -20,6 +22,12 @@ type RetentionManager struct {
 	checkInterval  time.Duration
 	log            *zap.Logger
 	compactIndexes func() error
+	metrics        *metrics.Metrics
+}
+
+// SetMetrics makes retention count the segments it deletes in m.
+func (r *RetentionManager) SetMetrics(m *metrics.Metrics) {
+	r.metrics = m
 }
 
 // SetIndexCompactor registers the index cleanup run after stale log segments
@@ -71,6 +79,7 @@ func (r *RetentionManager) sweep() {
 
 	deleted := r.sweepSegments(cutoffDate)
 	deleted += r.sweepLegacyFiles()
+	r.metrics.SegmentsDeleted(metrics.ReasonRetention, deleted)
 
 	if deleted > 0 && r.compactIndexes != nil {
 		if err := r.compactIndexes(); err != nil {

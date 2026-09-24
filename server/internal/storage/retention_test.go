@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/lsparey/simple-logging/internal/metrics"
 )
 
 func writeSegment(t *testing.T, root, namespace, pod, container, date string) string {
@@ -27,11 +29,16 @@ func TestRetentionManager_DeletesOldSegments(t *testing.T) {
 	oldDate := time.Now().UTC().AddDate(0, 0, -31).Format("2006-01-02")
 	oldPath := writeSegment(t, dir, "ns", "pod", "app", oldDate)
 
+	m := metrics.New(nil)
 	rm := NewRetentionManager(dir, 30, time.Hour, zap.NewNop())
+	rm.SetMetrics(m)
 	rm.sweep()
 
 	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
 		t.Error("expected old segment to be deleted after sweep")
+	}
+	if got := m.Snapshot().RetentionSegmentsDeleted; got != 1 {
+		t.Errorf("RetentionSegmentsDeleted: got %d, want 1", got)
 	}
 }
 

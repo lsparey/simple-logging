@@ -5,6 +5,9 @@
 {{- /* hybrid and fileTail both read pod logs from the node filesystem. */}}
 {{- $hostLogs := or (eq $mode "hybrid") (eq $mode "fileTail") }}
 {{- include "simple-logging.failOnRemovedValues" . }}
+{{- if and .Values.auth.basic.enabled (not .Values.auth.basic.existingSecret) }}
+{{- fail "auth.basic.enabled needs auth.basic.existingSecret: the name of a Secret holding an htpasswd file (see values.yaml)" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -106,6 +109,14 @@ spec:
               value: {{ .Values.config.diskLowWaterPercent | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            {{- if .Values.metrics.enabled }}
+            - name: METRICS_ENABLED
+              value: "true"
+            {{- end }}
+            {{- if .Values.auth.basic.enabled }}
+            - name: AUTH_HTPASSWD_FILE
+              value: /etc/simple-logging/auth/htpasswd
+            {{- end }}
             {{- if $hostLogs }}
             - name: NODE_LOGS_ROOT
               value: {{ .Values.config.nodeLogsRoot | quote }}
@@ -133,6 +144,11 @@ spec:
               mountPath: {{ .Values.config.dockerLogsRoot }}
               readOnly: true
             {{- end }}
+            {{- end }}
+            {{- if .Values.auth.basic.enabled }}
+            - name: htpasswd
+              mountPath: /etc/simple-logging/auth
+              readOnly: true
             {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
@@ -162,6 +178,14 @@ spec:
             path: {{ .Values.config.dockerLogsRoot }}
             type: DirectoryOrCreate
         {{- end }}
+        {{- end }}
+        {{- if .Values.auth.basic.enabled }}
+        - name: htpasswd
+          secret:
+            secretName: {{ .Values.auth.basic.existingSecret }}
+            items:
+              - key: {{ .Values.auth.basic.secretKey }}
+                path: htpasswd
         {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
