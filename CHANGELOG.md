@@ -2,6 +2,11 @@
 
 All notable changes to simple-logging. From v1.0.0 on, each release's entry is written by the Release workflow from its release notes; see [CONTRIBUTING.md](CONTRIBUTING.md#releases). Versions before v0.6.0 were early development releases of the chart only.
 
+## 1.0.0 (2026-09-24)
+
+- Phase 6: v1.0 — docs, CI, shim removal, and fixes from a Phase 0–5 audit (#27) (`0ff03a6`)
+- Phase 5: self-metrics and authentication (#26) (`b8ef2b6`)
+
 ## 0.14.1 (2026-09-24)
 
 - Sidebar: default namespace first and pre-expanded at / (#25) (`f523946`)
