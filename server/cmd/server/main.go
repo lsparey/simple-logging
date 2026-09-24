@@ -18,6 +18,7 @@ import (
 	"github.com/lsparey/simple-logging/internal/indexes"
 	"github.com/lsparey/simple-logging/internal/k8s"
 	"github.com/lsparey/simple-logging/internal/storage"
+	"github.com/lsparey/simple-logging/internal/ui"
 )
 
 // version is set at image build time with -ldflags. Local builds use "dev".
@@ -47,7 +48,7 @@ func main() {
 	log.Info("simple-logging starting",
 		zap.String("version", version),
 		zap.String("logs_root", cfg.LogsRoot),
-		zap.Int("grpc_web_port", cfg.GRPCWebPort),
+		zap.Int("port", cfg.Port),
 		zap.Int("retention_days", cfg.RetentionDays),
 		zap.Duration("retention_check_interval", cfg.RetentionCheckInterval),
 		zap.String("collection_mode", cfg.CollectionMode()),
@@ -70,9 +71,30 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// ── HTTP server ───────────────────────────────────────────────────────────
+	// Listens straight away so /healthz answers (and the liveness probe
+	// passes) during a long migration; /readyz and the API answer 503 until
+	// SetService is called below.
+	srv := api.NewServer(api.ServerOptions{
+		Port:               cfg.Port,
+		UI:                 ui.FS(),
+		APIURL:             cfg.APIURL,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
+	}, log)
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- srv.Start() }()
+
+	// ── Storage permissions ───────────────────────────────────────────────────
+	if err := storage.CheckWritable(cfg.LogsRoot); err != nil {
+		log.Fatal("LOGS_ROOT has entries this process cannot write, so logs would be silently lost. "+
+			"If they were written by an older image that ran as root, chown them to this user, "+
+			"e.g. with the Helm chart's volumePermissions.enabled=true for one upgrade",
+			zap.Error(err))
+	}
+
 	// ── Storage layout migration ──────────────────────────────────────────────
 	// Runs synchronously before anything else starts (collector, watcher,
-	// server) so the readiness probe stays failing for the duration, and so
+	// API) so the readiness probe stays failing for the duration, and so
 	// nothing reads the logs root mid-migration.
 	if cfg.MigrateLegacy {
 		migrationStart := time.Now()
@@ -123,24 +145,33 @@ func main() {
 	diskGuard := storage.NewDiskGuard(cfg.LogsRoot, cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent, diskGuardCheckInterval, log)
 	go diskGuard.Run(ctx)
 
-	// ── Phase 8/9: gRPC Service & gRPC-Web Server ───────────────────
+	// ── LogService API ────────────────────────────────────────────────────────
 	svc := api.NewLogServiceWithIndexes(cfg.LogsRoot, coll, coll, indexManager)
 	svc.SetDiskWaterMarks(cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent)
-	srv := api.NewServer(cfg.GRPCWebPort, svc, cfg.RESTDebugEnabled, log)
+	srv.SetService(svc)
 
-	serverErr := make(chan error, 1)
-	go func() { serverErr <- srv.Start() }()
+	select {
+	case <-ctx.Done():
+		log.Info("shutdown signal received, stopping")
+	case err := <-serverErr:
+		// Start only returns early on a listen failure (e.g. port in use).
+		log.Fatal("server exited unexpectedly", zap.Error(err))
+	}
 
-	<-ctx.Done()
-	log.Info("shutdown signal received, stopping")
-
+	// Stop serving first so no new streams start, then stop collecting. The
+	// pod watcher, retention and disk guard all stop with ctx, which is
+	// already cancelled.
 	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 	srv.Shutdown(shutdownCtx)
-
 	if err := <-serverErr; err != nil {
 		log.Error("server exited with error", zap.Error(err))
 	}
+
+	// Close waits for every stream goroutine to exit, and each one closes its
+	// segment writer on the way out, so all collected lines are on disk.
+	coll.Close()
+	log.Info("collector stopped, all log writers closed")
 }
 
 func buildLogger(level string) (*zap.Logger, error) {

@@ -6,7 +6,8 @@
 generate:
 	cd ../proto && buf generate
 
-## build: compile the server binary into bin/
+## build: compile the server binary into bin/ (embeds whatever is in
+##   internal/ui/dist; run `make build` at the repo root to include the UI)
 build:
 	go build -trimpath -ldflags="-s -w" -o bin/simple-logging ./cmd/server
 

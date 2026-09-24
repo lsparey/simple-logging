@@ -2,7 +2,7 @@
  * Mock ConnectRPC server that implements LogService with fixture data.
  * Run by Playwright's webServer config before E2E tests start.
  *
- * Supports the gRPC-Web protocol (used by the frontend's createGrpcWebTransport)
+ * Supports the Connect protocol (used by the frontend's createConnectTransport)
  * via @connectrpc/connect-node, plus a manual CORS wrapper so the Vite dev
  * server (port 5173) can reach it (port 8081) without proxy configuration.
  */

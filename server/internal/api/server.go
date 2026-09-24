@@ -3,93 +3,136 @@ package api
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"net"
 	"net/http"
-	"strings"
+	"sync/atomic"
 
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	connectcors "connectrpc.com/cors"
+	"github.com/rs/cors"
 	"go.uber.org/zap"
-	"google.golang.org/grpc"
 
-	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
+	"github.com/lsparey/simple-logging/gen/simplelog/v1/simplelogv1connect"
 )
 
-// Server wraps a gRPC server with a gRPC-Web HTTP/1.1 handler so browser
-// clients can connect directly without a proxy.
-type Server struct {
-	grpcServer *grpc.Server
-	httpServer *http.Server
-	log        *zap.Logger
+// ServerOptions configures NewServer.
+type ServerOptions struct {
+	// Port is the single port everything is served on: the UI, the API
+	// (gRPC, gRPC-Web and Connect), /download, /healthz and /readyz.
+	Port int
+
+	// UI is the built frontend, served from / with a fallback to index.html
+	// for client-side routes. Normally ui.FS().
+	UI fs.FS
+
+	// APIURL is written into /config.js for the frontend to use as its API
+	// base URL. Empty (the default) means the frontend's own origin.
+	APIURL string
+
+	// CORSAllowedOrigins lists the origins allowed to call the API from a
+	// browser. Empty (the default) disables CORS, which is all a same-origin
+	// deployment needs.
+	CORSAllowedOrigins []string
 }
 
-// NewServer creates a Server that serves svc over gRPC-Web on the given port.
-// When enableDebug is true, plain JSON REST endpoints are also mounted at /debug/*
-// for testing purposes.
-func NewServer(port int, svc *LogService, enableDebug bool, log *zap.Logger) *Server {
-	grpcSrv := grpc.NewServer()
-	pb.RegisterLogServiceServer(grpcSrv, svc)
+// Server serves the frontend and the LogService API over one HTTP port.
+// Plaintext HTTP/2 is accepted alongside HTTP/1.1 so native gRPC clients
+// work without TLS, while browsers use Connect or gRPC-Web over HTTP/1.1.
+//
+// The server can start listening before the LogService exists, so /healthz
+// answers during a long startup (e.g. a storage migration). Until SetService
+// is called, /readyz and every API route answer 503.
+type Server struct {
+	httpServer *http.Server
+	api        atomic.Pointer[http.ServeMux]
+	log        *zap.Logger
 
-	wrappedGrpc := grpcweb.WrapServer(
-		grpcSrv,
-		// Allow all origins; the app has no auth and is expected to run inside
-		// a cluster. Tighten this if TLS + public exposure is added later.
-		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-		grpcweb.WithAllowedRequestHeaders([]string{"*"}),
-	)
+	// cancelRequests cancels the base context of every request, so long-lived
+	// streaming RPCs end promptly on shutdown instead of holding it open.
+	cancelRequests context.CancelFunc
+}
+
+// NewServer creates a Server from opts. Call SetService to start serving the
+// API, then Start to begin listening.
+func NewServer(opts ServerOptions, log *zap.Logger) *Server {
+	s := &Server{log: log}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/download", downloadHandler(svc))
-
-	if enableDebug {
-		registerDebugRoutes(mux, svc)
-		log.Info("REST debug endpoints enabled at /debug/*")
-	}
-
-	// Catch-all: only forward genuine gRPC / gRPC-Web requests to the gRPC
-	// server. Any other request (e.g. a plain browser GET to an unknown path)
-	// gets a 404 instead of the confusing "invalid gRPC request method" error.
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ct := r.Header.Get("Content-Type")
-		if wrappedGrpc.IsGrpcWebRequest(r) ||
-			wrappedGrpc.IsGrpcWebSocketRequest(r) ||
-			wrappedGrpc.IsAcceptableGrpcCorsRequest(r) ||
-			strings.HasPrefix(ct, "application/grpc") {
-			wrappedGrpc.ServeHTTP(w, r)
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+		if s.api.Load() == nil {
+			http.Error(w, "starting up", http.StatusServiceUnavailable)
 			return
 		}
-		http.NotFound(w, r)
-	}))
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.Handle("GET /config.js", configJSHandler(opts.APIURL))
+	mux.Handle("/download", http.HandlerFunc(s.serveAPI))
+	mux.Handle("/"+simplelogv1connect.LogServiceName+"/", http.HandlerFunc(s.serveAPI))
+	mux.Handle("/", spaHandler(opts.UI))
 
-	httpSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
+	var handler http.Handler = mux
+	if len(opts.CORSAllowedOrigins) > 0 {
+		handler = cors.New(cors.Options{
+			AllowedOrigins: opts.CORSAllowedOrigins,
+			AllowedMethods: connectcors.AllowedMethods(),
+			AllowedHeaders: connectcors.AllowedHeaders(),
+			ExposedHeaders: connectcors.ExposedHeaders(),
+		}).Handler(handler)
 	}
 
-	return &Server{
-		grpcServer: grpcSrv,
-		httpServer: httpSrv,
-		log:        log,
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
+	baseCtx, cancel := context.WithCancel(context.Background())
+	s.cancelRequests = cancel
+	s.httpServer = &http.Server{
+		Addr:        fmt.Sprintf(":%d", opts.Port),
+		Handler:     handler,
+		Protocols:   &protocols,
+		BaseContext: func(net.Listener) context.Context { return baseCtx },
 	}
+	return s
+}
+
+// SetService starts serving svc on the API routes and marks the server ready.
+func (s *Server) SetService(svc *LogService) {
+	api := http.NewServeMux()
+	api.Handle(simplelogv1connect.NewLogServiceHandler(svc))
+	api.HandleFunc("/download", downloadHandler(svc))
+	s.api.Store(api)
+	s.log.Info("API ready")
+}
+
+// serveAPI forwards to the API routes once SetService has been called.
+func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
+	api := s.api.Load()
+	if api == nil {
+		http.Error(w, "starting up", http.StatusServiceUnavailable)
+		return
+	}
+	api.ServeHTTP(w, r)
 }
 
 // Start begins listening on the configured address. It blocks until the server
 // stops. A nil error means the server was shut down gracefully via Shutdown.
 func (s *Server) Start() error {
-	s.log.Info("gRPC-Web server listening", zap.String("addr", s.httpServer.Addr))
+	s.log.Info("HTTP server listening", zap.String("addr", s.httpServer.Addr))
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("grpc-web server: %w", err)
+		return fmt.Errorf("http server: %w", err)
 	}
 	return nil
 }
 
-// Shutdown gracefully stops the HTTP server (waiting for in-flight requests)
-// and then the underlying gRPC server.
+// Shutdown ends in-flight streaming RPCs and then gracefully stops the HTTP
+// server, waiting for remaining requests until ctx expires.
 func (s *Server) Shutdown(ctx context.Context) {
-	s.log.Info("gRPC-Web server shutting down")
+	s.log.Info("HTTP server shutting down")
+	s.cancelRequests()
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		s.log.Warn("http server shutdown error", zap.Error(err))
 	}
-	s.grpcServer.GracefulStop()
 }

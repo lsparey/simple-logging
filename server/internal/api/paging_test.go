@@ -77,7 +77,7 @@ func TestGetLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace:    "default",
 		Pod:          pod,
 		PageSize:     pagingPageSize,
@@ -124,7 +124,7 @@ func TestGetLogs_3Day_ForwardPaginationCoversAllLines(t *testing.T) {
 	var nextToken string
 	const maxPages = 20
 	for i := 0; i < maxPages; i++ {
-		resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+		resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 			Namespace: "default",
 			Pod:       pod,
 			PageSize:  pagingPageSize,
@@ -174,7 +174,7 @@ func TestGetLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T) {
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
 	// Load the most recent page.
-	initial, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	initial, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace:    "default",
 		Pod:          pod,
 		PageSize:     pagingPageSize,
@@ -197,7 +197,7 @@ func TestGetLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T) {
 		if prevToken == "" {
 			break
 		}
-		r, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+		r, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 			Namespace: "default",
 			Pod:       pod,
 			PageSize:  pagingPageSize,
@@ -243,7 +243,7 @@ func TestGetLogs_3Day_FirstForwardPageHasNoPrevToken(t *testing.T) {
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default",
 		Pod:       pod,
 		PageSize:  pagingPageSize,
@@ -284,7 +284,7 @@ func TestGetLogs_3Day_BurstLinesIncludedOnCorrectPage(t *testing.T) {
 	var all []string
 	var nextToken string
 	for i := 0; i < 20; i++ {
-		resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+		resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 			Namespace: "default",
 			Pod:       pod,
 			PageSize:  pagingPageSize,
@@ -344,7 +344,7 @@ func TestGetDeploymentLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
+	resp, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
 		Deployment:   deployment,
 		PageSize:     pagingPageSize,
@@ -393,7 +393,7 @@ func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
-	initial, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
+	initial, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
 		Deployment:   deployment,
 		PageSize:     pagingPageSize,
@@ -415,7 +415,7 @@ func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T
 		if prevToken == "" {
 			break
 		}
-		r, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
+		r, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
 			Namespace:  "default",
 			Deployment: deployment,
 			PageSize:   pagingPageSize,
@@ -465,7 +465,7 @@ func TestGetDeploymentLogs_3Day_MultiPod_LoadLastPageShowsMostRecent(t *testing.
 	writeLogFile(t, dir, "default", podB, generate3DayLogLines(podB))
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
+	resp, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
 		Deployment:   deployment,
 		PageSize:     pagingPageSize,
@@ -507,7 +507,7 @@ func TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
-	initial, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
+	initial, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
 		Namespace:    "default",
 		Deployment:   deployment,
 		PageSize:     pagingPageSize,
@@ -530,7 +530,7 @@ func TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *
 		if prevToken == "" {
 			break
 		}
-		r, err := svc.GetDeploymentLogs(context.Background(), &pb.GetDeploymentLogsRequest{
+		r, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
 			Namespace:  "default",
 			Deployment: deployment,
 			PageSize:   pagingPageSize,

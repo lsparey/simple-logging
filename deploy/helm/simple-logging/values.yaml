@@ -8,12 +8,6 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
-# URL the browser uses to reach the gRPC-Web backend.
-# With an ingress host this is derived automatically (including TLS). Without
-# ingress, leave blank to use the frontend's current browser origin. Set it
-# explicitly only when the backend is exposed at a different origin.
-grpcWebUrl: ""
-
 ingress:
   enabled: false
   className: ""
@@ -21,13 +15,12 @@ ingress:
   # host: logging.example.com
   host: ""
   tls: []
-  # Path prefix used to route gRPC-Web calls to port 8080 (must precede / catch-all).
-  grpcPathPrefix: "/simplelog.v1."
 
 # Application configuration — all values map 1:1 to environment variables.
 config:
   logsRoot: /var/pod-logs
-  grpcWebPort: 8080
+  # The one container port serving the UI, the API, /healthz and /readyz.
+  port: 8080
   retentionDays: 30
   retentionCheckInterval: "24h"
   # Safety net for when retention alone doesn't keep PVC usage down: at or
@@ -37,9 +30,6 @@ config:
   diskHighWaterPercent: 90
   diskLowWaterPercent: 80
   logLevel: info
-  # Enables plain JSON REST endpoints at /debug/* for testing purposes.
-  # Leave disabled unless you need to exercise the API without a gRPC-Web client.
-  restDebug: false
   # logCollectionMode controls how pod logs are collected.
   #
   #   hybrid (default) — pods scheduled on the same node as simple-logging
@@ -89,8 +79,14 @@ persistence:
 
 service:
   type: ClusterIP
-  httpPort: 80      # nginx frontend
-  grpcWebPort: 8080 # gRPC-Web backend
+  # Serves the UI and the API (gRPC, gRPC-Web and Connect) on one port.
+  port: 80
+
+# Browser origins allowed to call the API cross-origin. Leave empty (CORS
+# off) when the UI is served by this chart, which is the normal setup; set it
+# only if you host the frontend build somewhere else.
+cors:
+  allowedOrigins: []
 
 resources:
   requests:
@@ -100,9 +96,57 @@ resources:
     cpu: 700m
     memory: 576Mi
 
-# Pod-level security context.
-# The combined image uses nginx:alpine which starts as root to bind port 80.
-podSecurityContext: {}
+# Pod-level security context. The image runs as the distroless "nonroot"
+# user (UID/GID 65532); fsGroup makes the log PVC writable by it.
+#
+# In hybrid and fileTail modes the chart also adds supplemental group 0: the
+# CRI writes /var/log/pods as root:root 0750 with 0640 log files, so group 0
+# is what lets the non-root user read them. No root UID or capabilities are
+# needed on containerd or CRI-O.
+#
+# hybrid/fileTail on Docker (e.g. Docker Desktop): /var/lib/docker/containers
+# is readable by root only, so set podSecurityContext.runAsUser=0 and
+# securityContext.runAsNonRoot=false there. api mode never needs host access.
+podSecurityContext:
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# Runs a root init container that chowns the log PVC to runAsUser before the
+# app starts. Only needed when upgrading from chart 0.13.x or older (whose image ran
+# as root, so existing log files are root-owned) on a storage class that
+# ignores fsGroup, such as local-path or other hostPath-backed provisioners.
+# Enable for the upgrade, then it can be turned off again.
+volumePermissions:
+  enabled: false
+  image: busybox:1.37
+
+# Container-level security context.
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+# Optional NetworkPolicy. When enabled, ingress is only allowed from the
+# ingress controller's namespace, and egress only to DNS and the Kubernetes
+# API server (which also proxies log streams from kubelets in api/hybrid
+# mode, so kubelets never need to be reachable directly).
+networkPolicy:
+  enabled: false
+  # Namespace the ingress controller runs in. Its pods may reach the app.
+  ingressNamespace: ingress-nginx
+  # Additional ingress peers, e.g. a monitoring namespace or a namespace you
+  # port-forward from (list of NetworkPolicyPeer).
+  extraIngressFrom: []
+  # API server addresses for egress. Empty allows the API server ports to
+  # any address. Both the Service port (443) and the usual endpoint port
+  # (6443) are listed because CNIs differ in which one the policy sees.
+  apiServerCIDRs: []
+  apiServerPorts: [443, 6443]
 
 # Scheduling controls, all empty/disabled by default.
 nodeSelector: {}
@@ -130,20 +174,20 @@ rbac:
 
 readinessProbe:
   httpGet:
-    path: /healthz
-    port: 80
+    path: /readyz
+    port: http
   initialDelaySeconds: 5
   periodSeconds: 10
 
 # Extra environment variables to inject into the container.
 # e.g. extraEnv:
-#   - name: REST_DEBUG
-#     value: "true"
+#   - name: PPROF_PORT
+#     value: "6060"
 extraEnv: []
 
 livenessProbe:
   httpGet:
     path: /healthz
-    port: 80
+    port: http
   initialDelaySeconds: 15
   periodSeconds: 30

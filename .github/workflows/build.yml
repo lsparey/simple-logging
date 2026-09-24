@@ -9,7 +9,7 @@ on:
       - 'frontend/**'
       - 'deploy/**'
       - 'Dockerfile'
-      - 'docker-entrypoint.sh'
+      - 'proto/**'
       - '.github/workflows/build.yml'
 
 jobs:

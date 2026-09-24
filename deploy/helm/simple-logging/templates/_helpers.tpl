@@ -70,3 +70,30 @@ Name of the ServiceAccount to use.
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Fail with an upgrade hint when a values key removed in 0.14.0 (the single-
+binary release) is still set,
+rather than silently ignoring it.
+*/}}
+{{- define "simple-logging.failOnRemovedValues" -}}
+{{- $removed := list }}
+{{- if .Values.grpcWebUrl }}
+{{- $removed = append $removed "grpcWebUrl (the UI now always calls the API on its own origin)" }}
+{{- end }}
+{{- if (.Values.ingress).grpcPathPrefix }}
+{{- $removed = append $removed "ingress.grpcPathPrefix (the ingress now has a single / path)" }}
+{{- end }}
+{{- if (.Values.config).grpcWebPort }}
+{{- $removed = append $removed "config.grpcWebPort (use config.port)" }}
+{{- end }}
+{{- if (.Values.config).restDebug }}
+{{- $removed = append $removed "config.restDebug (every RPC can now be called as JSON with curl; see the README)" }}
+{{- end }}
+{{- if or (.Values.service).httpPort (.Values.service).grpcWebPort }}
+{{- $removed = append $removed "service.httpPort / service.grpcWebPort (use service.port)" }}
+{{- end }}
+{{- if $removed }}
+{{- fail (printf "\n\nThese values were removed in chart 0.14.0, when the image became a single binary serving the UI and API on one port. Remove them from your values:\n  - %s\n" (join "\n  - " $removed)) }}
+{{- end }}
+{{- end }}
