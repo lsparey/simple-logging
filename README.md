@@ -9,7 +9,7 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 ## Features
 
 - **Live log streaming** — real-time log tailing from all pods across all namespaces
-- **Every container** — every non-init container in a pod is collected independently, including sidecars
+- **Every container** — every container in a pod is collected independently, including sidecars and native (init-container) sidecars
 - **Every workload kind** — logs are grouped by Deployment, StatefulSet, DaemonSet, Job, CronJob or bare pod, and merged across a workload's pods (see [supported workloads](#supported-workloads))
 - **Search, indexes and download** — server-side substring or regex search across any time range, optional indexes on a JSON key, and plain-text download
 - **Persisted log storage** — logs are written to a PersistentVolumeClaim, one segment per container per day, and deleted once they're older than 30 days (see [retention](#retention) below)
@@ -109,7 +109,7 @@ Uses the same `config.nodeLogsRoot` / `config.dockerLogsRoot` values as `fileTai
 
 ### `fileTail`
 
-The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and tails log files directly on the node filesystem using filesystem events (`inotify`). No persistent HTTP connections are opened to kube-apiserver, kubelet, or containerd.
+The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and tails log files directly on the node filesystem using filesystem events (`inotify`). No log streams are opened through kube-apiserver, kubelet or containerd; the only API connection is the pod watch every mode uses.
 
 **Recommended for:** single-node clusters, k3s, Docker Desktop, or any setup where the simple-logging pod always runs on the same node as the pods it monitors.
 
@@ -150,7 +150,7 @@ Pods are grouped by the workload that owns them, worked out from each pod's `own
 
 | Workload | Grouped as | Notes |
 |---|---|---|
-| Deployment | Deployment | Through its ReplicaSets (matched by the `pod-template-hash` label), so every rollout's pods are grouped together. Other controllers that manage ReplicaSets the same way, such as Argo Rollouts, show up as a Deployment named after the controller. |
+| Deployment | Deployment | Through its ReplicaSets (matched by the `pod-template-hash` label), so every rollout's pods are grouped together. |
 | StatefulSet | StatefulSet | |
 | DaemonSet | DaemonSet | |
 | Job | Job | |
@@ -158,7 +158,7 @@ Pods are grouped by the workload that owns them, worked out from each pod's `own
 | Bare pod | Pod | Pods with no owner, including static pods such as a kubeadm control plane. |
 | ReplicaSet not owned by a Deployment | ReplicaSet | Available through the API; the UI lists these pods under Pods only. |
 
-Every pod is listed under **Pods** whatever owns it. All containers are collected, including sidecars; init containers are not.
+Every pod is listed under **Pods** whatever owns it, and pods that finish quickly (such as a short Job's) are collected too. All containers are collected, including sidecars and native sidecars (init containers with `restartPolicy: Always`); ordinary init containers are not.
 
 ## Security
 
@@ -329,6 +329,8 @@ v1.0.0 declares the on-disk format, the API, the chart's values and the environm
 - **Metrics and built-in basic auth** are new and off by default; see [Metrics](#metrics) and [Authentication](#authentication).
 - **Static pods are now collected** in `hybrid` and `fileTail` modes. Control-plane pods such as etcd and kube-apiserver were previously skipped, so expect them to appear, along with the storage they use.
 - **Retention now also sweeps at 00:05 UTC every day**, so expired logs are deleted within minutes of expiring rather than up to a day later.
+- **Collection and viewing fixes.** Live tail now follows every container of a pod, not just one. A multi-container pod's `GetLogs` pages and downloads are in timestamp order. Restart separators carry a timestamp, so they appear where the restart happened. Native sidecars and pods that finish before they're seen running are collected. Lines over 64 KiB no longer break reading. Stored lines are capped at 1 MiB and marked `…[truncated]` beyond that.
+- **Search matches the log message only**, not the stored timestamp and `[namespace/pod/container]` prefix; use the scope fields to narrow by namespace or workload. The search page gains a time range.
 
 ### Upgrading to v0.14.0 (single binary)
 

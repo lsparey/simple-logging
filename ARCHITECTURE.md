@@ -46,11 +46,11 @@ The server lives in `server/`. `cmd/server/main.go` wires the pieces together in
 
 ### Watching pods
 
-`k8s.PodWatcher` runs one shared informer over pods in all namespaces. It strips `managedFields` from each pod before caching it, since they're usually the largest part of a pod object and the collector never reads them. A pod is handed to the collector when it is first seen in any phase except `Pending`, or when it moves from `Pending` to `Running`. Deletions are passed on too.
+`k8s.PodWatcher` runs one shared informer over pods in all namespaces. It strips `managedFields` from each pod before caching it, since they're usually the largest part of a pod object and the collector never reads them. A pod is handed to the collector when it is first seen in any phase except `Pending`, or when it leaves `Pending` (for any phase, since a quick Job's pod can go straight to `Succeeded`). Deletions are passed on too.
 
 ### Collecting logs
 
-For each pod, the collector starts one stream per container, including sidecars but not init containers. Each stream decides where to read from:
+For each pod, the collector starts one stream per container, including sidecars and native sidecars (init containers with `restartPolicy: Always`), but not ordinary init containers. Each stream decides where to read from:
 
 - **File tail** is used in `fileTail` mode, and in `hybrid` mode for pods on the collector's own node (`NODE_NAME`). It reads `/var/log/pods/<namespace>_<pod>_<uid>/<container>/<restartCount>.log` from a read-only hostPath mount, and uses inotify with a polling fallback to wake when the file grows. For static pods (such as kubeadm's control plane) the directory uses the static pod's UID, which the kubelet records on the mirror pod as the `kubernetes.io/config.mirror` annotation. Lines are parsed as CRI (`<RFC3339Nano> <stream> <flag> <content>`) or as Docker JSON. When the container restarts, the stream moves on to the next `<restartCount>.log`.
 - **API stream** is used in `api` mode, and in `hybrid` mode for pods on other nodes. It follows `GET /api/v1/namespaces/<ns>/pods/<pod>/log` with timestamps on. If the stream drops it reconnects with exponential backoff (1s, doubling up to 30s), resuming from the last line's timestamp. It stops once the pod has finished or been replaced.
@@ -83,15 +83,15 @@ Each line in a segment is:
 <RFC3339Nano timestamp> [<namespace>/<pod>/<container>] <original log line>
 ```
 
-A line goes into the segment for its own timestamp's UTC date, so a line arriving late for yesterday is written to yesterday's file and expires with it.
+Every stored line has this prefix, restart separators included (the collector formats them all with one function, `storedLine`). A line goes into the segment for its own timestamp's UTC date, so a line arriving late for yesterday is written to yesterday's file and expires with it. `SegmentWriter` caps a stored line at 1 MiB (`storage.MaxLineBytes`), ending a longer one with `…[truncated]`; every segment reader uses `storage.NewLineScanner`, which is sized for that cap.
 
 **Write failures don't stop collection.** If a write fails (the volume is full or read-only, say), the line is dropped and counted, and that writer backs off from 1s up to 30s before trying again. Meanwhile the stream keeps reading from its source. The count shows up as `simplelog_lines_dropped_total` and on the storage dashboard.
 
 ### Retention and the disk guard
 
-`storage.RetentionManager` deletes any segment whose date is strictly older than today (UTC) minus `RETENTION_DAYS`. It then removes any container, pod and namespace directories left empty, and compacts the indexes. It sweeps at startup, every `RETENTION_CHECK_INTERVAL`, and at 00:05 UTC each day, so no line is kept for more than `RETENTION_DAYS` + 1 day. The expiry decision uses only the date in the file name, never file modification times.
+`storage.RetentionManager` deletes any segment whose date is strictly older than today (UTC) minus `RETENTION_DAYS`. It then removes any container, pod and namespace directories left empty (keeping `meta.json` for a pod that's still running, so it keeps its workload grouping), and compacts the indexes. It sweeps at startup, every `RETENTION_CHECK_INTERVAL`, and at 00:05 UTC each day, so no line is kept for more than `RETENTION_DAYS` + 1 day. The expiry decision uses only the date in the file name, never file modification times.
 
-`storage.DiskGuard` is a safety net that checks volume usage every minute. At or above `DISK_HIGH_WATER_PERCENT` (90) it deletes the oldest segments in the whole store, across all namespaces and pods, until usage drops below `DISK_LOW_WATER_PERCENT` (80). Each deletion is logged as a warning and counted.
+`storage.DiskGuard` is a safety net that checks volume usage every minute. At or above `DISK_HIGH_WATER_PERCENT` (90) it deletes the oldest segments in the whole store, across all namespaces and pods, until usage drops below `DISK_LOW_WATER_PERCENT` (80). It never deletes a segment a writer still has open, since that frees nothing until the file is closed. Each deletion is logged as a warning and counted, and indexes are compacted afterwards.
 
 ### Indexes
 
@@ -113,14 +113,14 @@ The API is `simplelog.v1.LogService`, defined in [`proto/simplelog/v1/log_servic
 |---|---|
 | Browse | `ListNamespaces`, `ListPods`, `ListWorkloads` |
 | Read | `GetLogs` (one pod), `GetWorkloadLogs` (every pod of a workload, merged by timestamp) |
-| Tail | `StreamLogs`, `StreamWorkloadLogs` (with an empty kind and name it tails a whole namespace) |
+| Tail | `StreamLogs`, `StreamWorkloadLogs` (with an empty kind and name it tails a whole namespace). A tail follows every container's latest segment and delivers lines as they're written. |
 | Search | `SearchLogs`, streamed |
 | Indexes | `ListIndexes`, `CreateIndex`, `DeleteIndex`, `ListIndexValues`, `GetIndexLogs` |
 | Status | `ListLogFiles` (storage summary and disk usage), `GetStats` (self-metrics) |
 
-**Reading pages.** `GetLogs` and `GetWorkloadLogs` return pages in time order, with opaque page tokens for moving forwards and backwards. A workload's pages come from a heap merge across its pods' segments, holding only one page's worth of lines at a time. Lines with equal timestamps keep their order within the file.
+**Reading pages.** `GetLogs` and `GetWorkloadLogs` return pages in time order, with opaque page tokens for moving forwards and backwards. A workload's pages, and a multi-container pod's, come from a heap merge across every container's segments, holding only one page's worth of lines at a time. `GetLogs` on a single-container pod pages by byte offset instead, which avoids rescanning. Lines with equal timestamps keep their order within the file.
 
-**Search.** `SearchLogs` works out which segments could hold matches by date, from the requested time range, and scans them concurrently with one worker per CPU. Matching is either a case-insensitive substring or an RE2 regex. Results stream back as they're found, up to `max_results`, and the final message says whether the results were cut off. Cancelling the request stops the workers.
+**Search.** `SearchLogs` works out which segments could hold matches by date, from the requested time range, and scans them concurrently with one worker per CPU. Matching runs against the log message, not the stored prefix, and is either a case-insensitive substring or an RE2 regex. Results stream back as they're found, up to `max_results`, and the final message says whether the results were cut off. Cancelling the request stops the workers.
 
 **Other endpoints**, on the same port:
 
@@ -151,7 +151,7 @@ The frontend lives in `frontend/`: React, TypeScript, Vite and MUI. The API clie
 | `/search` | Server-side search. |
 | `/dashboard` | Storage and collection dashboard. |
 
-Global state is a single zustand store (`src/store/logStore.ts`) holding the current selection, the loaded lines, paging tokens and filters. Data fetching lives in hooks under `src/hooks/`. Filtering by search text within the loaded page happens in the browser; server-side search is its own page.
+Global state is a single zustand store (`src/store/logStore.ts`) holding the current selection, the loaded lines, paging tokens and filters. Data fetching lives in hooks under `src/hooks/`. Filtering by search text within the loaded page happens in the browser; server-side search is its own page. A namespace page (`/ns/<ns>`) can also start a live tail of every pod in the namespace.
 
 ## Deployment
 

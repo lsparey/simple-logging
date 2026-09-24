@@ -14,6 +14,7 @@ The root `Makefile` is the entry point (`make lint`, `make test-go`, `make test-
 ## Invariants
 
 - **On-disk format is v1-stable.** Segment paths `<ns>/<pod>/<container>/<YYYY-MM-DD>.log`, the line format `<RFC3339Nano> [<ns>/<pod>/<container>] <line>`, `meta.json`, and the index manifest and shard format (`formatVersion` 3, magic `SLI3`). A change to any of them ships with a migration that runs at startup, and bumps the major version.
+- **Every stored line goes through `storedLine`** (collector) and is capped by `SegmentWriter` at `storage.MaxLineBytes`; read segments with `storage.NewLineScanner`.
 - **A line's segment comes from the line's own timestamp**, taken from the source (CRI, Docker, or the API's timestamps), in UTC. Retention deletes whole segments by the date in the file name. That is what makes the retention guarantee exact.
 - **Storage write failures drop and count the line.** The stream keeps reading, and the drop shows up in `simplelog_lines_dropped_total`.
 - **API changes are additive within v1.** Add RPCs and fields with new field numbers. Removing or renumbering needs a major version.
