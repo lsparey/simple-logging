@@ -84,6 +84,28 @@ jobs:
             } > "$notes_file"
           fi
 
+      - name: Update CHANGELOG.md
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # Insert this release's notes above the previous entries (after the
+          # file's intro paragraph). The notes' own headings are demoted one
+          # level so they nest under the version heading, and the generated
+          # "## Changes" heading is dropped as redundant.
+          python3 - <<'PY'
+          import datetime, os, re
+          notes = open("deploy/helm/simple-logging/RELEASE_NOTES.md").read().strip().splitlines()
+          if notes and notes[0].strip() == "## Changes":
+              notes = notes[1:]
+          notes = [re.sub(r"^(#+) ", r"#\1 ", line) for line in notes]
+          body = "\n".join(notes).strip()
+          entry = f"## {os.environ['VERSION']} ({datetime.date.today().isoformat()})\n\n{body}\n\n"
+          changelog = open("CHANGELOG.md").read()
+          first = changelog.find("\n## ")
+          changelog = changelog[: first + 1] + entry + changelog[first + 1 :] if first >= 0 else changelog.rstrip("\n") + "\n\n" + entry
+          open("CHANGELOG.md", "w").write(changelog)
+          PY
+
       - name: Update Chart.yaml
         run: |
           sed -i "s/^version:.*/version: ${{ steps.ver.outputs.version }}/" deploy/helm/simple-logging/Chart.yaml
@@ -93,7 +115,7 @@ jobs:
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          git add deploy/helm/simple-logging/Chart.yaml
+          git add deploy/helm/simple-logging/Chart.yaml CHANGELOG.md
           git commit -m "chore: release v${{ steps.ver.outputs.version }}"
           git tag "v${{ steps.ver.outputs.version }}"
           git push origin HEAD:main
