@@ -418,6 +418,23 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, containerNam
 	}
 }
 
+// mirrorPodAnnotation is set by the kubelet on the API server's mirror of a
+// static pod (e.g. kubeadm's control plane), holding the static pod's own
+// UID. The mirror has a different UID, but the node's log directory is named
+// after the static pod's.
+const mirrorPodAnnotation = "kubernetes.io/config.mirror"
+
+// podLogDirName returns the name of pod's directory under the node's
+// /var/log/pods: <namespace>_<name>_<uid>, using the static pod's UID for a
+// mirror pod.
+func podLogDirName(pod *corev1.Pod) string {
+	uid := string(pod.UID)
+	if staticUID := pod.Annotations[mirrorPodAnnotation]; staticUID != "" {
+		uid = staticUID
+	}
+	return fmt.Sprintf("%s_%s_%s", pod.Namespace, pod.Name, uid)
+}
+
 // runFileTail tails the pod's log file directly from the node filesystem,
 // completely bypassing the Kubernetes log API. This eliminates the persistent
 // HTTP streaming connections that cause elevated CPU in containerd/kubelet.
@@ -443,9 +460,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 	// decided most recently would arbitrarily win.
 	isDefaultContainer := containerName == defaultContainer(pod)
 
-	containerDir := filepath.Join(c.nodeLogsRoot,
-		fmt.Sprintf("%s_%s_%s", pod.Namespace, pod.Name, string(pod.UID)),
-		containerName)
+	containerDir := filepath.Join(c.nodeLogsRoot, podLogDirName(pod), containerName)
 
 	// The file for the currently-running container is named after its restart
 	// count. A container on its third run writes to 2.log, not 0.log.

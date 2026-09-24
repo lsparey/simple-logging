@@ -782,3 +782,36 @@ func TestCollector_OnAdd_BarePodOwnerIsPod(t *testing.T) {
 		t.Errorf("owner = (%q, %q), want (Pod, standalone-pod)", meta.OwnerKind, meta.OwnerName)
 	}
 }
+
+// TestCollector_FileTail_StaticPodUsesMirrorAnnotationForLogDir verifies that
+// a static pod (e.g. a kubeadm control-plane component) is tailed from the
+// directory named after its static UID, which the kubelet records on the
+// mirror pod as an annotation, rather than the mirror pod's own UID.
+func TestCollector_FileTail_StaticPodUsesMirrorAnnotationForLogDir(t *testing.T) {
+	logsRoot := t.TempDir()
+	nodeLogs := t.TempDir()
+
+	pod := makePod("kube-system", "etcd-node-a")
+	pod.UID = "mirror-uid"
+	pod.Annotations = map[string]string{"kubernetes.io/config.mirror": "static-hash"}
+	pod.Spec.NodeName = "node-a"
+
+	containerDir := filepath.Join(nodeLogs, "kube-system_etcd-node-a_static-hash", "app")
+	if err := os.MkdirAll(containerDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	criLine := fmt.Sprintf("%sZ stdout F etcd is ready\n", time.Now().UTC().Format("2006-01-02T15:04:05.000000000"))
+	if err := os.WriteFile(filepath.Join(containerDir, "0.log"), []byte(criLine), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop(), WithNodeName("node-a"))
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	if !waitFor(t, 5*time.Second, func() bool {
+		return countLines(t, logsRoot, "kube-system", "etcd-node-a", "etcd is ready") >= 1
+	}) {
+		t.Fatal("expected the static pod's log to be tailed from its static-UID directory")
+	}
+}
