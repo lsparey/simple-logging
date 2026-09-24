@@ -1,0 +1,23 @@
+name: Security scan
+
+# PRs are scanned before merge (see test.yml). This re-scans the published
+# image weekly, since new CVEs are disclosed against images that have
+# already shipped.
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  trivy:
+    name: Scan published image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Scan lsparey/simple-logging:latest
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: lsparey/simple-logging:latest
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'

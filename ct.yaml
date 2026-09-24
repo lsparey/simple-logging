@@ -1,0 +1,7 @@
+# chart-testing (ct) config, used by the Helm CI job.
+chart-dirs:
+  - deploy/helm
+target-branch: main
+# The Release workflow bumps the chart version, so PRs don't.
+check-version-increment: false
+validate-maintainers: false

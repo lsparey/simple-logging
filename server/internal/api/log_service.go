@@ -335,11 +335,9 @@ type logChunk struct {
 }
 
 // podChunks returns every segment file for every container of a pod, ordered
-// by segment date then container name. A pod has only ever had one collected
-// container in practice (multi-container collection is a later phase), so
-// this ordering is exactly chronological in the case that matters today; with
-// multiple containers it is a day-granularity approximation, refined once
-// per-container merging lands.
+// by segment date then container name. That is chronological only within one
+// container; callers that read a multi-container pod in time order merge the
+// containers by timestamp (see mergedLogsPage and the download handler).
 func podChunks(logsRoot, namespace, pod string) ([]logChunk, error) {
 	containers, err := storage.ListContainers(logsRoot, namespace, pod)
 	if err != nil {
@@ -366,6 +364,14 @@ func podChunks(logsRoot, namespace, pod string) ([]logChunk, error) {
 		return chunks[i].container < chunks[j].container
 	})
 	return chunks, nil
+}
+
+func distinctContainers(chunks []logChunk) int {
+	seen := make(map[string]bool)
+	for _, c := range chunks {
+		seen[c.container] = true
+	}
+	return len(seen)
 }
 
 func findChunkIndex(chunks []logChunk, container, segment string) int {
@@ -580,7 +586,7 @@ func findChunkPageStartBefore(chunks []logChunk, chunkIdx int, offset int64, n i
 // GetLogs returns a paginated, optionally time-filtered page of log lines for
 // a specific pod, across all of its stored log segments. Pagination is
 // cursor-based: the cursor identifies a segment and a byte offset within it.
-func (s *LogService) GetLogs(_ context.Context, r *connect.Request[pb.GetLogsRequest]) (*connect.Response[pb.GetLogsResponse], error) {
+func (s *LogService) GetLogs(ctx context.Context, r *connect.Request[pb.GetLogsRequest]) (*connect.Response[pb.GetLogsResponse], error) {
 	req := r.Msg
 	if req.Namespace == "" || req.Pod == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace and pod are required"))
@@ -600,6 +606,25 @@ func (s *LogService) GetLogs(_ context.Context, r *connect.Request[pb.GetLogsReq
 	}
 	if len(chunks) == 0 {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for pod %s/%s", req.Namespace, req.Pod))
+	}
+
+	// The byte-offset paging below reads segments one after another, which
+	// is only in time order for a single container. A pod with several
+	// containers is paged by the timestamp merge GetWorkloadLogs uses; its
+	// page tokens are a different (still opaque) format, and a token from
+	// one path is rejected by the other as invalid.
+	if distinctContainers(chunks) > 1 {
+		lines, next, prev, err := s.mergedLogsPage(ctx, req.Namespace, []string{req.Pod}, mergedPageRequest{
+			startTime:    req.StartTime,
+			endTime:      req.EndTime,
+			pageSize:     req.PageSize,
+			pageToken:    req.PageToken,
+			loadLastPage: req.LoadLastPage,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&pb.GetLogsResponse{Lines: lines, NextPageToken: next, PrevPageToken: prev}), nil
 	}
 
 	var startChunk int
@@ -720,54 +745,42 @@ func (cr *countingReader) Read(p []byte) (n int, err error) {
 	return
 }
 
-// tailLatestSegment tails a pod's most recent log segment, delivering each
-// new line to onLine, until ctx is cancelled or onLine returns an error. It
-// switches to a newer segment automatically when one appears (a UTC day
-// rollover while the tail is open).
-//
-// A pod is assumed to have exactly one actively-collected container (multi-
-// container collection is a later phase); the container followed is whichever
-// sorts last among those with any stored logs.
+// tailLatestSegment follows every container of a pod, delivering each line
+// written after the call to onLine, until ctx is cancelled or onLine returns
+// an error. For each container it reads the latest segment, moving to a
+// newer one when a UTC day rollover creates it. A container whose first logs
+// appear after the tail started (a sidecar added on restart, say) is picked
+// up from the start of its segment. Lines from different containers are
+// delivered as they're read, so they're interleaved in near-real time rather
+// than strictly by timestamp.
 func tailLatestSegment(ctx context.Context, logsRoot, namespace, pod string, onLine func(string) error) error {
-	chunks, err := podChunks(logsRoot, namespace, pod)
+	containers, err := storage.ListContainers(logsRoot, namespace, pod)
 	if err != nil {
 		return err
 	}
-	if len(chunks) == 0 {
+	if len(containers) == 0 {
 		return os.ErrNotExist
 	}
 
-	container := chunks[len(chunks)-1].container
-	currentPath := chunks[len(chunks)-1].path
-
-	var f *os.File
+	tails := make(map[string]*segmentTail)
 	defer func() {
-		if f != nil {
-			f.Close()
+		for _, t := range tails {
+			t.close()
 		}
 	}()
-
-	f, err = os.Open(currentPath)
-	if err != nil {
-		return err
+	for _, container := range containers {
+		t := &segmentTail{}
+		if err := t.follow(logsRoot, namespace, pod, container, true); err != nil {
+			return err
+		}
+		tails[container] = t
 	}
-	if _, err := f.Seek(0, io.SeekEnd); err != nil {
-		return err
-	}
 
-	br := bufio.NewReader(f)
 	for {
-		line, readErr := br.ReadString('\n')
-		if len(line) > 0 {
-			if err := onLine(strings.TrimRight(line, "\r\n")); err != nil {
+		for _, container := range sortedKeys(tails) {
+			if err := tails[container].drain(onLine); err != nil {
 				return err
 			}
-		}
-		if readErr == nil {
-			continue
-		}
-		if readErr != io.EOF {
-			return readErr
 		}
 
 		select {
@@ -776,16 +789,97 @@ func tailLatestSegment(ctx context.Context, logsRoot, namespace, pod string, onL
 		case <-time.After(250 * time.Millisecond):
 		}
 
-		if next, nerr := latestSegmentPath(logsRoot, namespace, pod, container); nerr == nil && next != "" && next != currentPath {
-			f.Close()
-			f, err = os.Open(next)
-			if err != nil {
+		// Move to a newer segment after a day rollover, and pick up new
+		// containers from the start of their segment.
+		containers, err := storage.ListContainers(logsRoot, namespace, pod)
+		if err != nil {
+			continue // the pod dir may be mid-cleanup; retry next tick
+		}
+		for _, container := range containers {
+			t, known := tails[container]
+			if !known {
+				t = &segmentTail{}
+				tails[container] = t
+			}
+			if err := t.follow(logsRoot, namespace, pod, container, false); err != nil {
 				return err
 			}
-			currentPath = next
 		}
-		br.Reset(f)
 	}
+}
+
+// segmentTail follows one container's latest log segment.
+type segmentTail struct {
+	path    string
+	f       *os.File
+	br      *bufio.Reader
+	partial strings.Builder // a line read before its newline was written
+}
+
+// follow makes t read container's latest segment, reopening if that is a
+// different file from the one t has open. A newly opened file is read from
+// its end when atEnd is set (skipping history), and from its start otherwise.
+func (t *segmentTail) follow(logsRoot, namespace, pod, container string, atEnd bool) error {
+	latest, err := latestSegmentPath(logsRoot, namespace, pod, container)
+	if err != nil || latest == "" || latest == t.path {
+		return nil // nothing (new) to follow yet
+	}
+	f, err := os.Open(latest)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if atEnd {
+		if _, err := f.Seek(0, io.SeekEnd); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	t.close()
+	t.path, t.f = latest, f
+	t.br = bufio.NewReader(f)
+	t.partial.Reset()
+	return nil
+}
+
+// drain delivers every complete line available so far.
+func (t *segmentTail) drain(onLine func(string) error) error {
+	if t.br == nil {
+		return nil
+	}
+	for {
+		chunk, err := t.br.ReadString('\n')
+		t.partial.WriteString(chunk)
+		if err == io.EOF {
+			return nil // keep any partial line until its newline arrives
+		}
+		if err != nil {
+			return err
+		}
+		line := strings.TrimRight(t.partial.String(), "\r\n")
+		t.partial.Reset()
+		if err := onLine(line); err != nil {
+			return err
+		}
+	}
+}
+
+func (t *segmentTail) close() {
+	if t.f != nil {
+		t.f.Close()
+		t.f, t.br = nil, nil
+	}
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // StreamLogs tails a pod's most recent log segment and streams new lines as

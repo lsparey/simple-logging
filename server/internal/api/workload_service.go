@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"container/heap"
 	"context"
 	"errors"
@@ -148,7 +147,40 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace, kind and name are required"))
 	}
 
-	pageSize := int(req.PageSize)
+	pods, err := s.workloadPodsForNamespace(req.Namespace, req.Kind, req.Name)
+	if err != nil {
+		return nil, err
+	}
+	if len(pods) == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name))
+	}
+
+	lines, next, prev, err := s.mergedLogsPage(ctx, req.Namespace, pods, mergedPageRequest{
+		startTime:    req.StartTime,
+		endTime:      req.EndTime,
+		pageSize:     req.PageSize,
+		pageToken:    req.PageToken,
+		loadLastPage: req.LoadLastPage,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.GetWorkloadLogsResponse{Lines: lines, NextPageToken: next, PrevPageToken: prev}), nil
+}
+
+// mergedPageRequest is the paging part of a GetWorkloadLogs or GetLogs
+// request.
+type mergedPageRequest struct {
+	startTime, endTime int64 // Unix seconds; 0 means unbounded
+	pageSize           int32
+	pageToken          string
+	loadLastPage       bool
+}
+
+// mergedLogsPage returns one page of the lines of every container of pods,
+// merged into timestamp order, with nanosecond-timestamp page tokens.
+func (s *LogService) mergedLogsPage(ctx context.Context, namespace string, pods []string, req mergedPageRequest) (lines []string, nextPageToken, prevPageToken string, err error) {
+	pageSize := int(req.pageSize)
 	if pageSize <= 0 {
 		pageSize = defaultPageSize
 	}
@@ -159,10 +191,10 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 	// Decode the cursor: forward (8-byte nanos) or backward (9-byte with 0x01 flag).
 	var afterNanos int64
 	var beforeNanos int64
-	if req.PageToken != "" {
-		tok, err := decodeNanosToken(req.PageToken)
+	if req.pageToken != "" {
+		tok, err := decodeNanosToken(req.pageToken)
 		if err != nil {
-			return nil, err
+			return nil, "", "", err
 		}
 		if tok.backward {
 			beforeNanos = tok.nanos
@@ -172,22 +204,14 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 	}
 
 	// reversed = we want the most recent N lines (last page or backward cursor).
-	reversed := req.LoadLastPage || beforeNanos > 0
-
-	pods, err := s.workloadPodsForNamespace(req.Namespace, req.Kind, req.Name)
-	if err != nil {
-		return nil, err
-	}
-	if len(pods) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name))
-	}
+	reversed := req.loadLastPage || beforeNanos > 0
 
 	var startTime, endTime time.Time
-	if req.StartTime != 0 {
-		startTime = time.Unix(req.StartTime, 0)
+	if req.startTime != 0 {
+		startTime = time.Unix(req.startTime, 0)
 	}
-	if req.EndTime != 0 {
-		endTime = time.Unix(req.EndTime, 0)
+	if req.endTime != 0 {
+		endTime = time.Unix(req.endTime, 0)
 	}
 	afterTime := time.Unix(0, afterNanos)
 	beforeTime := time.Unix(0, beforeNanos)
@@ -200,9 +224,9 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 	var matchingCount int
 
 	for _, pod := range pods {
-		chunks, err := podChunks(s.logsRoot, req.Namespace, pod)
+		chunks, err := podChunks(s.logsRoot, namespace, pod)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list log segments: %v", err))
+			return nil, "", "", connect.NewError(connect.CodeInternal, fmt.Errorf("list log segments: %v", err))
 		}
 		for _, chunk := range chunks {
 			f, err := os.Open(chunk.path)
@@ -210,14 +234,14 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 				if os.IsNotExist(err) {
 					continue
 				}
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open log segment: %v", err))
+				return nil, "", "", connect.NewError(connect.CodeInternal, fmt.Errorf("open log segment: %v", err))
 			}
 
-			scanner := bufio.NewScanner(f)
+			scanner := storage.NewLineScanner(f)
 			for scanner.Scan() {
 				if err := ctx.Err(); err != nil {
 					f.Close()
-					return nil, err
+					return nil, "", "", err
 				}
 				line := scanner.Text()
 				ts := parseLineTimestamp(line)
@@ -243,7 +267,11 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 					heap.Pop(h)
 				}
 			}
+			scanErr := scanner.Err()
 			f.Close()
+			if scanErr != nil {
+				return nil, "", "", connect.NewError(connect.CodeInternal, fmt.Errorf("read log segment %s: %v", chunk.path, scanErr))
+			}
 		}
 	}
 
@@ -251,28 +279,28 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.
 	sort.Slice(page, func(i, j int) bool { return logEntryLess(page[i], page[j]) })
 	hasMore := matchingCount > len(page)
 
-	resp := &pb.GetWorkloadLogsResponse{Lines: make([]string, len(page))}
+	lines = make([]string, len(page))
 	for i, entry := range page {
-		resp.Lines[i] = entry.line
+		lines[i] = entry.line
 	}
 
 	if reversed {
 		if hasMore && len(page) > 0 {
-			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
+			prevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
 		}
 		if beforeNanos > 0 && len(page) > 0 {
-			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
+			nextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
 		}
 	} else {
 		if hasMore && len(page) > 0 {
-			resp.NextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
+			nextPageToken = encodeForwardNanosToken(page[len(page)-1].ts.UnixNano())
 		}
 		if afterNanos > 0 && len(page) > 0 {
-			resp.PrevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
+			prevPageToken = encodeBackwardNanosToken(page[0].ts.UnixNano())
 		}
 	}
 
-	return connect.NewResponse(resp), nil
+	return lines, nextPageToken, prevPageToken, nil
 }
 
 // StreamWorkloadLogs fans out to a per-pod tail for every currently active
@@ -287,8 +315,7 @@ func (s *LogService) StreamWorkloadLogs(ctx context.Context, r *connect.Request[
 }
 
 // streamWorkloadLines implements StreamWorkloadLogs, delivering each line to
-// send. It is shared with the deprecated StreamDeploymentLogs, whose stream
-// carries a different response type.
+// send.
 func (s *LogService) streamWorkloadLines(ctx context.Context, req *pb.StreamWorkloadLogsRequest, send func(line string) error) error {
 	namespaceWide := req.Kind == "" && req.Name == ""
 	if req.Namespace == "" || (!namespaceWide && (req.Kind == "" || req.Name == "")) {

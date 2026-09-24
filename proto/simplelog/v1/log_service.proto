@@ -22,28 +22,6 @@ service LogService {
   // written. The stream stays open until the client cancels it.
   rpc StreamLogs(StreamLogsRequest) returns (stream StreamLogsResponse);
 
-  // ListDeployments returns all deployments (groups of pods sharing the same
-  // deployment name) within a namespace for which log files exist.
-  //
-  // Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
-  // thin wrapper for one release before removal.
-  rpc ListDeployments(ListDeploymentsRequest) returns (ListDeploymentsResponse);
-
-  // GetDeploymentLogs returns a paginated, optionally time-filtered page of
-  // log lines merged from all pods belonging to a deployment, sorted by time.
-  //
-  // Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
-  // a thin wrapper for one release before removal.
-  rpc GetDeploymentLogs(GetDeploymentLogsRequest) returns (GetDeploymentLogsResponse);
-
-  // StreamDeploymentLogs tails all active pods for a deployment and streams
-  // merged log lines in real time. The stream stays open until the client
-  // cancels it.
-  //
-  // Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
-  // as a thin wrapper for one release before removal.
-  rpc StreamDeploymentLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse);
-
   // ListWorkloads returns every workload (a group of pods sharing the same
   // owner, resolved from each pod's ownerReferences) within a namespace:
   // Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
@@ -167,73 +145,6 @@ message StreamLogsRequest {
 }
 
 message StreamLogsResponse {
-  string line = 1;
-}
-
-// ── ListDeployments ───────────────────────────────────────────────────────────
-
-message ListDeploymentsRequest {
-  string namespace = 1;
-}
-
-message DeploymentInfo {
-  string name      = 1;
-  string namespace = 2;
-  // active is true when at least one pod in the deployment is currently running.
-  bool active = 3;
-  // json_logging is true when at least one pod in the deployment uses JSON log formatting.
-  bool json_logging = 4;
-}
-
-message ListDeploymentsResponse {
-  repeated DeploymentInfo deployments = 1;
-}
-
-// ── GetDeploymentLogs ─────────────────────────────────────────────────────────
-
-message GetDeploymentLogsRequest {
-  string namespace   = 1;
-  string deployment  = 2;
-
-  // start_time and end_time are Unix timestamps (seconds).
-  // A value of 0 means no bound on that side.
-  int64 start_time = 3;
-  int64 end_time   = 4;
-
-  // page_size is the maximum number of log lines to return.
-  // Defaults to 200 if unset or 0; capped at a server-defined maximum.
-  int32 page_size = 5;
-
-  // page_token is an opaque cursor returned by a previous GetDeploymentLogs call.
-  // Leave empty to start from the beginning.
-  string page_token = 6;
-
-  // load_last_page, when true, returns the last page of logs (most recent
-  // lines) regardless of page_token. Use prev_page_token from the response
-  // to page backwards through older logs.
-  bool load_last_page = 7;
-}
-
-message GetDeploymentLogsResponse {
-  repeated string lines = 1;
-
-  // next_page_token is the cursor to pass in the next request.
-  // An empty value means this is the last page.
-  string next_page_token = 2;
-
-  // prev_page_token is the cursor to pass to load the page of older logs
-  // that precedes this one. Empty when already at the beginning.
-  string prev_page_token = 3;
-}
-
-// ── StreamDeploymentLogs ──────────────────────────────────────────────────────
-
-message StreamDeploymentLogsRequest {
-  string namespace  = 1;
-  string deployment = 2;
-}
-
-message StreamDeploymentLogsResponse {
   string line = 1;
 }
 

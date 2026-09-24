@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -386,29 +385,6 @@ func (m *Manager) GetLogs(key, value string, pageSize int, pageToken string, loa
 	return lines, next, prev, nil
 }
 
-func sortEntriesByTimestamp(entries []Entry) {
-	type timedEntry struct {
-		entry Entry
-		time  time.Time
-		valid bool
-	}
-
-	timed := make([]timedEntry, len(entries))
-	for i, entry := range entries {
-		parsed, err := time.Parse(time.RFC3339, entry.Timestamp)
-		timed[i] = timedEntry{entry: entry, time: parsed, valid: err == nil}
-	}
-	sort.SliceStable(timed, func(i, j int) bool {
-		if timed[i].valid != timed[j].valid {
-			return timed[i].valid
-		}
-		return timed[i].valid && timed[i].time.Before(timed[j].time)
-	})
-	for i := range timed {
-		entries[i] = timed[i].entry
-	}
-}
-
 func (m *Manager) ListValues(key string, pageSize int, pageToken string) ([]ValueInfo, string, string, error) {
 	if err := ValidateKey(key); err != nil {
 		return nil, "", "", err
@@ -530,8 +506,11 @@ func (m *Manager) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return json.NewEncoder(f).Encode(manifest{Keys: keys, FormatVersion: indexFormatVersion})
+	if err := json.NewEncoder(f).Encode(manifest{Keys: keys, FormatVersion: indexFormatVersion}); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func (m *Manager) sortedKeysLocked() []string {
@@ -638,18 +617,22 @@ func (m *Manager) appendReferenceLocked(key string, ref reference) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
 	record, err := encodeReference(ref, info.Size() == 0)
 	if err != nil {
+		_ = f.Close()
 		return err
 	}
-	_, err = f.Write(record)
-	return err
+	if _, err := f.Write(record); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func encodeReference(ref reference, includeMagic bool) ([]byte, error) {
@@ -856,164 +839,12 @@ func shardNumber(value string) byte {
 	return sha256.Sum256([]byte(value))[0]
 }
 
-func (m *Manager) appendLocked(key string, entry Entry) error {
-	path := m.valuePath(key, entry.Value)
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	return json.NewEncoder(f).Encode(entry)
-}
-
-func (m *Manager) readValueEntriesLocked(key, value string) ([]Entry, error) {
-	path := m.valuePath(key, value)
-	return readEntriesFile(path)
-}
-
-func readEntriesFile(path string) ([]Entry, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	defer f.Close()
-
-	var entries []Entry
-	reader := bufio.NewReader(f)
-	for {
-		line, err := readLine(reader)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, err
-		}
-		var entry Entry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	return entries, nil
-}
-
-func readEntriesPage(path string, start, pageSize int, loadLastPage bool) ([]Entry, int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, 0, nil
-		}
-		return nil, 0, err
-	}
-	defer f.Close()
-
-	limit := pageSize
-	if !loadLastPage {
-		limit += start
-	}
-	h := &entryPageHeap{keepNewest: loadLastPage}
-	heap.Init(h)
-	reader := bufio.NewReader(f)
-	total := 0
-	for {
-		line, readErr := readLine(reader)
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return nil, 0, readErr
-		}
-		var entry Entry
-		if json.Unmarshal([]byte(line), &entry) != nil {
-			continue
-		}
-		parsed, parseErr := time.Parse(time.RFC3339, entry.Timestamp)
-		heap.Push(h, sortableEntry{
-			entry: entry, position: total, time: parsed, valid: parseErr == nil,
-		})
-		total++
-		if h.Len() > limit {
-			heap.Pop(h)
-		}
-	}
-
-	selected := h.entries
-	sort.Slice(selected, func(i, j int) bool { return sortableEntryLess(selected[i], selected[j]) })
-	if !loadLastPage {
-		if start > len(selected) {
-			start = len(selected)
-		}
-		selected = selected[start:]
-	}
-	entries := make([]Entry, len(selected))
-	for i := range selected {
-		entries[i] = selected[i].entry
-	}
-	return entries, total, nil
-}
-
-func summarizeEntriesFile(path string) (ValueInfo, bool, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return ValueInfo{}, false, err
-	}
-	defer f.Close()
-
-	var info ValueInfo
-	reader := bufio.NewReader(f)
-	for {
-		line, readErr := readLine(reader)
-		if readErr != nil {
-			if errors.Is(readErr, io.EOF) {
-				break
-			}
-			return ValueInfo{}, false, readErr
-		}
-		var entry Entry
-		if json.Unmarshal([]byte(line), &entry) != nil {
-			continue
-		}
-		if info.Count == 0 {
-			info.Value = entry.Value
-		}
-		info.Count++
-		if timestamp, parseErr := time.Parse(time.RFC3339, entry.Timestamp); parseErr == nil && timestamp.After(info.LastUpdated) {
-			info.LastUpdated = timestamp
-		}
-	}
-	return info, info.Count > 0, nil
-}
-
-func readLine(r *bufio.Reader) (string, error) {
-	line, err := r.ReadString('\n')
-	if len(line) > 0 {
-		return strings.TrimRight(line, "\r\n"), nil
-	}
-	return "", err
-}
-
 func (m *Manager) keyRoot(key string) string {
 	return filepath.Join(m.root, "keys", encodePathPart(key))
 }
 
-func (m *Manager) valuePath(key, value string) string {
-	digest := valueDigest(value)
-	return filepath.Join(m.keyRoot(key), "values", digest[:2], digest+".jsonl")
-}
-
 func encodePathPart(s string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(s))
-}
-
-func valueDigest(value string) string {
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
 }
 
 func indexedValue(line, key string) (string, bool) {

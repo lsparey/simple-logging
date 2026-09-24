@@ -235,11 +235,18 @@ func (c *Collector) OnAdd(pod *corev1.Pod) {
 	}
 }
 
-// collectableContainers returns the names of a pod's non-init containers.
-// pod.Spec.Containers already excludes init containers (a separate slice),
-// so they are out of scope with no extra filtering.
+// collectableContainers returns the containers whose logs are collected:
+// every regular container, plus native sidecars (init containers with
+// restartPolicy Always, which run alongside the others for the pod's whole
+// life, as Istio's native sidecar mode uses). Ordinary init containers,
+// which run to completion before the pod starts, are not collected.
 func collectableContainers(pod *corev1.Pod) []string {
-	names := make([]string, 0, len(pod.Spec.Containers))
+	names := make([]string, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
+	for _, container := range pod.Spec.InitContainers {
+		if container.RestartPolicy != nil && *container.RestartPolicy == corev1.ContainerRestartPolicyAlways {
+			names = append(names, container.Name)
+		}
+	}
 	for _, container := range pod.Spec.Containers {
 		names = append(names, container.Name)
 	}
@@ -266,7 +273,7 @@ func (c *Collector) detectJsonFromFile(namespace, podName, container string) {
 	// Lines in the file have the prefix: "TIMESTAMP [ns/pod/container] <rawLog>"
 	// Strip up to and including the first "] " to recover the original log line.
 	var probe jsonProbe
-	scanner := bufio.NewScanner(f)
+	scanner := storage.NewLineScanner(f)
 	for scanner.Scan() && probe.samples < jsonProbeLines {
 		line := scanner.Text()
 		idx := strings.Index(line, "] ")
@@ -401,11 +408,20 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, containerNam
 	c.metrics.StreamStarted(source)
 	defer c.metrics.StreamStopped(source)
 
+	writer.SetDropStateHook(func(dropping bool, dropped int64, err error) {
+		if dropping {
+			log.Warn("log writes failing, dropping lines until storage recovers", zap.Error(err))
+		} else {
+			log.Info("log writes recovered", zap.Int64("lines_dropped", dropped))
+		}
+	})
+
 	// Write a separator line when a pod restarts so log consumers can identify
 	// the boundary between distinct container lifecycles.
 	if isRestart && writer.HasContent() {
 		now := time.Now().UTC()
-		sep := fmt.Sprintf("--- pod restarted at %s ---", now.Format(time.RFC3339))
+		sep := storedLine(now, pod.Namespace, pod.Name, containerName,
+			fmt.Sprintf("--- pod restarted at %s ---", now.Format(time.RFC3339)))
 		if ok := writer.Write(now, sep); !ok {
 			log.Warn("failed to write restart separator, dropped")
 		}
@@ -416,6 +432,23 @@ func (c *Collector) runStream(ctx context.Context, pod *corev1.Pod, containerNam
 	} else {
 		c.runAPIStream(ctx, pod, containerName, writer, log)
 	}
+}
+
+// mirrorPodAnnotation is set by the kubelet on the API server's mirror of a
+// static pod (e.g. kubeadm's control plane), holding the static pod's own
+// UID. The mirror has a different UID, but the node's log directory is named
+// after the static pod's.
+const mirrorPodAnnotation = "kubernetes.io/config.mirror"
+
+// podLogDirName returns the name of pod's directory under the node's
+// /var/log/pods: <namespace>_<name>_<uid>, using the static pod's UID for a
+// mirror pod.
+func podLogDirName(pod *corev1.Pod) string {
+	uid := string(pod.UID)
+	if staticUID := pod.Annotations[mirrorPodAnnotation]; staticUID != "" {
+		uid = staticUID
+	}
+	return fmt.Sprintf("%s_%s_%s", pod.Namespace, pod.Name, uid)
 }
 
 // runFileTail tails the pod's log file directly from the node filesystem,
@@ -443,9 +476,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 	// decided most recently would arbitrarily win.
 	isDefaultContainer := containerName == defaultContainer(pod)
 
-	containerDir := filepath.Join(c.nodeLogsRoot,
-		fmt.Sprintf("%s_%s_%s", pod.Namespace, pod.Name, string(pod.UID)),
-		containerName)
+	containerDir := filepath.Join(c.nodeLogsRoot, podLogDirName(pod), containerName)
 
 	// The file for the currently-running container is named after its restart
 	// count. A container on its third run writes to 2.log, not 0.log.
@@ -550,7 +581,8 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 					_ = f.Close()
 					restartCount++
 					now := time.Now().UTC()
-					sep := fmt.Sprintf("--- container restarted at %s ---", now.Format(time.RFC3339))
+					sep := storedLine(now, pod.Namespace, pod.Name, containerName,
+						fmt.Sprintf("--- container restarted at %s ---", now.Format(time.RFC3339)))
 					if ok := writer.Write(now, sep); !ok {
 						log.Warn("failed to write restart separator, dropped")
 					}
@@ -578,7 +610,11 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 				if partial.Len() == 0 {
 					partialTS = lineTS
 				}
-				partial.WriteString(content)
+				// The writer caps stored lines anyway; stop buffering a
+				// runaway partial line well before that.
+				if partial.Len() < storage.MaxLineBytes {
+					partial.WriteString(content)
+				}
 				continue
 			}
 			logContent := content
@@ -599,11 +635,7 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 				}
 			}
 
-			line := fmt.Sprintf("%s [%s/%s/%s] %s",
-				lineTS.Format(time.RFC3339Nano),
-				pod.Namespace, pod.Name, containerName,
-				logContent,
-			)
+			line := storedLine(lineTS, pod.Namespace, pod.Name, containerName, logContent)
 			c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line)
 		}
 
@@ -617,6 +649,12 @@ func (c *Collector) runFileTail(ctx context.Context, pod *corev1.Pod, containerN
 // the pod status, or 0 if the container is not yet in the status list.
 func containerRestartCount(pod *corev1.Pod, containerName string) int32 {
 	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == containerName {
+			return cs.RestartCount
+		}
+	}
+	// Native sidecars report their status with the init containers.
+	for _, cs := range pod.Status.InitContainerStatuses {
 		if cs.Name == containerName {
 			return cs.RestartCount
 		}
@@ -803,9 +841,18 @@ func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containe
 	log.Info("log stream started")
 
 	var lastLine time.Time
-	scanner := bufio.NewScanner(stream)
-	for scanner.Scan() {
-		rawLine := scanner.Text()
+	// Lines are read with a cap rather than a bufio.Scanner, whose fixed
+	// buffer fails on one long line: the stream would end, reconnect from
+	// just before that line, and fail on it again forever.
+	reader := bufio.NewReaderSize(stream, 64*1024)
+	for {
+		rawLine, readErr := storage.ReadCappedLine(reader, storage.MaxLineBytes)
+		if readErr != nil && rawLine == "" {
+			if readErr == io.EOF {
+				return lastLine, nil
+			}
+			return lastLine, readErr
+		}
 
 		// Timestamps: true prefixes each line with "<RFC3339Nano> ". Split it
 		// off so the source timestamp is used instead of receipt wall-clock
@@ -829,17 +876,18 @@ func (c *Collector) streamAPIOnce(ctx context.Context, pod *corev1.Pod, containe
 			}
 		}
 
-		line := fmt.Sprintf("%s [%s/%s/%s] %s",
-			lineTS.Format(time.RFC3339Nano),
-			pod.Namespace, pod.Name, containerName,
-			content,
-		)
+		line := storedLine(lineTS, pod.Namespace, pod.Name, containerName, content)
 		c.writeLogLine(writer, pod.Namespace, pod.Name, containerName, lineTS, line)
 		lastLine = lineTS
-	}
 
-	if serr := scanner.Err(); serr != nil {
-		return lastLine, serr
+		// A final line without a trailing newline comes back with the error
+		// that ended the stream.
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return lastLine, readErr
+		}
 	}
 	log.Debug("log stream ended")
 	return lastLine, nil
@@ -879,6 +927,14 @@ func isJSONLine(line string) bool {
 		return false
 	}
 	return json.Valid([]byte(trimmed))
+}
+
+// storedLine formats one line as it is stored in a segment:
+// "<RFC3339Nano> [<namespace>/<pod>/<container>] <content>". Every line,
+// restart separators included, carries this prefix, so readers can place it
+// in time and attribute it to its container.
+func storedLine(ts time.Time, namespace, pod, container, content string) string {
+	return fmt.Sprintf("%s [%s/%s/%s] %s", ts.UTC().Format(time.RFC3339Nano), namespace, pod, container, content)
 }
 
 // writeLogLine writes line to storage. Write failures are transient (see

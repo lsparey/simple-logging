@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -309,8 +308,7 @@ func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, m
 	}
 	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	scanner := storage.NewLineScanner(f)
 	for scanner.Scan() {
 		if searchDone(ctx, stopCh) {
 			return scanned
@@ -324,7 +322,9 @@ func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, m
 		if !end.IsZero() && ts.After(end) {
 			continue
 		}
-		if !matches(line) {
+		// Match the log message only, not the stored timestamp and
+		// [namespace/pod/container] prefix, which scoping already covers.
+		if !matches(storedMessage(line)) {
 			continue
 		}
 		select {
@@ -341,4 +341,13 @@ func scanSearchJob(ctx context.Context, stopCh <-chan struct{}, job searchJob, m
 		}
 	}
 	return scanned
+}
+
+// storedMessage returns the original log message of a stored line, dropping
+// the "<timestamp> [<namespace>/<pod>/<container>] " prefix.
+func storedMessage(line string) string {
+	if idx := strings.Index(line, "] "); idx >= 0 {
+		return line[idx+2:]
+	}
+	return line
 }

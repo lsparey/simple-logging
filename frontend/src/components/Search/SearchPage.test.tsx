@@ -193,3 +193,32 @@ describe('SearchPage', () => {
     await waitFor(() => expect(screen.getByText(/invalid regex/)).toBeInTheDocument());
   });
 });
+
+describe('SearchPage — time range', () => {
+  it('searches all time by default, sending no start time', async () => {
+    searchLogs.mockReturnValue(asyncIterableOf([]) as ReturnType<typeof logClient.searchLogs>);
+    render(<SearchPage />, { wrapper: Wrapper });
+
+    fireEvent.change(screen.getByPlaceholderText('Query…'), { target: { value: 'error' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await waitFor(() => expect(searchLogs).toHaveBeenCalledTimes(1));
+    expect(searchLogs.mock.calls[0][0]).toMatchObject({ startTimeUnixMs: 0n });
+  });
+
+  it('sends the start of the chosen range', async () => {
+    searchLogs.mockReturnValue(asyncIterableOf([]) as ReturnType<typeof logClient.searchLogs>);
+    render(<SearchPage />, { wrapper: Wrapper });
+
+    fireEvent.mouseDown(screen.getByLabelText('Time range'));
+    fireEvent.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Last hour' }));
+    fireEvent.change(screen.getByPlaceholderText('Query…'), { target: { value: 'error' } });
+    const before = Date.now();
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+    await waitFor(() => expect(searchLogs).toHaveBeenCalledTimes(1));
+    const start = Number(searchLogs.mock.calls[0][0].startTimeUnixMs);
+    expect(start).toBeGreaterThanOrEqual(before - 60 * 60 * 1000 - 1000);
+    expect(start).toBeLessThanOrEqual(Date.now() - 60 * 60 * 1000);
+  });
+});

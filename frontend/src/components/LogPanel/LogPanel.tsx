@@ -1,13 +1,19 @@
 import { useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import LogToolbar from './LogToolbar.js';
 import LogList from './LogList.js';
+import NamespaceTail from './NamespaceTail.js';
 import { useWorkloadLogHistory } from '../../hooks/useWorkloadLogHistory.js';
 import { useWorkloadLogStream } from '../../hooks/useWorkloadLogStream.js';
 import { useLogStore, useFilteredLines, makeFormatKey } from '../../store/logStore.js';
 import { logClient } from '../../grpc/client.js';
+
+const namespacePagePattern = /^\/ns\/([^/]+)\/?$/;
 
 export default function LogPanel() {
   const {
@@ -25,6 +31,12 @@ export default function LogPanel() {
   } = useLogStore();
 
   const [liveEnabled, setLiveEnabled] = useState(false);
+  // The namespace tail belongs to the namespace page (/ns/<ns>) it was
+  // started on, and stops as soon as the URL moves elsewhere.
+  const location = useLocation();
+  const pageNamespace = namespacePagePattern.exec(location.pathname)?.[1];
+  const namespaceOnPage = pageNamespace ? decodeURIComponent(pageNamespace) : null;
+  const [tailNamespace, setTailNamespace] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   // prependKey increments with every loadOlder call; prependCount carries the
   // number of lines added so LogList can adjust scrollTop even when two
@@ -93,18 +105,29 @@ export default function LogPanel() {
   const handleScrollUp = useCallback(() => setAutoScroll(false), []);
   const handleScrollBottom = useCallback(() => setAutoScroll(true), []);
 
+  if (!kind && namespaceOnPage && tailNamespace === namespaceOnPage) {
+    return <NamespaceTail key={namespaceOnPage} namespace={namespaceOnPage} onStop={() => setTailNamespace(null)} />;
+  }
+
   if (!namespace || !kind || !name) {
     return (
       <Box
         sx={{
           flex: 1,
           display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
           alignItems: 'center',
           justifyContent: 'center',
           color: 'text.disabled',
         }}
       >
         <Typography>Select a workload from the sidebar to view logs.</Typography>
+        {namespaceOnPage && (
+          <Button variant="outlined" startIcon={<PlayArrowIcon />} onClick={() => setTailNamespace(namespaceOnPage)}>
+            Live tail every pod in {namespaceOnPage}
+          </Button>
+        )}
       </Box>
     );
   }

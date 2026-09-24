@@ -160,6 +160,7 @@ func main() {
 	retention := storage.NewRetentionManager(cfg.LogsRoot, cfg.RetentionDays, cfg.RetentionCheckInterval, log)
 	retention.SetIndexCompactor(indexManager.Compact)
 	retention.SetMetrics(m)
+	retention.SetActiveChecker(coll.IsActive)
 	go retention.Run(ctx)
 
 	// Disk guard: a safety net for when retention alone doesn't keep LOGS_ROOT
@@ -167,6 +168,7 @@ func main() {
 	// disk can happen much faster than a day.
 	diskGuard := storage.NewDiskGuard(cfg.LogsRoot, cfg.DiskHighWaterPercent, cfg.DiskLowWaterPercent, diskGuardCheckInterval, log)
 	diskGuard.SetMetrics(m)
+	diskGuard.SetIndexCompactor(indexManager.Compact)
 	go diskGuard.Run(ctx)
 
 	// ── LogService API ────────────────────────────────────────────────────────

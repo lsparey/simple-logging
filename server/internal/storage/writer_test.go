@@ -320,3 +320,46 @@ func TestSegmentWriter_BacksOffAfterWriteFailure(t *testing.T) {
 		t.Errorf("segment content = %q, want only the recovered line (dropped writes must not be retried)", content)
 	}
 }
+
+func TestSegmentWriter_ReportsDropStateChanges(t *testing.T) {
+	logsRoot := t.TempDir()
+	origMin, origMax := minWriteBackoff, maxWriteBackoff
+	minWriteBackoff, maxWriteBackoff = 20*time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { minWriteBackoff, maxWriteBackoff = origMin, origMax })
+
+	w, err := NewSegmentWriter(logsRoot, "ns", "pod", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	type change struct {
+		dropping bool
+		dropped  int64
+	}
+	var changes []change
+	w.SetDropStateHook(func(dropping bool, dropped int64, _ error) {
+		changes = append(changes, change{dropping, dropped})
+	})
+
+	// Block the segment path with a directory so writes fail.
+	ts := time.Date(2026, 5, 20, 10, 0, 0, 0, time.UTC)
+	blocked := SegmentPath(logsRoot, "ns", "pod", "app", ts)
+	if err := os.MkdirAll(blocked, 0755); err != nil {
+		t.Fatal(err)
+	}
+	w.Write(ts, "dropped 1")
+	w.Write(ts, "dropped 2") // within the backoff window
+	if err := os.Remove(blocked); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * minWriteBackoff)
+	if !w.Write(ts, "written") {
+		t.Fatal("expected the write to succeed after recovery")
+	}
+
+	want := []change{{true, 1}, {false, 2}}
+	if len(changes) != len(want) || changes[0] != want[0] || changes[1] != want[1] {
+		t.Errorf("drop state changes = %+v, want %+v", changes, want)
+	}
+}

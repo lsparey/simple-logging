@@ -65,10 +65,12 @@ func NewPodWatcher(cs kubernetes.Interface, handler PodEventHandler, resyncPerio
 			if !ok1 || !ok2 {
 				return
 			}
-			// Treat a transition into Running as an "add" so that pods which
-			// were Pending at startup get picked up once they start.
-			if oldPod.Status.Phase == corev1.PodPending && newPod.Status.Phase == corev1.PodRunning {
-				log.Debug("pod transitioned to Running", zap.String("namespace", newPod.Namespace), zap.String("pod", newPod.Name))
+			// Treat leaving Pending as an "add", so pods that were Pending
+			// when first seen get picked up once they start. That includes
+			// going straight to Succeeded or Failed, as a quick Job's pod
+			// can between two watch events; its logs are still readable.
+			if oldPod.Status.Phase == corev1.PodPending && newPod.Status.Phase != corev1.PodPending {
+				log.Debug("pod left Pending", zap.String("namespace", newPod.Namespace), zap.String("pod", newPod.Name), zap.String("phase", string(newPod.Status.Phase)))
 				if handler.OnAdd != nil {
 					handler.OnAdd(newPod)
 				}

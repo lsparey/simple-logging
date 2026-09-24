@@ -37,6 +37,16 @@ function splitLine(line: string): { tsMs: number | null; message: string } {
 // so the surrounding lines are visible without pulling in unrelated history.
 const JUMP_CONTEXT_WINDOW_MS = 5 * 60 * 1000;
 
+// Search time ranges, as how far back from now to search (0 = all retained
+// history). The server only opens segments for the days a range covers, so a
+// short range is much faster on a large store.
+const TIME_RANGES: { label: string; ms: number }[] = [
+  { label: 'Last hour', ms: 60 * 60 * 1000 },
+  { label: 'Last 24 hours', ms: 24 * 60 * 60 * 1000 },
+  { label: 'Last 7 days', ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: 'All time', ms: 0 },
+];
+
 export default function SearchPage() {
   const navigate = useNavigate();
   const [namespace, setNamespace] = useState('');
@@ -45,6 +55,7 @@ export default function SearchPage() {
   const [query, setQuery] = useState('');
   const [regex, setRegex] = useState(false);
   const [newestFirst, setNewestFirst] = useState(true);
+  const [rangeMs, setRangeMs] = useState(0);
   const [results, setResults] = useState<SearchLogsResponse[]>([]);
   const [searching, setSearching] = useState(false);
   const [truncated, setTruncated] = useState(false);
@@ -91,6 +102,7 @@ export default function SearchPage() {
           query,
           regex,
           newestFirst,
+          startTimeUnixMs: rangeMs ? BigInt(Date.now() - rangeMs) : 0n,
         },
         { signal: controller.signal },
       );
@@ -106,7 +118,7 @@ export default function SearchPage() {
     } finally {
       if (!controller.signal.aborted) setSearching(false);
     }
-  }, [namespace, workloadKind, workloadName, query, regex, newestFirst]);
+  }, [namespace, workloadKind, workloadName, query, regex, newestFirst, rangeMs]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -203,6 +215,19 @@ export default function SearchPage() {
           }}
           sx={{ flex: 1, minWidth: 200 }}
         />
+        <FormControl size="small" sx={{ width: 150 }}>
+          <InputLabel shrink>Time range</InputLabel>
+          <Select
+            label="Time range"
+            value={String(rangeMs)}
+            onChange={(e: SelectChangeEvent) => setRangeMs(Number(e.target.value))}
+            inputProps={{ 'aria-label': 'Time range' }}
+          >
+            {TIME_RANGES.map(({ label, ms }) => (
+              <MenuItem key={ms} value={String(ms)}>{label}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <FormControlLabel
           control={<Checkbox size="small" checked={regex} onChange={(e) => setRegex(e.target.checked)} />}
           label="Regex"

@@ -42,15 +42,6 @@ const (
 	LogServiceGetLogsProcedure = "/simplelog.v1.LogService/GetLogs"
 	// LogServiceStreamLogsProcedure is the fully-qualified name of the LogService's StreamLogs RPC.
 	LogServiceStreamLogsProcedure = "/simplelog.v1.LogService/StreamLogs"
-	// LogServiceListDeploymentsProcedure is the fully-qualified name of the LogService's
-	// ListDeployments RPC.
-	LogServiceListDeploymentsProcedure = "/simplelog.v1.LogService/ListDeployments"
-	// LogServiceGetDeploymentLogsProcedure is the fully-qualified name of the LogService's
-	// GetDeploymentLogs RPC.
-	LogServiceGetDeploymentLogsProcedure = "/simplelog.v1.LogService/GetDeploymentLogs"
-	// LogServiceStreamDeploymentLogsProcedure is the fully-qualified name of the LogService's
-	// StreamDeploymentLogs RPC.
-	LogServiceStreamDeploymentLogsProcedure = "/simplelog.v1.LogService/StreamDeploymentLogs"
 	// LogServiceListWorkloadsProcedure is the fully-qualified name of the LogService's ListWorkloads
 	// RPC.
 	LogServiceListWorkloadsProcedure = "/simplelog.v1.LogService/ListWorkloads"
@@ -92,25 +83,6 @@ type LogServiceClient interface {
 	// StreamLogs tails a pod's log file and streams new lines as they are
 	// written. The stream stays open until the client cancels it.
 	StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest]) (*connect.ServerStreamForClient[v1.StreamLogsResponse], error)
-	// ListDeployments returns all deployments (groups of pods sharing the same
-	// deployment name) within a namespace for which log files exist.
-	//
-	// Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
-	// thin wrapper for one release before removal.
-	ListDeployments(context.Context, *connect.Request[v1.ListDeploymentsRequest]) (*connect.Response[v1.ListDeploymentsResponse], error)
-	// GetDeploymentLogs returns a paginated, optionally time-filtered page of
-	// log lines merged from all pods belonging to a deployment, sorted by time.
-	//
-	// Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
-	// a thin wrapper for one release before removal.
-	GetDeploymentLogs(context.Context, *connect.Request[v1.GetDeploymentLogsRequest]) (*connect.Response[v1.GetDeploymentLogsResponse], error)
-	// StreamDeploymentLogs tails all active pods for a deployment and streams
-	// merged log lines in real time. The stream stays open until the client
-	// cancels it.
-	//
-	// Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
-	// as a thin wrapper for one release before removal.
-	StreamDeploymentLogs(context.Context, *connect.Request[v1.StreamDeploymentLogsRequest]) (*connect.ServerStreamForClient[v1.StreamDeploymentLogsResponse], error)
 	// ListWorkloads returns every workload (a group of pods sharing the same
 	// owner, resolved from each pod's ownerReferences) within a namespace:
 	// Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
@@ -179,24 +151,6 @@ func NewLogServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+LogServiceStreamLogsProcedure,
 			connect.WithSchema(logServiceMethods.ByName("StreamLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		listDeployments: connect.NewClient[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse](
-			httpClient,
-			baseURL+LogServiceListDeploymentsProcedure,
-			connect.WithSchema(logServiceMethods.ByName("ListDeployments")),
-			connect.WithClientOptions(opts...),
-		),
-		getDeploymentLogs: connect.NewClient[v1.GetDeploymentLogsRequest, v1.GetDeploymentLogsResponse](
-			httpClient,
-			baseURL+LogServiceGetDeploymentLogsProcedure,
-			connect.WithSchema(logServiceMethods.ByName("GetDeploymentLogs")),
-			connect.WithClientOptions(opts...),
-		),
-		streamDeploymentLogs: connect.NewClient[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse](
-			httpClient,
-			baseURL+LogServiceStreamDeploymentLogsProcedure,
-			connect.WithSchema(logServiceMethods.ByName("StreamDeploymentLogs")),
 			connect.WithClientOptions(opts...),
 		),
 		listWorkloads: connect.NewClient[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse](
@@ -270,24 +224,21 @@ func NewLogServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // logServiceClient implements LogServiceClient.
 type logServiceClient struct {
-	listNamespaces       *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
-	listPods             *connect.Client[v1.ListPodsRequest, v1.ListPodsResponse]
-	getLogs              *connect.Client[v1.GetLogsRequest, v1.GetLogsResponse]
-	streamLogs           *connect.Client[v1.StreamLogsRequest, v1.StreamLogsResponse]
-	listDeployments      *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
-	getDeploymentLogs    *connect.Client[v1.GetDeploymentLogsRequest, v1.GetDeploymentLogsResponse]
-	streamDeploymentLogs *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
-	listWorkloads        *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
-	getWorkloadLogs      *connect.Client[v1.GetWorkloadLogsRequest, v1.GetWorkloadLogsResponse]
-	streamWorkloadLogs   *connect.Client[v1.StreamWorkloadLogsRequest, v1.StreamWorkloadLogsResponse]
-	listLogFiles         *connect.Client[v1.ListLogFilesRequest, v1.ListLogFilesResponse]
-	listIndexes          *connect.Client[v1.ListIndexesRequest, v1.ListIndexesResponse]
-	createIndex          *connect.Client[v1.CreateIndexRequest, v1.CreateIndexResponse]
-	deleteIndex          *connect.Client[v1.DeleteIndexRequest, v1.DeleteIndexResponse]
-	listIndexValues      *connect.Client[v1.ListIndexValuesRequest, v1.ListIndexValuesResponse]
-	getIndexLogs         *connect.Client[v1.GetIndexLogsRequest, v1.GetIndexLogsResponse]
-	searchLogs           *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
-	getStats             *connect.Client[v1.GetStatsRequest, v1.GetStatsResponse]
+	listNamespaces     *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
+	listPods           *connect.Client[v1.ListPodsRequest, v1.ListPodsResponse]
+	getLogs            *connect.Client[v1.GetLogsRequest, v1.GetLogsResponse]
+	streamLogs         *connect.Client[v1.StreamLogsRequest, v1.StreamLogsResponse]
+	listWorkloads      *connect.Client[v1.ListWorkloadsRequest, v1.ListWorkloadsResponse]
+	getWorkloadLogs    *connect.Client[v1.GetWorkloadLogsRequest, v1.GetWorkloadLogsResponse]
+	streamWorkloadLogs *connect.Client[v1.StreamWorkloadLogsRequest, v1.StreamWorkloadLogsResponse]
+	listLogFiles       *connect.Client[v1.ListLogFilesRequest, v1.ListLogFilesResponse]
+	listIndexes        *connect.Client[v1.ListIndexesRequest, v1.ListIndexesResponse]
+	createIndex        *connect.Client[v1.CreateIndexRequest, v1.CreateIndexResponse]
+	deleteIndex        *connect.Client[v1.DeleteIndexRequest, v1.DeleteIndexResponse]
+	listIndexValues    *connect.Client[v1.ListIndexValuesRequest, v1.ListIndexValuesResponse]
+	getIndexLogs       *connect.Client[v1.GetIndexLogsRequest, v1.GetIndexLogsResponse]
+	searchLogs         *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
+	getStats           *connect.Client[v1.GetStatsRequest, v1.GetStatsResponse]
 }
 
 // ListNamespaces calls simplelog.v1.LogService.ListNamespaces.
@@ -308,21 +259,6 @@ func (c *logServiceClient) GetLogs(ctx context.Context, req *connect.Request[v1.
 // StreamLogs calls simplelog.v1.LogService.StreamLogs.
 func (c *logServiceClient) StreamLogs(ctx context.Context, req *connect.Request[v1.StreamLogsRequest]) (*connect.ServerStreamForClient[v1.StreamLogsResponse], error) {
 	return c.streamLogs.CallServerStream(ctx, req)
-}
-
-// ListDeployments calls simplelog.v1.LogService.ListDeployments.
-func (c *logServiceClient) ListDeployments(ctx context.Context, req *connect.Request[v1.ListDeploymentsRequest]) (*connect.Response[v1.ListDeploymentsResponse], error) {
-	return c.listDeployments.CallUnary(ctx, req)
-}
-
-// GetDeploymentLogs calls simplelog.v1.LogService.GetDeploymentLogs.
-func (c *logServiceClient) GetDeploymentLogs(ctx context.Context, req *connect.Request[v1.GetDeploymentLogsRequest]) (*connect.Response[v1.GetDeploymentLogsResponse], error) {
-	return c.getDeploymentLogs.CallUnary(ctx, req)
-}
-
-// StreamDeploymentLogs calls simplelog.v1.LogService.StreamDeploymentLogs.
-func (c *logServiceClient) StreamDeploymentLogs(ctx context.Context, req *connect.Request[v1.StreamDeploymentLogsRequest]) (*connect.ServerStreamForClient[v1.StreamDeploymentLogsResponse], error) {
-	return c.streamDeploymentLogs.CallServerStream(ctx, req)
 }
 
 // ListWorkloads calls simplelog.v1.LogService.ListWorkloads.
@@ -393,25 +329,6 @@ type LogServiceHandler interface {
 	// StreamLogs tails a pod's log file and streams new lines as they are
 	// written. The stream stays open until the client cancels it.
 	StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest], *connect.ServerStream[v1.StreamLogsResponse]) error
-	// ListDeployments returns all deployments (groups of pods sharing the same
-	// deployment name) within a namespace for which log files exist.
-	//
-	// Deprecated: superseded by ListWorkloads (kind = "Deployment"). Kept as a
-	// thin wrapper for one release before removal.
-	ListDeployments(context.Context, *connect.Request[v1.ListDeploymentsRequest]) (*connect.Response[v1.ListDeploymentsResponse], error)
-	// GetDeploymentLogs returns a paginated, optionally time-filtered page of
-	// log lines merged from all pods belonging to a deployment, sorted by time.
-	//
-	// Deprecated: superseded by GetWorkloadLogs (kind = "Deployment"). Kept as
-	// a thin wrapper for one release before removal.
-	GetDeploymentLogs(context.Context, *connect.Request[v1.GetDeploymentLogsRequest]) (*connect.Response[v1.GetDeploymentLogsResponse], error)
-	// StreamDeploymentLogs tails all active pods for a deployment and streams
-	// merged log lines in real time. The stream stays open until the client
-	// cancels it.
-	//
-	// Deprecated: superseded by StreamWorkloadLogs (kind = "Deployment"). Kept
-	// as a thin wrapper for one release before removal.
-	StreamDeploymentLogs(context.Context, *connect.Request[v1.StreamDeploymentLogsRequest], *connect.ServerStream[v1.StreamDeploymentLogsResponse]) error
 	// ListWorkloads returns every workload (a group of pods sharing the same
 	// owner, resolved from each pod's ownerReferences) within a namespace:
 	// Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod. A Job
@@ -476,24 +393,6 @@ func NewLogServiceHandler(svc LogServiceHandler, opts ...connect.HandlerOption) 
 		LogServiceStreamLogsProcedure,
 		svc.StreamLogs,
 		connect.WithSchema(logServiceMethods.ByName("StreamLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	logServiceListDeploymentsHandler := connect.NewUnaryHandler(
-		LogServiceListDeploymentsProcedure,
-		svc.ListDeployments,
-		connect.WithSchema(logServiceMethods.ByName("ListDeployments")),
-		connect.WithHandlerOptions(opts...),
-	)
-	logServiceGetDeploymentLogsHandler := connect.NewUnaryHandler(
-		LogServiceGetDeploymentLogsProcedure,
-		svc.GetDeploymentLogs,
-		connect.WithSchema(logServiceMethods.ByName("GetDeploymentLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
-	logServiceStreamDeploymentLogsHandler := connect.NewServerStreamHandler(
-		LogServiceStreamDeploymentLogsProcedure,
-		svc.StreamDeploymentLogs,
-		connect.WithSchema(logServiceMethods.ByName("StreamDeploymentLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
 	logServiceListWorkloadsHandler := connect.NewUnaryHandler(
@@ -572,12 +471,6 @@ func NewLogServiceHandler(svc LogServiceHandler, opts ...connect.HandlerOption) 
 			logServiceGetLogsHandler.ServeHTTP(w, r)
 		case LogServiceStreamLogsProcedure:
 			logServiceStreamLogsHandler.ServeHTTP(w, r)
-		case LogServiceListDeploymentsProcedure:
-			logServiceListDeploymentsHandler.ServeHTTP(w, r)
-		case LogServiceGetDeploymentLogsProcedure:
-			logServiceGetDeploymentLogsHandler.ServeHTTP(w, r)
-		case LogServiceStreamDeploymentLogsProcedure:
-			logServiceStreamDeploymentLogsHandler.ServeHTTP(w, r)
 		case LogServiceListWorkloadsProcedure:
 			logServiceListWorkloadsHandler.ServeHTTP(w, r)
 		case LogServiceGetWorkloadLogsProcedure:
@@ -623,18 +516,6 @@ func (UnimplementedLogServiceHandler) GetLogs(context.Context, *connect.Request[
 
 func (UnimplementedLogServiceHandler) StreamLogs(context.Context, *connect.Request[v1.StreamLogsRequest], *connect.ServerStream[v1.StreamLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("simplelog.v1.LogService.StreamLogs is not implemented"))
-}
-
-func (UnimplementedLogServiceHandler) ListDeployments(context.Context, *connect.Request[v1.ListDeploymentsRequest]) (*connect.Response[v1.ListDeploymentsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("simplelog.v1.LogService.ListDeployments is not implemented"))
-}
-
-func (UnimplementedLogServiceHandler) GetDeploymentLogs(context.Context, *connect.Request[v1.GetDeploymentLogsRequest]) (*connect.Response[v1.GetDeploymentLogsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("simplelog.v1.LogService.GetDeploymentLogs is not implemented"))
-}
-
-func (UnimplementedLogServiceHandler) StreamDeploymentLogs(context.Context, *connect.Request[v1.StreamDeploymentLogsRequest], *connect.ServerStream[v1.StreamDeploymentLogsResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("simplelog.v1.LogService.StreamDeploymentLogs is not implemented"))
 }
 
 func (UnimplementedLogServiceHandler) ListWorkloads(context.Context, *connect.Request[v1.ListWorkloadsRequest]) (*connect.Response[v1.ListWorkloadsResponse], error) {

@@ -19,7 +19,7 @@ interface Props {
 // from ListPods instead, replacing whatever ListWorkloads reported for kind
 // "Pod".
 function podAsSidebarWorkload(pod: PodInfo): SidebarWorkload {
-  return { kind: 'Pod', name: pod.name, namespace: pod.namespace, active: pod.active, jsonLogging: pod.jsonLogging, pods: [pod.name] };
+  return { kind: 'Pod', name: pod.name, namespace: pod.namespace, active: pod.active, jsonLogging: pod.jsonLogging, pods: [pod.name], containers: pod.containers };
 }
 
 /**

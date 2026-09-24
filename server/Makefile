@@ -15,9 +15,9 @@ build:
 test:
 	go test ./...
 
-## lint: run go vet on the server module
+## lint: run golangci-lint (v2) on the server module
 lint:
-	go vet ./...
+	golangci-lint run ./...
 
 ## tidy: tidy the server Go module
 tidy:

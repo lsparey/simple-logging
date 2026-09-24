@@ -30,7 +30,14 @@ type DiskGuard struct {
 	// usedPercent is DiskUsedPercent by default; overridable in tests.
 	usedPercent func(path string) (int, error)
 
-	metrics *metrics.Metrics
+	metrics        *metrics.Metrics
+	compactIndexes func() error
+}
+
+// SetIndexCompactor registers the index cleanup run after the guard deletes
+// segments, so indexes don't keep pointing at them.
+func (g *DiskGuard) SetIndexCompactor(compact func() error) {
+	g.compactIndexes = compact
 }
 
 // SetMetrics makes the guard count the segments it deletes in m.
@@ -97,11 +104,24 @@ func (g *DiskGuard) check() {
 		return
 	}
 
-	deleted := 0
-	defer func() { g.metrics.SegmentsDeleted(metrics.ReasonDiskGuard, deleted) }()
+	deleted, skippedOpen := 0, 0
+	defer func() {
+		g.metrics.SegmentsDeleted(metrics.ReasonDiskGuard, deleted)
+		if deleted > 0 && g.compactIndexes != nil {
+			if err := g.compactIndexes(); err != nil {
+				g.log.Error("failed to compact indexes after disk guard deletions", zap.Error(err))
+			}
+		}
+	}()
 	for _, seg := range segments {
 		if usedPercent < g.lowWaterPercent {
 			break
+		}
+		// A segment a writer has open is still being appended to, and
+		// deleting it would free nothing until the writer moves on.
+		if isOpenSegment(seg.path) {
+			skippedOpen++
+			continue
 		}
 		if err := os.Remove(seg.path); err != nil {
 			g.log.Error("failed to delete log segment", zap.String("path", seg.path), zap.Error(err))
@@ -126,6 +146,7 @@ func (g *DiskGuard) check() {
 			zap.Int("used_percent", usedPercent),
 			zap.Int("low_water_percent", g.lowWaterPercent),
 			zap.Int("segments_deleted", deleted),
+			zap.Int("open_segments_skipped", skippedOpen),
 		)
 	}
 }

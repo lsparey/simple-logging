@@ -782,3 +782,90 @@ func TestCollector_OnAdd_BarePodOwnerIsPod(t *testing.T) {
 		t.Errorf("owner = (%q, %q), want (Pod, standalone-pod)", meta.OwnerKind, meta.OwnerName)
 	}
 }
+
+// TestCollector_FileTail_StaticPodUsesMirrorAnnotationForLogDir verifies that
+// a static pod (e.g. a kubeadm control-plane component) is tailed from the
+// directory named after its static UID, which the kubelet records on the
+// mirror pod as an annotation, rather than the mirror pod's own UID.
+func TestCollector_FileTail_StaticPodUsesMirrorAnnotationForLogDir(t *testing.T) {
+	logsRoot := t.TempDir()
+	nodeLogs := t.TempDir()
+
+	pod := makePod("kube-system", "etcd-node-a")
+	pod.UID = "mirror-uid"
+	pod.Annotations = map[string]string{"kubernetes.io/config.mirror": "static-hash"}
+	pod.Spec.NodeName = "node-a"
+
+	containerDir := filepath.Join(nodeLogs, "kube-system_etcd-node-a_static-hash", "app")
+	if err := os.MkdirAll(containerDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	criLine := fmt.Sprintf("%sZ stdout F etcd is ready\n", time.Now().UTC().Format("2006-01-02T15:04:05.000000000"))
+	if err := os.WriteFile(filepath.Join(containerDir, "0.log"), []byte(criLine), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	coll := New(fake.NewSimpleClientset(), logsRoot, nodeLogs, zap.NewNop(), WithNodeName("node-a"))
+	t.Cleanup(coll.Close)
+	coll.OnAdd(pod)
+
+	if !waitFor(t, 5*time.Second, func() bool {
+		return countLines(t, logsRoot, "kube-system", "etcd-node-a", "etcd is ready") >= 1
+	}) {
+		t.Fatal("expected the static pod's log to be tailed from its static-UID directory")
+	}
+}
+
+func TestCollectableContainers_IncludesNativeSidecarsOnly(t *testing.T) {
+	always := corev1.ContainerRestartPolicyAlways
+	pod := makeMultiContainerPod("default", "p", "app")
+	pod.Spec.InitContainers = []corev1.Container{
+		{Name: "migrate"}, // ordinary init container
+		{Name: "istio-proxy", RestartPolicy: &always}, // native sidecar
+	}
+	got := collectableContainers(pod)
+	if strings.Join(got, ",") != "istio-proxy,app" {
+		t.Errorf("collectableContainers = %v, want [istio-proxy app]", got)
+	}
+
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "istio-proxy", RestartCount: 3}}
+	if n := containerRestartCount(pod, "istio-proxy"); n != 3 {
+		t.Errorf("native sidecar restart count = %d, want 3 (from InitContainerStatuses)", n)
+	}
+}
+
+func TestCollector_RestartSeparatorHasTheStoredLinePrefix(t *testing.T) {
+	logsRoot := t.TempDir()
+	coll := New(fake.NewSimpleClientset(), logsRoot, "", zap.NewNop())
+	t.Cleanup(coll.Close)
+
+	pod := makePod("default", "my-pod")
+	coll.OnAdd(pod)
+	if !waitFor(t, 5*time.Second, func() bool { return countLines(t, logsRoot, "default", "my-pod", "fake logs") >= 1 }) {
+		t.Fatal("expected the first stream to write")
+	}
+	restarted := makePod("default", "my-pod")
+	restarted.UID = "uid-2"
+	coll.OnAdd(restarted)
+
+	if !waitFor(t, 5*time.Second, func() bool { return countLines(t, logsRoot, "default", "my-pod", "--- pod restarted at") >= 1 }) {
+		t.Fatal("expected a restart separator")
+	}
+	segments, _ := storage.ListSegments(logsRoot, "default", "my-pod", "app")
+	data, err := os.ReadFile(filepath.Join(storage.ContainerDir(logsRoot, "default", "my-pod", "app"), segments[len(segments)-1]+".log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.Contains(line, "--- pod restarted at") {
+			continue
+		}
+		ts, _, found := strings.Cut(line, " [default/my-pod/app] --- pod restarted at")
+		if !found {
+			t.Fatalf("separator lacks the [ns/pod/container] prefix: %q", line)
+		}
+		if _, err := time.Parse(time.RFC3339Nano, ts); err != nil {
+			t.Errorf("separator doesn't start with a timestamp: %q", line)
+		}
+	}
+}

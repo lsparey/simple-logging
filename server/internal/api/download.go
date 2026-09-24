@@ -20,6 +20,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/lsparey/simple-logging/internal/storage"
 )
 
 func downloadHandler(svc *LogService) http.HandlerFunc {
@@ -78,14 +80,26 @@ func downloadHandler(svc *LogService) http.HandlerFunc {
 				it.close()
 			}
 		}()
+		// One iterator per container, since each container's segments are
+		// only in order with themselves; the merge below interleaves them.
 		for _, p := range pods {
-			it, err := newPodLineIterator(svc.logsRoot, ns, p, container, start, end)
+			containers, err := storage.ListContainers(svc.logsRoot, ns, p)
 			if err != nil {
-				http.Error(w, fmt.Sprintf("open logs for pod %s: %v", p, err), http.StatusInternalServerError)
+				http.Error(w, fmt.Sprintf("list containers for pod %s: %v", p, err), http.StatusInternalServerError)
 				return
 			}
-			if it != nil {
-				iterators = append(iterators, it)
+			for _, c := range containers {
+				if container != "" && c != container {
+					continue
+				}
+				it, err := newPodLineIterator(svc.logsRoot, ns, p, c, start, end)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("open logs for pod %s: %v", p, err), http.StatusInternalServerError)
+					return
+				}
+				if it != nil {
+					iterators = append(iterators, it)
+				}
 			}
 		}
 		if len(iterators) == 0 {
@@ -128,8 +142,9 @@ func formatFilenameTime(t time.Time) string {
 	return t.UTC().Format("20060102T150405Z")
 }
 
-// podLineIterator yields one pod's log lines in chronological order, filtered
-// to a single container (if set) and a time range.
+// podLineIterator yields one container's log lines in chronological order,
+// filtered to a time range. (A pod's containers are each in order only with
+// themselves, so callers open one iterator per container and merge them.)
 type podLineIterator struct {
 	reader     *chunkReader
 	start, end time.Time

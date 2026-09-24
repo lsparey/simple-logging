@@ -9,7 +9,9 @@ Simple, lightweight log aggregation for Kubernetes. simple-logging automatically
 ## Features
 
 - **Live log streaming** — real-time log tailing from all pods across all namespaces
-- **Every container** — every non-init container in a pod is collected independently, including sidecars
+- **Every container** — every container in a pod is collected independently, including sidecars and native (init-container) sidecars
+- **Every workload kind** — logs are grouped by Deployment, StatefulSet, DaemonSet, Job, CronJob or bare pod, and merged across a workload's pods (see [supported workloads](#supported-workloads))
+- **Search, indexes and download** — server-side substring or regex search across any time range, optional indexes on a JSON key, and plain-text download
 - **Persisted log storage** — logs are written to a PersistentVolumeClaim, one segment per container per day, and deleted once they're older than 30 days (see [retention](#retention) below)
 - **Automatic pod discovery** — new pods are detected and streamed as soon as they start
 - **Multi-node from a single replica** — pods on the local node are tailed straight from disk; pods on other nodes are streamed via the Kubernetes API, so no DaemonSet is needed
@@ -107,7 +109,7 @@ Uses the same `config.nodeLogsRoot` / `config.dockerLogsRoot` values as `fileTai
 
 ### `fileTail`
 
-The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and tails log files directly on the node filesystem using filesystem events (`inotify`). No persistent HTTP connections are opened to kube-apiserver, kubelet, or containerd.
+The collector mounts the node's CRI log directory (`/var/log/pods`) as a `hostPath` volume and tails log files directly on the node filesystem using filesystem events (`inotify`). No log streams are opened through kube-apiserver, kubelet or containerd; the only API connection is the pod watch every mode uses.
 
 **Recommended for:** single-node clusters, k3s, Docker Desktop, or any setup where the simple-logging pod always runs on the same node as the pods it monitors.
 
@@ -141,6 +143,22 @@ helm install simple-logging simple-logging/simple-logging \
   --create-namespace \
   --set config.logCollectionMode=api
 ```
+
+## Supported workloads
+
+Pods are grouped by the workload that owns them, worked out from each pod's `ownerReferences` and stored with its logs, so a workload's history stays grouped after its pods are gone. The UI shows each workload's pods merged into one timeline, which can be filtered to one container; any single pod can be opened on its own under **Pods**.
+
+| Workload | Grouped as | Notes |
+|---|---|---|
+| Deployment | Deployment | Through its ReplicaSets (matched by the `pod-template-hash` label), so every rollout's pods are grouped together. |
+| StatefulSet | StatefulSet | |
+| DaemonSet | DaemonSet | |
+| Job | Job | |
+| CronJob | CronJob, and each run as a Job | Matched by the `<cronjob>-<timestamp>` names CronJobs give their Jobs, which avoids needing permission to read Jobs. A Job renamed from that pattern shows up only as a Job. |
+| Bare pod | Pod | Pods with no owner, including static pods such as a kubeadm control plane. |
+| ReplicaSet not owned by a Deployment | ReplicaSet | Available through the API; the UI lists these pods under Pods only. |
+
+Every pod is listed under **Pods** whatever owns it, and pods that finish quickly (such as a short Job's) are collected too. All containers are collected, including sidecars and native sidecars (init containers with `restartPolicy: Always`); ordinary init containers are not.
 
 ## Security
 
@@ -272,11 +290,15 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 or with `grpcurl -plaintext -proto proto/simplelog/v1/log_service.proto localhost:8080 simplelog.v1.LogService/ListNamespaces`.
 
-`GET /download?ns=&pod=` (or `&kind=&name=` for a workload, plus optional `container`, `from` and `to` in Unix seconds) streams stored logs as a plain-text file. `/healthz` is the liveness endpoint, and `/readyz` returns 503 until startup (including any storage migration) has finished.
+Server-streaming RPCs (`StreamLogs`, `StreamWorkloadLogs`, `SearchLogs`) use Connect's framed streaming protocol, so call them from a Connect or gRPC client rather than with a plain JSON POST.
+
+`GET /download?ns=&pod=` (or `&kind=&name=` for a workload, plus optional `container`, `from` and `to` in Unix seconds) streams stored logs as a plain-text file. `/healthz` is the liveness endpoint, `/readyz` returns 503 until startup (including any storage migration) has finished, and `/metrics` serves Prometheus metrics when [enabled](#metrics).
 
 ## Retention
 
-`config.retentionDays` (default 30) controls how long log lines are kept. Logs are stored as one file per container per UTC day; retention deletes any day's file once it is strictly older than `retentionDays`, independent of whether the pod is still logging. Worst-case overshoot is under 24 hours (a day's file isn't deleted until the day itself has fully expired), which is the normal reading of "retain for `retentionDays`".
+`config.retentionDays` (default 30) controls how long log lines are kept. Logs are stored as one file per container per UTC day; retention deletes any day's file once it is strictly older than `retentionDays`, independent of whether the pod is still logging. Retention sweeps at 00:05 UTC every day (as well as at startup and every `config.retentionCheckInterval`), so an expired day is deleted within five minutes of expiring.
+
+The guarantee is therefore: no log line is kept for more than `retentionDays` + 1 day (plus those five minutes). A line written just after midnight UTC is kept for the full extra day, because its whole day's file expires together; a line written just before midnight is kept for barely more than `retentionDays`.
 
 Upgrading from a v0.11 install migrates existing `<namespace>/<pod>.log` files into this layout automatically on first startup (see [Upgrading](#upgrading)); set `MIGRATE_LEGACY=false` to opt out and leave legacy files in place, in which case they're swept by their file modification time instead (matching the old, less precise behaviour) rather than participating in the day-based cutoff.
 
@@ -299,6 +321,17 @@ helm upgrade simple-logging simple-logging/simple-logging --namespace simple-log
 
 Upgrading from a v0.11 install (or older) triggers a one-time, automatic migration of existing logs to the current on-disk layout the first time the new version starts. The pod's readiness probe stays failing until migration completes, so `kubectl rollout status` will simply take longer than usual on a large PVC rather than reporting a healthy pod prematurely; existing history is preserved. The PVC itself is reused — no `persistence.claimSuffix` change is needed.
 
+### Upgrading to v1.0.0
+
+v1.0.0 declares the on-disk format, the API, the chart's values and the environment variables stable (see [Versioning](#versioning)). Upgrading from 0.14.x needs no changes to your values, and the default install renders exactly as before. Things to know:
+
+- **Removed RPCs.** `ListDeployments`, `GetDeploymentLogs` and `StreamDeploymentLogs` are gone. They were deprecated in 0.13 in favour of `ListWorkloads`, `GetWorkloadLogs` and `StreamWorkloadLogs` with `kind: "Deployment"`. The UI stopped using them in the same release, so this only affects your own API clients.
+- **Metrics and built-in basic auth** are new and off by default; see [Metrics](#metrics) and [Authentication](#authentication).
+- **Static pods are now collected** in `hybrid` and `fileTail` modes. Control-plane pods such as etcd and kube-apiserver were previously skipped, so expect them to appear, along with the storage they use.
+- **Retention now also sweeps at 00:05 UTC every day**, so expired logs are deleted within minutes of expiring rather than up to a day later.
+- **Collection and viewing fixes.** Live tail now follows every container of a pod, not just one. A multi-container pod's `GetLogs` pages and downloads are in timestamp order. Restart separators carry a timestamp, so they appear where the restart happened. Native sidecars and pods that finish before they're seen running are collected. Lines over 64 KiB no longer break reading. Stored lines are capped at 1 MiB and marked `…[truncated]` beyond that.
+- **Search matches the log message only**, not the stored timestamp and `[namespace/pod/container]` prefix; use the scope fields to narrow by namespace or workload. The search page gains a time range.
+
 ### Upgrading to v0.14.0 (single binary)
 
 v0.14.0 replaces the nginx + Go image with a single non-root binary serving everything on port 8080. The chart handles the move, but check the following:
@@ -306,6 +339,10 @@ v0.14.0 replaces the nginx + Go image with a single non-root binary serving ever
 - **Removed values.** `grpcWebUrl`, `ingress.grpcPathPrefix`, `config.grpcWebPort`, `config.restDebug`, `service.httpPort` and `service.grpcWebPort` are gone, and `helm upgrade` fails with a list if any are still set. Use `config.port` and `service.port` instead. The Ingress now has a single `/` path. The `/debug/*` REST endpoints are gone because every RPC can now be called as JSON directly (see [API](#api)).
 - **Renamed environment variables.** If you set them yourself (e.g. via `extraEnv`): `GRPC_WEB_PORT` is now `PORT`, `GRPC_WEB_URL` is gone (the UI always uses its own origin; `API_URL` exists for the rare split-origin setup), and `REST_DEBUG` is gone.
 - **Existing log files are root-owned.** Older images ran as root. Most storage classes apply `fsGroup`, so Kubernetes fixes ownership on mount. Storage classes that ignore it (local-path and other hostPath-backed provisioners, e.g. k3s's default) leave the old files unwritable. The server detects this at startup and exits with an error rather than silently dropping logs. If that happens, upgrade once with `--set volumePermissions.enabled=true`, which chowns the PVC in a short-lived root init container. You can turn it off again afterwards.
+
+## Versioning
+
+simple-logging follows [Semantic Versioning](https://semver.org). From v1.0.0, the on-disk log and index format, the `simplelog.v1` API, the chart's values and the environment variables are stable: minor and patch releases only add to them. A release that breaks one of them is a new major version, and ships with an automatic migration and upgrade notes here. The details are in [ARCHITECTURE.md](ARCHITECTURE.md#compatibility-promises), and every release is listed in the [changelog](CHANGELOG.md).
 
 ## Image tags
 
@@ -321,6 +358,10 @@ helm uninstall simple-logging --namespace simple-logging
 ```
 
 > **Note:** Uninstalling does not delete the PVC. To remove persisted logs, delete the PVC manually: `kubectl delete pvc -n simple-logging -l app.kubernetes.io/instance=simple-logging`
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setting up, testing and releasing, and [ARCHITECTURE.md](ARCHITECTURE.md) for how simple-logging works.
 
 ## License
 
