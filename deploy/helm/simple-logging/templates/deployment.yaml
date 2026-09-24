@@ -4,6 +4,7 @@
 {{- end }}
 {{- /* hybrid and fileTail both read pod logs from the node filesystem. */}}
 {{- $hostLogs := or (eq $mode "hybrid") (eq $mode "fileTail") }}
+{{- include "simple-logging.failOnRemovedValues" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,8 +34,15 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "simple-logging.serviceAccountName" . }}
+      {{- $podSecurityContext := deepCopy .Values.podSecurityContext }}
+      {{- if $hostLogs }}
+      {{- /* The CRI writes /var/log/pods as root:root 0750 with 0640 log files,
+      so a non-root UID can only read them as a member of group 0. */}}
+      {{- $groups := concat ($podSecurityContext.supplementalGroups | default list) (list 0) | uniq }}
+      {{- $_ := set $podSecurityContext "supplementalGroups" $groups }}
+      {{- end }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml $podSecurityContext | nindent 8 }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -50,30 +58,44 @@ spec:
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
+      {{- if .Values.volumePermissions.enabled }}
+      initContainers:
+        - name: volume-permissions
+          image: {{ .Values.volumePermissions.image | quote }}
+          command:
+            - chown
+            - -R
+            - {{ printf "%v:%v" .Values.podSecurityContext.runAsUser (.Values.podSecurityContext.runAsGroup | default .Values.podSecurityContext.runAsUser) | quote }}
+            - {{ .Values.config.logsRoot | quote }}
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
+            capabilities:
+              drop: [ALL]
+              add: [CHOWN]
+          volumeMounts:
+            - name: logs
+              mountPath: {{ .Values.config.logsRoot }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: http
-              containerPort: 80
-              protocol: TCP
-            - name: grpc-web
-              containerPort: {{ .Values.config.grpcWebPort }}
+              containerPort: {{ .Values.config.port }}
               protocol: TCP
           env:
-            - name: GRPC_WEB_URL
-              {{- if .Values.grpcWebUrl }}
-              value: {{ .Values.grpcWebUrl | quote }}
-              {{- else if and .Values.ingress.enabled .Values.ingress.host }}
-              value: {{ printf "%s://%s" (ternary "https" "http" (gt (len .Values.ingress.tls) 0)) .Values.ingress.host | quote }}
-              {{- else }}
-              value: ""
-              {{- end }}
             - name: LOGS_ROOT
               value: {{ .Values.config.logsRoot | quote }}
-            - name: GRPC_WEB_PORT
-              value: {{ .Values.config.grpcWebPort | quote }}
+            - name: PORT
+              value: {{ .Values.config.port | quote }}
+            {{- with .Values.cors.allowedOrigins }}
+            - name: CORS_ALLOWED_ORIGINS
+              value: {{ join "," . | quote }}
+            {{- end }}
             - name: RETENTION_DAYS
               value: {{ .Values.config.retentionDays | quote }}
             - name: RETENTION_CHECK_INTERVAL
@@ -84,8 +106,6 @@ spec:
               value: {{ .Values.config.diskLowWaterPercent | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
-            - name: REST_DEBUG
-              value: {{ .Values.config.restDebug | quote }}
             {{- if $hostLogs }}
             - name: NODE_LOGS_ROOT
               value: {{ .Values.config.nodeLogsRoot | quote }}

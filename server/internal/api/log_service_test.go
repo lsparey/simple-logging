@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/metadata"
-
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
+	"github.com/lsparey/simple-logging/gen/simplelog/v1/simplelogv1connect"
 	"github.com/lsparey/simple-logging/internal/storage"
 )
 
@@ -117,7 +116,7 @@ func TestListNamespaces(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "kube-system"), 0755)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListNamespaces(context.Background(), &pb.ListNamespacesRequest{})
+	resp, err := call(context.Background(), svc.ListNamespaces, &pb.ListNamespacesRequest{})
 	if err != nil {
 		t.Fatalf("ListNamespaces: %v", err)
 	}
@@ -140,7 +139,7 @@ func TestListPods(t *testing.T) {
 
 	checker := &fakeChecker{active: map[string]bool{"default/pod-a": true}}
 	svc := NewLogService(dir, checker, checker)
-	resp, err := svc.ListPods(context.Background(), &pb.ListPodsRequest{Namespace: "default"})
+	resp, err := call(context.Background(), svc.ListPods, &pb.ListPodsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListPods: %v", err)
 	}
@@ -167,7 +166,7 @@ func TestListPods(t *testing.T) {
 func TestListPods_UnknownNamespace(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListPods(context.Background(), &pb.ListPodsRequest{Namespace: "nonexistent"})
+	resp, err := call(context.Background(), svc.ListPods, &pb.ListPodsRequest{Namespace: "nonexistent"})
 	if err != nil {
 		t.Fatalf("ListPods: %v", err)
 	}
@@ -184,7 +183,7 @@ func TestListPods_ReportsAllContainers(t *testing.T) {
 	})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListPods(context.Background(), &pb.ListPodsRequest{Namespace: "default"})
+	resp, err := call(context.Background(), svc.ListPods, &pb.ListPodsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListPods: %v", err)
 	}
@@ -230,7 +229,7 @@ func TestListLogFiles(t *testing.T) {
 	}
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	resp, err := call(context.Background(), svc.ListLogFiles, &pb.ListLogFilesRequest{})
 	if err != nil {
 		t.Fatalf("ListLogFiles: %v", err)
 	}
@@ -299,7 +298,7 @@ func TestListLogFiles_ReportsDiskUsage(t *testing.T) {
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 	svc.SetDiskWaterMarks(90, 80)
 
-	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	resp, err := call(context.Background(), svc.ListLogFiles, &pb.ListLogFilesRequest{})
 	if err != nil {
 		t.Fatalf("ListLogFiles: %v", err)
 	}
@@ -326,7 +325,7 @@ func TestListLogFiles_TruncatesToLargestFiles(t *testing.T) {
 	}
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListLogFiles(context.Background(), &pb.ListLogFilesRequest{})
+	resp, err := call(context.Background(), svc.ListLogFiles, &pb.ListLogFilesRequest{})
 	if err != nil {
 		t.Fatalf("ListLogFiles: %v", err)
 	}
@@ -370,7 +369,7 @@ func TestGetLogs_Basic(t *testing.T) {
 	writeLogFile(t, dir, "default", "pod", lines)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default",
 		Pod:       "pod",
 	})
@@ -396,7 +395,7 @@ func TestGetLogs_Pagination(t *testing.T) {
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
 	// First page of 2.
-	resp1, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp1, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod", PageSize: 2,
 	})
 	if err != nil {
@@ -410,7 +409,7 @@ func TestGetLogs_Pagination(t *testing.T) {
 	}
 
 	// Second page.
-	resp2, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp2, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod", PageSize: 2, PageToken: resp1.NextPageToken,
 	})
 	if err != nil {
@@ -421,7 +420,7 @@ func TestGetLogs_Pagination(t *testing.T) {
 	}
 
 	// Third (last) page.
-	resp3, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp3, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod", PageSize: 2, PageToken: resp2.NextPageToken,
 	})
 	if err != nil {
@@ -455,7 +454,7 @@ func TestGetLogs_TimeRangeFilter(t *testing.T) {
 	start := time.Date(2026, 5, 20, 9, 30, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 20, 10, 30, 0, 0, time.UTC)
 
-	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default",
 		Pod:       "pod",
 		StartTime: start.Unix(),
@@ -477,7 +476,7 @@ func TestGetLogs_InvalidPageToken(t *testing.T) {
 	writeLogFile(t, dir, "default", "pod", []string{"line"})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	_, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	_, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod", PageToken: "notvalidbase64!!!",
 	})
 	if err == nil {
@@ -488,7 +487,7 @@ func TestGetLogs_InvalidPageToken(t *testing.T) {
 func TestGetLogs_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	_, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	_, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default", Pod: "nonexistent",
 	})
 	if err == nil {
@@ -505,7 +504,7 @@ func TestGetLogs_DefaultPageSize(t *testing.T) {
 	writeLogFile(t, dir, "default", "pod", lines)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default", Pod: "pod",
 		// PageSize intentionally zero — should default to 200.
 	})
@@ -522,32 +521,6 @@ func TestGetLogs_DefaultPageSize(t *testing.T) {
 
 // ── StreamLogs ────────────────────────────────────────────────────────────────
 
-// fakeStreamLogsServer captures sent lines and honours a cancellable context.
-type fakeStreamLogsServer struct {
-	ctx    context.Context
-	lines  []string
-	sendCh chan string
-}
-
-func newFakeStreamLogsServer(ctx context.Context) *fakeStreamLogsServer {
-	return &fakeStreamLogsServer{ctx: ctx, sendCh: make(chan string, 64)}
-}
-
-func (f *fakeStreamLogsServer) Send(resp *pb.StreamLogsResponse) error {
-	select {
-	case <-f.ctx.Done():
-		return f.ctx.Err()
-	case f.sendCh <- resp.Line:
-		return nil
-	}
-}
-func (f *fakeStreamLogsServer) Context() context.Context     { return f.ctx }
-func (f *fakeStreamLogsServer) SetHeader(metadata.MD) error  { return nil }
-func (f *fakeStreamLogsServer) SendHeader(metadata.MD) error { return nil }
-func (f *fakeStreamLogsServer) SetTrailer(metadata.MD)       {}
-func (f *fakeStreamLogsServer) SendMsg(any) error            { return nil }
-func (f *fakeStreamLogsServer) RecvMsg(any) error            { return nil }
-
 func TestStreamLogs_OnlyNewLines(t *testing.T) {
 	dir := t.TempDir()
 	// Write existing content — StreamLogs must NOT replay these.
@@ -561,11 +534,8 @@ func TestStreamLogs_OnlyNewLines(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stream := newFakeStreamLogsServer(ctx)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "mypod"}, stream)
-	}()
+	stream := startLineStream(ctx, newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamLogs,
+		&pb.StreamLogsRequest{Namespace: "default", Pod: "mypod"})
 
 	// Give the goroutine time to open and seek to EOF.
 	time.Sleep(50 * time.Millisecond)
@@ -584,14 +554,14 @@ func TestStreamLogs_OnlyNewLines(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for len(received) < 2 {
 		select {
-		case line := <-stream.sendCh:
+		case line := <-stream.lines:
 			received = append(received, line)
 		case <-deadline:
 			t.Fatalf("timed out waiting for streamed lines; got: %v", received)
 		}
 	}
 	cancel()
-	<-errCh
+	<-stream.err
 
 	if len(received) != 2 {
 		t.Fatalf("expected 2 lines, got %d: %v", len(received), received)
@@ -607,9 +577,8 @@ func TestStreamLogs_OnlyNewLines(t *testing.T) {
 func TestStreamLogs_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	ctx := context.Background()
-	stream := newFakeStreamLogsServer(ctx)
-	err := svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "ghost"}, stream)
+	err := <-startLineStream(context.Background(), newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamLogs,
+		&pb.StreamLogsRequest{Namespace: "default", Pod: "ghost"}).err
 	if err == nil {
 		t.Fatal("expected error for missing log file")
 	}
@@ -618,9 +587,8 @@ func TestStreamLogs_NotFound(t *testing.T) {
 func TestStreamLogs_MissingArgs(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	ctx := context.Background()
-	stream := newFakeStreamLogsServer(ctx)
-	err := svc.StreamLogs(&pb.StreamLogsRequest{}, stream)
+	err := <-startLineStream(context.Background(), newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamLogs,
+		&pb.StreamLogsRequest{}).err
 	if err == nil {
 		t.Fatal("expected error for empty namespace/pod")
 	}
@@ -641,7 +609,7 @@ func TestGetLogs_SameTimestampPreservesOrder(t *testing.T) {
 	writeLogFile(t, dir, "default", "pod", lines)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetLogs(context.Background(), &pb.GetLogsRequest{
+	resp, err := call(context.Background(), svc.GetLogs, &pb.GetLogsRequest{
 		Namespace: "default",
 		Pod:       "pod",
 	})
@@ -675,11 +643,8 @@ func TestStreamLogs_SameTimestampPreservesOrder(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stream := newFakeStreamLogsServer(ctx)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.StreamLogs(&pb.StreamLogsRequest{Namespace: "default", Pod: "pod"}, stream)
-	}()
+	stream := startLineStream(ctx, newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamLogs,
+		&pb.StreamLogsRequest{Namespace: "default", Pod: "pod"})
 
 	// Give the goroutine time to seek to EOF.
 	time.Sleep(50 * time.Millisecond)
@@ -699,14 +664,14 @@ func TestStreamLogs_SameTimestampPreservesOrder(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 	for len(received) < n {
 		select {
-		case line := <-stream.sendCh:
+		case line := <-stream.lines:
 			received = append(received, line)
 		case <-deadline:
 			t.Fatalf("timed out waiting for streamed lines; got %d/%d: %v", len(received), n, received)
 		}
 	}
 	cancel()
-	<-errCh
+	<-stream.err
 
 	for i, got := range received {
 		want := fmt.Sprintf("%s [default/pod/app] startup message %d", ts, i)

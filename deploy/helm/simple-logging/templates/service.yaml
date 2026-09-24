@@ -11,10 +11,6 @@ spec:
     {{- include "simple-logging.selectorLabels" . | nindent 4 }}
   ports:
     - name: http
-      port: {{ .Values.service.httpPort }}
+      port: {{ .Values.service.port }}
       targetPort: http
-      protocol: TCP
-    - name: grpc-web
-      port: {{ .Values.service.grpcWebPort }}
-      targetPort: grpc-web
       protocol: TCP

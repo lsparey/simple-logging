@@ -3,6 +3,8 @@ package api
 import (
 	"bufio"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,8 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"connectrpc.com/connect"
 
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
 	"github.com/lsparey/simple-logging/internal/storage"
@@ -40,7 +41,7 @@ func (s *LogService) searchTargets(req *pb.SearchLogsRequest) ([]searchTarget, e
 	} else {
 		entries, err := os.ReadDir(s.logsRoot)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "read logs root: %v", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read logs root: %v", err))
 		}
 		for _, e := range entries {
 			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
@@ -72,7 +73,7 @@ func (s *LogService) searchTargets(req *pb.SearchLogsRequest) ([]searchTarget, e
 			} else {
 				containers, err = storage.ListContainers(s.logsRoot, namespace, pod)
 				if err != nil {
-					return nil, status.Errorf(codes.Internal, "read pod dir %q: %v", pod, err)
+					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read pod dir %q: %v", pod, err))
 				}
 			}
 			for _, container := range containers {
@@ -98,7 +99,7 @@ func (s *LogService) searchJobsFor(targets []searchTarget, start, end time.Time)
 	for _, t := range targets {
 		segments, err := storage.ListSegments(s.logsRoot, t.namespace, t.pod, t.container)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "list log segments: %v", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list log segments: %v", err))
 		}
 		for _, segment := range segments {
 			date, err := storage.SegmentDate(segment + ".log")
@@ -135,7 +136,7 @@ func newSearchMatcher(query string, isRegex bool) (searchMatcher, error) {
 	if isRegex {
 		re, err := regexp.Compile(query)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid regex: %v", err)
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid regex: %v", err))
 		}
 		return re.MatchString, nil
 	}
@@ -158,9 +159,10 @@ func newSearchMatcher(query string, isRegex bool) (searchMatcher, error) {
 // order; matches within a single file are always in line (chronological)
 // order. A future revision could add a true k-way merge if strict ordering
 // turns out to matter in practice.
-func (s *LogService) SearchLogs(req *pb.SearchLogsRequest, stream pb.LogService_SearchLogsServer) error {
+func (s *LogService) SearchLogs(ctx context.Context, r *connect.Request[pb.SearchLogsRequest], stream *connect.ServerStream[pb.SearchLogsResponse]) error {
+	req := r.Msg
 	if req.Query == "" {
-		return status.Error(codes.InvalidArgument, "query is required")
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("query is required"))
 	}
 
 	matches, err := newSearchMatcher(req.Query, req.Regex)
@@ -205,7 +207,6 @@ func (s *LogService) SearchLogs(req *pb.SearchLogsRequest, stream pb.LogService_
 		return jobs[i].container < jobs[j].container
 	})
 
-	ctx := stream.Context()
 	jobCh := make(chan searchJob)
 	resultCh := make(chan *pb.SearchLogsResponse, 64)
 	stopCh := make(chan struct{})
@@ -258,7 +259,7 @@ func (s *LogService) SearchLogs(req *pb.SearchLogsRequest, stream pb.LogService_
 	for result := range resultCh {
 		if err := ctx.Err(); err != nil {
 			stop()
-			return status.FromContextError(err).Err()
+			return err
 		}
 		if err := stream.Send(result); err != nil {
 			stop()

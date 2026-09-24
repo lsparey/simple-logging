@@ -8,11 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-
+	"connectrpc.com/connect"
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
+	"github.com/lsparey/simple-logging/gen/simplelog/v1/simplelogv1connect"
 	"github.com/lsparey/simple-logging/internal/storage"
 )
 
@@ -40,7 +38,7 @@ func TestListWorkloads_GroupsByOwnerKindAndName(t *testing.T) {
 
 	checker := &fakeChecker{active: map[string]bool{"default/cache-0": true}}
 	svc := NewLogService(dir, checker, checker)
-	resp, err := svc.ListWorkloads(context.Background(), &pb.ListWorkloadsRequest{Namespace: "default"})
+	resp, err := call(context.Background(), svc.ListWorkloads, &pb.ListWorkloadsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListWorkloads: %v", err)
 	}
@@ -84,7 +82,7 @@ func TestListWorkloads_CronJobPodAppearsUnderBothJobAndCronJob(t *testing.T) {
 	recordOwner(t, dir, "default", "backup-2893471000-x2f9p", "Job", "backup-2893471000", "backup")
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListWorkloads(context.Background(), &pb.ListWorkloadsRequest{Namespace: "default"})
+	resp, err := call(context.Background(), svc.ListWorkloads, &pb.ListWorkloadsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListWorkloads: %v", err)
 	}
@@ -112,7 +110,7 @@ func TestListWorkloads_MultipleCronJobRunsCollapseIntoOneCronJobEntry(t *testing
 	recordOwner(t, dir, "default", "backup-2893481000-bbbbb", "Job", "backup-2893481000", "backup")
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListWorkloads(context.Background(), &pb.ListWorkloadsRequest{Namespace: "default"})
+	resp, err := call(context.Background(), svc.ListWorkloads, &pb.ListWorkloadsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListWorkloads: %v", err)
 	}
@@ -138,7 +136,7 @@ func TestListWorkloads_SkipsPodsWithoutOwnerKind(t *testing.T) {
 	writeLogFile(t, dir, "default", "plain-pod", []string{"line"})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.ListWorkloads(context.Background(), &pb.ListWorkloadsRequest{Namespace: "default"})
+	resp, err := call(context.Background(), svc.ListWorkloads, &pb.ListWorkloadsRequest{Namespace: "default"})
 	if err != nil {
 		t.Fatalf("ListWorkloads: %v", err)
 	}
@@ -150,8 +148,8 @@ func TestListWorkloads_SkipsPodsWithoutOwnerKind(t *testing.T) {
 func TestListWorkloads_RequiresNamespace(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	_, err := svc.ListWorkloads(context.Background(), &pb.ListWorkloadsRequest{})
-	if status.Code(err) != codes.InvalidArgument {
+	_, err := call(context.Background(), svc.ListWorkloads, &pb.ListWorkloadsRequest{})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
@@ -170,7 +168,7 @@ func TestGetWorkloadLogs_MergesAcrossPodsForNonDeploymentKind(t *testing.T) {
 	recordOwner(t, dir, "default", "cache-1", "StatefulSet", "cache", "")
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetWorkloadLogs(context.Background(), &pb.GetWorkloadLogsRequest{
+	resp, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
 		Namespace: "default", Kind: "StatefulSet", Name: "cache",
 	})
 	if err != nil {
@@ -196,7 +194,7 @@ func TestGetWorkloadLogs_KindPodSelectsOneOwnedPodDirectly(t *testing.T) {
 	recordOwner(t, dir, "default", "web-app-abc12-uvw34", "Deployment", "web-app", "")
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := svc.GetWorkloadLogs(context.Background(), &pb.GetWorkloadLogsRequest{
+	resp, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
 		Namespace: "default", Kind: "Pod", Name: "web-app-abc12-xyz89",
 	})
 	if err != nil {
@@ -210,10 +208,10 @@ func TestGetWorkloadLogs_KindPodSelectsOneOwnedPodDirectly(t *testing.T) {
 func TestGetWorkloadLogs_NotFoundForUnknownWorkload(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	_, err := svc.GetWorkloadLogs(context.Background(), &pb.GetWorkloadLogsRequest{
+	_, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
 		Namespace: "default", Kind: "StatefulSet", Name: "nonexistent",
 	})
-	if status.Code(err) != codes.NotFound {
+	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("expected NotFound, got %v", err)
 	}
 }
@@ -227,38 +225,13 @@ func TestGetWorkloadLogs_RequiresNamespaceKindAndName(t *testing.T) {
 		{Namespace: "default", Kind: "StatefulSet"},
 	}
 	for _, req := range cases {
-		if _, err := svc.GetWorkloadLogs(context.Background(), req); status.Code(err) != codes.InvalidArgument {
+		if _, err := call(context.Background(), svc.GetWorkloadLogs, req); connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("request %+v: expected InvalidArgument, got %v", req, err)
 		}
 	}
 }
 
 // ── StreamWorkloadLogs ───────────────────────────────────────────────────────
-
-// fakeStreamWorkloadLogsServer captures sent lines and honours a cancellable context.
-type fakeStreamWorkloadLogsServer struct {
-	ctx    context.Context
-	sendCh chan string
-}
-
-func newFakeStreamWorkloadLogsServer(ctx context.Context) *fakeStreamWorkloadLogsServer {
-	return &fakeStreamWorkloadLogsServer{ctx: ctx, sendCh: make(chan string, 64)}
-}
-
-func (f *fakeStreamWorkloadLogsServer) Send(resp *pb.StreamWorkloadLogsResponse) error {
-	select {
-	case <-f.ctx.Done():
-		return f.ctx.Err()
-	case f.sendCh <- resp.Line:
-		return nil
-	}
-}
-func (f *fakeStreamWorkloadLogsServer) Context() context.Context     { return f.ctx }
-func (f *fakeStreamWorkloadLogsServer) SetHeader(metadata.MD) error  { return nil }
-func (f *fakeStreamWorkloadLogsServer) SendHeader(metadata.MD) error { return nil }
-func (f *fakeStreamWorkloadLogsServer) SetTrailer(metadata.MD)       {}
-func (f *fakeStreamWorkloadLogsServer) SendMsg(any) error            { return nil }
-func (f *fakeStreamWorkloadLogsServer) RecvMsg(any) error            { return nil }
 
 func TestStreamWorkloadLogs_TailsActivePods(t *testing.T) {
 	dir := t.TempDir()
@@ -272,13 +245,8 @@ func TestStreamWorkloadLogs_TailsActivePods(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stream := newFakeStreamWorkloadLogsServer(ctx)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{
-			Namespace: "default", Kind: "StatefulSet", Name: "cache",
-		}, stream)
-	}()
+	stream := startLineStream(ctx, newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamWorkloadLogs,
+		&pb.StreamWorkloadLogsRequest{Namespace: "default", Kind: "StatefulSet", Name: "cache"})
 
 	// Give the goroutine time to open and seek to EOF.
 	time.Sleep(50 * time.Millisecond)
@@ -292,7 +260,7 @@ func TestStreamWorkloadLogs_TailsActivePods(t *testing.T) {
 	f.Close()
 
 	select {
-	case line := <-stream.sendCh:
+	case line := <-stream.lines:
 		if !strings.Contains(line, "new line") {
 			t.Errorf("unexpected line: %q", line)
 		}
@@ -300,17 +268,15 @@ func TestStreamWorkloadLogs_TailsActivePods(t *testing.T) {
 		t.Fatal("timed out waiting for streamed line")
 	}
 	cancel()
-	<-errCh
+	<-stream.err
 }
 
 func TestStreamWorkloadLogs_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeStreamWorkloadLogsServer(context.Background())
-	err := svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{
-		Namespace: "default", Kind: "StatefulSet", Name: "ghost",
-	}, stream)
-	if status.Code(err) != codes.NotFound {
+	err := <-startLineStream(context.Background(), newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamWorkloadLogs,
+		&pb.StreamWorkloadLogsRequest{Namespace: "default", Kind: "StatefulSet", Name: "ghost"}).err
+	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("expected NotFound, got %v", err)
 	}
 }
@@ -330,11 +296,8 @@ func TestStreamWorkloadLogs_NamespaceWideTailsEveryPod(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stream := newFakeStreamWorkloadLogsServer(ctx)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{Namespace: "default"}, stream)
-	}()
+	stream := startLineStream(ctx, newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamWorkloadLogs,
+		&pb.StreamWorkloadLogsRequest{Namespace: "default"})
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -344,22 +307,22 @@ func TestStreamWorkloadLogs_NamespaceWideTailsEveryPod(t *testing.T) {
 	seen := map[string]bool{}
 	for len(seen) < 2 {
 		select {
-		case line := <-stream.sendCh:
+		case line := <-stream.lines:
 			seen[line] = true
 		case <-time.After(2 * time.Second):
 			t.Fatalf("timed out waiting for both tails, got: %v", seen)
 		}
 	}
 	cancel()
-	<-errCh
+	<-stream.err
 }
 
 func TestStreamWorkloadLogs_NamespaceWideNotFound(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeStreamWorkloadLogsServer(context.Background())
-	err := svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{Namespace: "empty-ns"}, stream)
-	if status.Code(err) != codes.NotFound {
+	err := <-startLineStream(context.Background(), newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamWorkloadLogs,
+		&pb.StreamWorkloadLogsRequest{Namespace: "empty-ns"}).err
+	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("expected NotFound, got %v", err)
 	}
 }
@@ -367,9 +330,9 @@ func TestStreamWorkloadLogs_NamespaceWideNotFound(t *testing.T) {
 func TestStreamWorkloadLogs_RejectsKindWithoutName(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeStreamWorkloadLogsServer(context.Background())
-	err := svc.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{Namespace: "default", Kind: "StatefulSet"}, stream)
-	if status.Code(err) != codes.InvalidArgument {
+	err := <-startLineStream(context.Background(), newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamWorkloadLogs,
+		&pb.StreamWorkloadLogsRequest{Namespace: "default", Kind: "StatefulSet"}).err
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
@@ -398,13 +361,8 @@ func TestStreamDeploymentLogs_ThinWrapperAdaptsMessages(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stream := newFakeStreamLogsServer(ctx)
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.StreamDeploymentLogs(&pb.StreamDeploymentLogsRequest{
-			Namespace: "default", Deployment: "myapp",
-		}, &deploymentStreamAdapterForTest{stream})
-	}()
+	stream := startLineStream(ctx, newTestClient(t, svc), simplelogv1connect.LogServiceClient.StreamDeploymentLogs,
+		&pb.StreamDeploymentLogsRequest{Namespace: "default", Deployment: "myapp"})
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -417,7 +375,7 @@ func TestStreamDeploymentLogs_ThinWrapperAdaptsMessages(t *testing.T) {
 	f.Close()
 
 	select {
-	case line := <-stream.sendCh:
+	case line := <-stream.lines:
 		if !strings.Contains(line, "new line") {
 			t.Errorf("unexpected line: %q", line)
 		}
@@ -425,16 +383,5 @@ func TestStreamDeploymentLogs_ThinWrapperAdaptsMessages(t *testing.T) {
 		t.Fatal("timed out waiting for streamed line")
 	}
 	cancel()
-	<-errCh
-}
-
-// deploymentStreamAdapterForTest satisfies pb.LogService_StreamDeploymentLogsServer
-// by forwarding onto fakeStreamLogsServer, letting the existing test double be
-// reused to verify StreamDeploymentLogs -> StreamWorkloadLogs message adaptation.
-type deploymentStreamAdapterForTest struct {
-	*fakeStreamLogsServer
-}
-
-func (a *deploymentStreamAdapterForTest) Send(resp *pb.StreamDeploymentLogsResponse) error {
-	return a.fakeStreamLogsServer.Send(&pb.StreamLogsResponse{Line: resp.Line})
+	<-stream.err
 }

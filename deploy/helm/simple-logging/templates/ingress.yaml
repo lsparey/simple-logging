@@ -24,14 +24,7 @@ spec:
       {{- end }}
       http:
         paths:
-          # Route gRPC-Web calls to the backend — must come before the / catch-all.
-          - path: {{ .Values.ingress.grpcPathPrefix }}
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "simple-logging.fullname" . }}
-                port:
-                  name: grpc-web
+          # The UI and the API are served from the same origin and port.
           - path: /
             pathType: Prefix
             backend:

@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"container/heap"
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"sync"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"connectrpc.com/connect"
 
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
 	"github.com/lsparey/simple-logging/internal/storage"
@@ -36,7 +37,7 @@ import (
 func (s *LogService) workloadPodsForNamespace(namespace, kind, name string) ([]string, error) {
 	podNames, err := storage.ListPodDirs(s.logsRoot, namespace)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read namespace dir: %v", err))
 	}
 
 	if kind == "Pod" {
@@ -52,7 +53,7 @@ func (s *LogService) workloadPodsForNamespace(namespace, kind, name string) ([]s
 	for _, podName := range podNames {
 		meta, err := storage.ReadPodMeta(s.logsRoot, namespace, podName)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "read pod meta %q: %v", podName, err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read pod meta %q: %v", podName, err))
 		}
 		if meta.OwnerKind == kind && meta.OwnerName == name {
 			pods = append(pods, podName)
@@ -72,14 +73,15 @@ type workloadKey struct{ kind, name string }
 
 // ListWorkloads returns every workload with log files in the given namespace:
 // Deployment, StatefulSet, DaemonSet, Job, CronJob, or bare Pod.
-func (s *LogService) ListWorkloads(_ context.Context, req *pb.ListWorkloadsRequest) (*pb.ListWorkloadsResponse, error) {
+func (s *LogService) ListWorkloads(_ context.Context, r *connect.Request[pb.ListWorkloadsRequest]) (*connect.Response[pb.ListWorkloadsResponse], error) {
+	req := r.Msg
 	if req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace is required"))
 	}
 
 	podNames, err := storage.ListPodDirs(s.logsRoot, req.Namespace)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read namespace dir: %v", err))
 	}
 
 	active := make(map[workloadKey]bool)
@@ -104,7 +106,7 @@ func (s *LogService) ListWorkloads(_ context.Context, req *pb.ListWorkloadsReque
 	for _, podName := range podNames {
 		meta, err := storage.ReadPodMeta(s.logsRoot, req.Namespace, podName)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "read pod meta %q: %v", podName, err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read pod meta %q: %v", podName, err))
 		}
 		if meta.OwnerKind == "" {
 			continue // not yet (re-)observed by the collector since upgrading
@@ -135,14 +137,15 @@ func (s *LogService) ListWorkloads(_ context.Context, req *pb.ListWorkloadsReque
 		return workloads[i].Name < workloads[j].Name
 	})
 
-	return &pb.ListWorkloadsResponse{Workloads: workloads}, nil
+	return connect.NewResponse(&pb.ListWorkloadsResponse{Workloads: workloads}), nil
 }
 
 // GetWorkloadLogs returns a paginated, time-sorted page of log lines merged
 // from every pod and container belonging to the given workload.
-func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLogsRequest) (*pb.GetWorkloadLogsResponse, error) {
+func (s *LogService) GetWorkloadLogs(ctx context.Context, r *connect.Request[pb.GetWorkloadLogsRequest]) (*connect.Response[pb.GetWorkloadLogsResponse], error) {
+	req := r.Msg
 	if req.Namespace == "" || req.Kind == "" || req.Name == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace, kind and name are required")
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace, kind and name are required"))
 	}
 
 	pageSize := int(req.PageSize)
@@ -176,7 +179,7 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLog
 		return nil, err
 	}
 	if len(pods) == 0 {
-		return nil, status.Errorf(codes.NotFound, "no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name))
 	}
 
 	var startTime, endTime time.Time
@@ -199,7 +202,7 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLog
 	for _, pod := range pods {
 		chunks, err := podChunks(s.logsRoot, req.Namespace, pod)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "list log segments: %v", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list log segments: %v", err))
 		}
 		for _, chunk := range chunks {
 			f, err := os.Open(chunk.path)
@@ -207,14 +210,14 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLog
 				if os.IsNotExist(err) {
 					continue
 				}
-				return nil, status.Errorf(codes.Internal, "open log segment: %v", err)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open log segment: %v", err))
 			}
 
 			scanner := bufio.NewScanner(f)
 			for scanner.Scan() {
 				if err := ctx.Err(); err != nil {
 					f.Close()
-					return nil, status.FromContextError(err).Err()
+					return nil, err
 				}
 				line := scanner.Text()
 				ts := parseLineTimestamp(line)
@@ -269,7 +272,7 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLog
 		}
 	}
 
-	return resp, nil
+	return connect.NewResponse(resp), nil
 }
 
 // StreamWorkloadLogs fans out to a per-pod tail for every currently active
@@ -277,10 +280,19 @@ func (s *LogService) GetWorkloadLogs(ctx context.Context, req *pb.GetWorkloadLog
 //
 // Leaving both Kind and Name empty requests a namespace-wide live tail of
 // every pod in the namespace, rather than one workload's pods.
-func (s *LogService) StreamWorkloadLogs(req *pb.StreamWorkloadLogsRequest, stream pb.LogService_StreamWorkloadLogsServer) error {
+func (s *LogService) StreamWorkloadLogs(ctx context.Context, r *connect.Request[pb.StreamWorkloadLogsRequest], stream *connect.ServerStream[pb.StreamWorkloadLogsResponse]) error {
+	return s.streamWorkloadLines(ctx, r.Msg, func(line string) error {
+		return stream.Send(&pb.StreamWorkloadLogsResponse{Line: line})
+	})
+}
+
+// streamWorkloadLines implements StreamWorkloadLogs, delivering each line to
+// send. It is shared with the deprecated StreamDeploymentLogs, whose stream
+// carries a different response type.
+func (s *LogService) streamWorkloadLines(ctx context.Context, req *pb.StreamWorkloadLogsRequest, send func(line string) error) error {
 	namespaceWide := req.Kind == "" && req.Name == ""
 	if req.Namespace == "" || (!namespaceWide && (req.Kind == "" || req.Name == "")) {
-		return status.Error(codes.InvalidArgument, "namespace is required, and kind and name must both be set or both be empty")
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("namespace is required, and kind and name must both be set or both be empty"))
 	}
 
 	var pods []string
@@ -308,12 +320,11 @@ func (s *LogService) StreamWorkloadLogs(req *pb.StreamWorkloadLogsRequest, strea
 	}
 	if len(activePods) == 0 {
 		if namespaceWide {
-			return status.Errorf(codes.NotFound, "no logs found in namespace %s", req.Namespace)
+			return connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found in namespace %s", req.Namespace))
 		}
-		return status.Errorf(codes.NotFound, "no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name)
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for %s %s/%s", req.Kind, req.Namespace, req.Name))
 	}
 
-	ctx := stream.Context()
 	lineCh := make(chan string, 64)
 
 	var wg sync.WaitGroup
@@ -337,7 +348,7 @@ func (s *LogService) StreamWorkloadLogs(req *pb.StreamWorkloadLogsRequest, strea
 			if !ok {
 				return nil
 			}
-			if err := stream.Send(&pb.StreamWorkloadLogsResponse{Line: line}); err != nil {
+			if err := send(line); err != nil {
 				return err
 			}
 		case <-ctx.Done():

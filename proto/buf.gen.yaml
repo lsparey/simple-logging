@@ -5,17 +5,14 @@ plugins:
     out: ../server/gen
     opt:
       - paths=source_relative
-  - remote: buf.build/grpc/go
+  - remote: buf.build/connectrpc/go
     out: ../server/gen
     opt:
       - paths=source_relative
-      - require_unimplemented_servers=false
   # ── TypeScript (Connect-ES v2) ────────────────────────────────────────────
+  # protoc-gen-es v2 emits the service descriptors Connect-ES v2 clients use,
+  # so no separate Connect plugin is needed.
   - remote: buf.build/bufbuild/es
-    out: ../frontend/src/gen
-    opt:
-      - target=ts
-  - remote: buf.build/connectrpc/es
     out: ../frontend/src/gen
     opt:
       - target=ts

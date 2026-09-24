@@ -1,57 +1,18 @@
 package api
 
 import (
-	"context"
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
-
+	"connectrpc.com/connect"
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
 )
-
-// fakeSearchLogsServer captures every sent response.
-type fakeSearchLogsServer struct {
-	ctx  context.Context
-	sent []*pb.SearchLogsResponse
-}
-
-func newFakeSearchLogsServer(ctx context.Context) *fakeSearchLogsServer {
-	return &fakeSearchLogsServer{ctx: ctx}
-}
-
-func (f *fakeSearchLogsServer) Send(resp *pb.SearchLogsResponse) error {
-	f.sent = append(f.sent, resp)
-	return nil
-}
-func (f *fakeSearchLogsServer) Context() context.Context     { return f.ctx }
-func (f *fakeSearchLogsServer) SetHeader(metadata.MD) error  { return nil }
-func (f *fakeSearchLogsServer) SendHeader(metadata.MD) error { return nil }
-func (f *fakeSearchLogsServer) SetTrailer(metadata.MD)       {}
-func (f *fakeSearchLogsServer) SendMsg(any) error            { return nil }
-func (f *fakeSearchLogsServer) RecvMsg(any) error            { return nil }
-
-func (f *fakeSearchLogsServer) lines() []string {
-	var lines []string
-	for _, r := range f.sent {
-		if !r.Truncated {
-			lines = append(lines, r.Line)
-		}
-	}
-	return lines
-}
-
-func (f *fakeSearchLogsServer) truncated() bool {
-	return len(f.sent) > 0 && f.sent[len(f.sent)-1].Truncated
-}
 
 func TestSearchLogs_RequiresQuery(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	err := svc.SearchLogs(&pb.SearchLogsRequest{}, newFakeSearchLogsServer(context.Background()))
-	if status.Code(err) != codes.InvalidArgument {
+	_, err := search(t, svc, &pb.SearchLogsRequest{})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
@@ -59,8 +20,8 @@ func TestSearchLogs_RequiresQuery(t *testing.T) {
 func TestSearchLogs_RejectsInvalidRegex(t *testing.T) {
 	dir := t.TempDir()
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	err := svc.SearchLogs(&pb.SearchLogsRequest{Query: "([", Regex: true}, newFakeSearchLogsServer(context.Background()))
-	if status.Code(err) != codes.InvalidArgument {
+	_, err := search(t, svc, &pb.SearchLogsRequest{Query: "([", Regex: true})
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("expected InvalidArgument, got %v", err)
 	}
 }
@@ -73,8 +34,8 @@ func TestSearchLogs_SubstringMatchIsCaseInsensitive(t *testing.T) {
 	})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
-	if err := svc.SearchLogs(&pb.SearchLogsRequest{Namespace: "default", Query: "error"}, stream); err != nil {
+	stream, err := search(t, svc, &pb.SearchLogsRequest{Namespace: "default", Query: "error"})
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 
@@ -95,9 +56,9 @@ func TestSearchLogs_RegexMatch(t *testing.T) {
 	})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
 	req := &pb.SearchLogsRequest{Namespace: "default", Query: `status=(4\d\d|5\d\d)`, Regex: true}
-	if err := svc.SearchLogs(req, stream); err != nil {
+	stream, err := search(t, svc, req)
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 
@@ -119,8 +80,8 @@ func TestSearchLogs_NamespaceScoping(t *testing.T) {
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
 	// Scoped to one namespace.
-	stream := newFakeSearchLogsServer(context.Background())
-	if err := svc.SearchLogs(&pb.SearchLogsRequest{Namespace: "default", Query: "needle"}, stream); err != nil {
+	stream, err := search(t, svc, &pb.SearchLogsRequest{Namespace: "default", Query: "needle"})
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if lines := stream.lines(); len(lines) != 1 || lines[0] != "2026-05-20T10:00:00Z [default/web-app-abc/app] needle in default" {
@@ -128,8 +89,8 @@ func TestSearchLogs_NamespaceScoping(t *testing.T) {
 	}
 
 	// Unscoped: searches every namespace.
-	streamAll := newFakeSearchLogsServer(context.Background())
-	if err := svc.SearchLogs(&pb.SearchLogsRequest{Query: "needle"}, streamAll); err != nil {
+	streamAll, err := search(t, svc, &pb.SearchLogsRequest{Query: "needle"})
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if lines := streamAll.lines(); len(lines) != 2 {
@@ -149,9 +110,9 @@ func TestSearchLogs_WorkloadScoping(t *testing.T) {
 	recordOwner(t, dir, "default", "web-app-abc", "Deployment", "web-app", "")
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
 	req := &pb.SearchLogsRequest{Namespace: "default", WorkloadKind: "StatefulSet", WorkloadName: "cache", Query: "needle"}
-	if err := svc.SearchLogs(req, stream); err != nil {
+	stream, err := search(t, svc, req)
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if lines := stream.lines(); len(lines) != 1 || lines[0] != "2026-05-20T10:00:00Z [default/cache-0/app] needle in cache" {
@@ -169,9 +130,9 @@ func TestSearchLogs_PodAndContainerScoping(t *testing.T) {
 	})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
 	req := &pb.SearchLogsRequest{Namespace: "default", Pod: "web-app-abc", Query: "needle"}
-	if err := svc.SearchLogs(req, stream); err != nil {
+	stream, err := search(t, svc, req)
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if lines := stream.lines(); len(lines) != 1 || lines[0] != "2026-05-20T10:00:00Z [default/web-app-abc/app] needle in app" {
@@ -188,7 +149,6 @@ func TestSearchLogs_TimeRangePrunesSegments(t *testing.T) {
 	})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
 	start := time.Date(2026, 5, 19, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 19, 23, 59, 59, 0, time.UTC)
 	req := &pb.SearchLogsRequest{
@@ -197,7 +157,8 @@ func TestSearchLogs_TimeRangePrunesSegments(t *testing.T) {
 		StartTimeUnixMs: start.UnixMilli(),
 		EndTimeUnixMs:   end.UnixMilli(),
 	}
-	if err := svc.SearchLogs(req, stream); err != nil {
+	stream, err := search(t, svc, req)
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if lines := stream.lines(); len(lines) != 1 || lines[0] != "2026-05-19T10:00:00Z [default/web-app-abc/app] needle on day 2" {
@@ -214,9 +175,9 @@ func TestSearchLogs_MaxResultsTruncates(t *testing.T) {
 	writeLogFile(t, dir, "default", "web-app-abc", lines)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
 	req := &pb.SearchLogsRequest{Namespace: "default", Query: "needle", MaxResults: 3}
-	if err := svc.SearchLogs(req, stream); err != nil {
+	stream, err := search(t, svc, req)
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if got := len(stream.lines()); got != 3 {
@@ -234,8 +195,8 @@ func TestSearchLogs_NoMatchesNotTruncated(t *testing.T) {
 	})
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	stream := newFakeSearchLogsServer(context.Background())
-	if err := svc.SearchLogs(&pb.SearchLogsRequest{Namespace: "default", Query: "needle"}, stream); err != nil {
+	stream, err := search(t, svc, &pb.SearchLogsRequest{Namespace: "default", Query: "needle"})
+	if err != nil {
 		t.Fatalf("SearchLogs: %v", err)
 	}
 	if len(stream.sent) != 0 {

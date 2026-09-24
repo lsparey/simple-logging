@@ -9,7 +9,7 @@ import (
 func TestLoad_Defaults(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOGS_ROOT", dir)
-	t.Setenv("GRPC_WEB_PORT", "")
+	t.Setenv("PORT", "")
 	t.Setenv("RETENTION_DAYS", "")
 	t.Setenv("RETENTION_CHECK_INTERVAL", "")
 	t.Setenv("LOG_LEVEL", "")
@@ -22,8 +22,8 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.LogsRoot != dir {
 		t.Errorf("LogsRoot: got %q, want %q", cfg.LogsRoot, dir)
 	}
-	if cfg.GRPCWebPort != 8080 {
-		t.Errorf("GRPCWebPort: got %d, want 8080", cfg.GRPCWebPort)
+	if cfg.Port != 8080 {
+		t.Errorf("Port: got %d, want 8080", cfg.Port)
 	}
 	if cfg.RetentionDays != 30 {
 		t.Errorf("RetentionDays: got %d, want 30", cfg.RetentionDays)
@@ -45,7 +45,7 @@ func TestLoad_Defaults(t *testing.T) {
 func TestLoad_EnvOverrides(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOGS_ROOT", dir)
-	t.Setenv("GRPC_WEB_PORT", "9090")
+	t.Setenv("PORT", "9090")
 	t.Setenv("RETENTION_DAYS", "7")
 	t.Setenv("RETENTION_CHECK_INTERVAL", "12h")
 	t.Setenv("LOG_LEVEL", "debug")
@@ -55,8 +55,8 @@ func TestLoad_EnvOverrides(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if cfg.GRPCWebPort != 9090 {
-		t.Errorf("GRPCWebPort: got %d, want 9090", cfg.GRPCWebPort)
+	if cfg.Port != 9090 {
+		t.Errorf("Port: got %d, want 9090", cfg.Port)
 	}
 	if cfg.RetentionDays != 7 {
 		t.Errorf("RetentionDays: got %d, want 7", cfg.RetentionDays)
@@ -74,11 +74,11 @@ func TestLoad_InvalidPort(t *testing.T) {
 	for _, v := range []string{"0", "99999", "abc", "-1"} {
 		t.Run(v, func(t *testing.T) {
 			t.Setenv("LOGS_ROOT", dir)
-			t.Setenv("GRPC_WEB_PORT", v)
+			t.Setenv("PORT", v)
 			t.Setenv("RETENTION_DAYS", "")
 			t.Setenv("RETENTION_CHECK_INTERVAL", "")
 			if _, err := Load(); err == nil {
-				t.Errorf("expected error for GRPC_WEB_PORT=%q", v)
+				t.Errorf("expected error for PORT=%q", v)
 			}
 		})
 	}
@@ -89,7 +89,7 @@ func TestLoad_InvalidRetentionDays(t *testing.T) {
 	for _, v := range []string{"0", "-1", "abc"} {
 		t.Run(v, func(t *testing.T) {
 			t.Setenv("LOGS_ROOT", dir)
-			t.Setenv("GRPC_WEB_PORT", "")
+			t.Setenv("PORT", "")
 			t.Setenv("RETENTION_DAYS", v)
 			t.Setenv("RETENTION_CHECK_INTERVAL", "")
 			if _, err := Load(); err == nil {
@@ -104,7 +104,7 @@ func TestLoad_InvalidRetentionCheckInterval(t *testing.T) {
 	for _, v := range []string{"-1h", "notaduration"} {
 		t.Run(v, func(t *testing.T) {
 			t.Setenv("LOGS_ROOT", dir)
-			t.Setenv("GRPC_WEB_PORT", "")
+			t.Setenv("PORT", "")
 			t.Setenv("RETENTION_DAYS", "")
 			t.Setenv("RETENTION_CHECK_INTERVAL", v)
 			if _, err := Load(); err == nil {
@@ -117,7 +117,7 @@ func TestLoad_InvalidRetentionCheckInterval(t *testing.T) {
 func TestLoad_LogsRootCreated(t *testing.T) {
 	newDir := t.TempDir() + "/sub/dir"
 	t.Setenv("LOGS_ROOT", newDir)
-	t.Setenv("GRPC_WEB_PORT", "")
+	t.Setenv("PORT", "")
 	t.Setenv("RETENTION_DAYS", "")
 	t.Setenv("RETENTION_CHECK_INTERVAL", "")
 
@@ -234,7 +234,7 @@ func TestLoad_DiskLowWaterMarkMustBeBelowHigh(t *testing.T) {
 func TestLoad_NodeNameFromEnv(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("LOGS_ROOT", dir)
-	t.Setenv("GRPC_WEB_PORT", "")
+	t.Setenv("PORT", "")
 	t.Setenv("RETENTION_DAYS", "")
 	t.Setenv("RETENTION_CHECK_INTERVAL", "")
 	t.Setenv("NODE_LOGS_ROOT", "/var/log/pods")
@@ -249,5 +249,40 @@ func TestLoad_NodeNameFromEnv(t *testing.T) {
 	}
 	if got := cfg.CollectionMode(); got != ModeHybrid {
 		t.Errorf("CollectionMode: got %q, want %q", got, ModeHybrid)
+	}
+}
+
+func TestLoad_CORSAndAPIURLDefaultOff(t *testing.T) {
+	t.Setenv("LOGS_ROOT", t.TempDir())
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	t.Setenv("API_URL", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.CORSAllowedOrigins) != 0 {
+		t.Errorf("CORSAllowedOrigins: got %v, want none", cfg.CORSAllowedOrigins)
+	}
+	if cfg.APIURL != "" {
+		t.Errorf("APIURL: got %q, want empty", cfg.APIURL)
+	}
+}
+
+func TestLoad_CORSAllowedOriginsParsed(t *testing.T) {
+	t.Setenv("LOGS_ROOT", t.TempDir())
+	t.Setenv("CORS_ALLOWED_ORIGINS", " https://a.example.com, ,https://b.example.com ")
+	t.Setenv("API_URL", "https://api.example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"https://a.example.com", "https://b.example.com"}
+	if len(cfg.CORSAllowedOrigins) != len(want) || cfg.CORSAllowedOrigins[0] != want[0] || cfg.CORSAllowedOrigins[1] != want[1] {
+		t.Errorf("CORSAllowedOrigins: got %v, want %v", cfg.CORSAllowedOrigins, want)
+	}
+	if cfg.APIURL != "https://api.example.com" {
+		t.Errorf("APIURL: got %q, want https://api.example.com", cfg.APIURL)
 	}
 }

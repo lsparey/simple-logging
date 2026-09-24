@@ -1,0 +1,7 @@
+# Frontend build output, copied in by `make build` / the Dockerfile before
+# compiling so it can be embedded. Only the placeholder is tracked.
+internal/ui/dist/*
+!internal/ui/dist/.gitkeep
+
+# Local `make build` output.
+bin/

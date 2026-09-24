@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"connectrpc.com/connect"
 
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
 )
@@ -23,13 +24,14 @@ import (
 // ListDeployments returns all deployments with log files in the given namespace.
 //
 // Deprecated: superseded by ListWorkloads.
-func (s *LogService) ListDeployments(ctx context.Context, req *pb.ListDeploymentsRequest) (*pb.ListDeploymentsResponse, error) {
-	resp, err := s.ListWorkloads(ctx, &pb.ListWorkloadsRequest{Namespace: req.Namespace})
+func (s *LogService) ListDeployments(ctx context.Context, r *connect.Request[pb.ListDeploymentsRequest]) (*connect.Response[pb.ListDeploymentsResponse], error) {
+	req := r.Msg
+	resp, err := s.ListWorkloads(ctx, connect.NewRequest(&pb.ListWorkloadsRequest{Namespace: req.Namespace}))
 	if err != nil {
 		return nil, err
 	}
-	deployments := make([]*pb.DeploymentInfo, 0, len(resp.Workloads))
-	for _, w := range resp.Workloads {
+	deployments := make([]*pb.DeploymentInfo, 0, len(resp.Msg.Workloads))
+	for _, w := range resp.Msg.Workloads {
 		if w.Kind != "Deployment" {
 			continue
 		}
@@ -40,18 +42,19 @@ func (s *LogService) ListDeployments(ctx context.Context, req *pb.ListDeployment
 			JsonLogging: w.JsonLogging,
 		})
 	}
-	return &pb.ListDeploymentsResponse{Deployments: deployments}, nil
+	return connect.NewResponse(&pb.ListDeploymentsResponse{Deployments: deployments}), nil
 }
 
 // GetDeploymentLogs returns a paginated, time-sorted page of log lines from
 // all pods belonging to the given deployment.
 //
 // Deprecated: superseded by GetWorkloadLogs.
-func (s *LogService) GetDeploymentLogs(ctx context.Context, req *pb.GetDeploymentLogsRequest) (*pb.GetDeploymentLogsResponse, error) {
+func (s *LogService) GetDeploymentLogs(ctx context.Context, r *connect.Request[pb.GetDeploymentLogsRequest]) (*connect.Response[pb.GetDeploymentLogsResponse], error) {
+	req := r.Msg
 	if req.Namespace == "" || req.Deployment == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace and deployment are required")
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace and deployment are required"))
 	}
-	resp, err := s.GetWorkloadLogs(ctx, &pb.GetWorkloadLogsRequest{
+	resp, err := s.GetWorkloadLogs(ctx, connect.NewRequest(&pb.GetWorkloadLogsRequest{
 		Namespace:    req.Namespace,
 		Kind:         "Deployment",
 		Name:         req.Deployment,
@@ -60,48 +63,39 @@ func (s *LogService) GetDeploymentLogs(ctx context.Context, req *pb.GetDeploymen
 		PageSize:     req.PageSize,
 		PageToken:    req.PageToken,
 		LoadLastPage: req.LoadLastPage,
-	})
+	}))
 	if err != nil {
-		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return nil, status.Errorf(codes.NotFound, "no logs found for deployment %s/%s", req.Namespace, req.Deployment)
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for deployment %s/%s", req.Namespace, req.Deployment))
 		}
 		return nil, err
 	}
-	return &pb.GetDeploymentLogsResponse{
-		Lines:         resp.Lines,
-		NextPageToken: resp.NextPageToken,
-		PrevPageToken: resp.PrevPageToken,
-	}, nil
-}
-
-// deploymentToWorkloadStream adapts a StreamDeploymentLogs server stream to
-// the LogService_StreamWorkloadLogsServer interface StreamWorkloadLogs
-// expects, translating each sent message. All other grpc.ServerStream
-// methods (Context, SetHeader, ...) are satisfied by the embedded stream.
-type deploymentToWorkloadStream struct {
-	pb.LogService_StreamDeploymentLogsServer
-}
-
-func (a *deploymentToWorkloadStream) Send(resp *pb.StreamWorkloadLogsResponse) error {
-	return a.LogService_StreamDeploymentLogsServer.Send(&pb.StreamDeploymentLogsResponse{Line: resp.Line})
+	return connect.NewResponse(&pb.GetDeploymentLogsResponse{
+		Lines:         resp.Msg.Lines,
+		NextPageToken: resp.Msg.NextPageToken,
+		PrevPageToken: resp.Msg.PrevPageToken,
+	}), nil
 }
 
 // StreamDeploymentLogs tails all active pods for a deployment and streams
 // merged log lines in real time.
 //
 // Deprecated: superseded by StreamWorkloadLogs.
-func (s *LogService) StreamDeploymentLogs(req *pb.StreamDeploymentLogsRequest, stream pb.LogService_StreamDeploymentLogsServer) error {
+func (s *LogService) StreamDeploymentLogs(ctx context.Context, r *connect.Request[pb.StreamDeploymentLogsRequest], stream *connect.ServerStream[pb.StreamDeploymentLogsResponse]) error {
+	req := r.Msg
 	if req.Namespace == "" || req.Deployment == "" {
-		return status.Error(codes.InvalidArgument, "namespace and deployment are required")
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("namespace and deployment are required"))
 	}
-	err := s.StreamWorkloadLogs(&pb.StreamWorkloadLogsRequest{
+	err := s.streamWorkloadLines(ctx, &pb.StreamWorkloadLogsRequest{
 		Namespace: req.Namespace,
 		Kind:      "Deployment",
 		Name:      req.Deployment,
-	}, &deploymentToWorkloadStream{stream})
+	}, func(line string) error {
+		return stream.Send(&pb.StreamDeploymentLogsResponse{Line: line})
+	})
 	if err != nil {
-		if s, ok := status.FromError(err); ok && s.Code() == codes.NotFound {
-			return status.Errorf(codes.NotFound, "no logs found for deployment %s/%s", req.Namespace, req.Deployment)
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			return connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for deployment %s/%s", req.Namespace, req.Deployment))
 		}
 		return err
 	}
@@ -174,18 +168,18 @@ type nanosToken struct {
 func decodeNanosToken(token string) (nanosToken, error) {
 	b, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
-		return nanosToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+		return nanosToken{}, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
 	}
 	switch len(b) {
 	case 8:
 		return nanosToken{nanos: int64(binary.BigEndian.Uint64(b)), backward: false}, nil
 	case 9:
 		if b[0] != 0x01 {
-			return nanosToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+			return nanosToken{}, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
 		}
 		return nanosToken{nanos: int64(binary.BigEndian.Uint64(b[1:])), backward: true}, nil
 	default:
-		return nanosToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+		return nanosToken{}, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
 	}
 }
 

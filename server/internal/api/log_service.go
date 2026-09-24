@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,13 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/lsparey/simple-logging/internal/indexes"
 	"github.com/lsparey/simple-logging/internal/storage"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
+	"github.com/lsparey/simple-logging/gen/simplelog/v1/simplelogv1connect"
 )
 
 const (
@@ -45,9 +45,10 @@ type JsonLoggingChecker interface {
 	IsJsonLogging(namespace, pod string) bool
 }
 
-// LogService implements the generated pb.LogServiceServer interface.
+// LogService implements the generated simplelogv1connect.LogServiceHandler
+// interface.
 type LogService struct {
-	pb.UnimplementedLogServiceServer
+	simplelogv1connect.UnimplementedLogServiceHandler
 	logsRoot    string
 	active      ActiveChecker
 	jsonLogging JsonLoggingChecker
@@ -78,10 +79,10 @@ func NewLogServiceWithIndexes(logsRoot string, active ActiveChecker, jsonLogging
 }
 
 // ListNamespaces returns the names of all namespace subdirectories under logsRoot.
-func (s *LogService) ListNamespaces(_ context.Context, _ *pb.ListNamespacesRequest) (*pb.ListNamespacesResponse, error) {
+func (s *LogService) ListNamespaces(_ context.Context, _ *connect.Request[pb.ListNamespacesRequest]) (*connect.Response[pb.ListNamespacesResponse], error) {
 	entries, err := os.ReadDir(s.logsRoot)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read logs root: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read logs root: %v", err))
 	}
 
 	var namespaces []string
@@ -91,25 +92,26 @@ func (s *LogService) ListNamespaces(_ context.Context, _ *pb.ListNamespacesReque
 		}
 	}
 
-	return &pb.ListNamespacesResponse{Namespaces: namespaces}, nil
+	return connect.NewResponse(&pb.ListNamespacesResponse{Namespaces: namespaces}), nil
 }
 
 // ListPods returns metadata for every pod with a log directory in the given namespace.
-func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.ListPodsResponse, error) {
+func (s *LogService) ListPods(_ context.Context, r *connect.Request[pb.ListPodsRequest]) (*connect.Response[pb.ListPodsResponse], error) {
+	req := r.Msg
 	if req.Namespace == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace is required")
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace is required"))
 	}
 
 	podNames, err := storage.ListPodDirs(s.logsRoot, req.Namespace)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read namespace dir: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read namespace dir: %v", err))
 	}
 
 	pods := make([]*pb.PodInfo, 0, len(podNames))
 	for _, podName := range podNames {
 		containers, err := storage.ListContainers(s.logsRoot, req.Namespace, podName)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "read pod dir %q: %v", podName, err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read pod dir %q: %v", podName, err))
 		}
 		pods = append(pods, &pb.PodInfo{
 			Name:        podName,
@@ -120,17 +122,17 @@ func (s *LogService) ListPods(_ context.Context, req *pb.ListPodsRequest) (*pb.L
 		})
 	}
 
-	return &pb.ListPodsResponse{Pods: pods}, nil
+	return connect.NewResponse(&pb.ListPodsResponse{Pods: pods}), nil
 }
 
 // ListLogFiles returns metadata summarising the largest persisted pod log
 // segments and index files, up to maxListedLogFiles, along with totals across
 // all of them. Log segments are grouped by (namespace, pod, container),
 // since a container's history is now many daily files rather than one.
-func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) (*pb.ListLogFilesResponse, error) {
+func (s *LogService) ListLogFiles(_ context.Context, _ *connect.Request[pb.ListLogFilesRequest]) (*connect.Response[pb.ListLogFilesResponse], error) {
 	namespaceEntries, err := os.ReadDir(s.logsRoot)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "read logs root: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read logs root: %v", err))
 	}
 
 	type logSummary struct {
@@ -151,18 +153,18 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 
 		pods, err := storage.ListPodDirs(s.logsRoot, namespace)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "read namespace dir %q: %v", namespace, err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read namespace dir %q: %v", namespace, err))
 		}
 		for _, pod := range pods {
 			containers, err := storage.ListContainers(s.logsRoot, namespace, pod)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, "read pod dir %q: %v", pod, err)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read pod dir %q: %v", pod, err))
 			}
 			for _, container := range containers {
 				containerDir := storage.ContainerDir(s.logsRoot, namespace, pod, container)
 				entries, err := os.ReadDir(containerDir)
 				if err != nil {
-					return nil, status.Errorf(codes.Internal, "read container dir %q: %v", containerDir, err)
+					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read container dir %q: %v", containerDir, err))
 				}
 				for _, entry := range entries {
 					if entry.IsDir() {
@@ -173,7 +175,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 					}
 					info, err := entry.Info()
 					if err != nil {
-						return nil, status.Errorf(codes.Internal, "stat log segment %q: %v", entry.Name(), err)
+						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("stat log segment %q: %v", entry.Name(), err))
 					}
 					key := namespace + "/" + pod + "/" + container
 					summary := logSummaries[key]
@@ -251,7 +253,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
-		return nil, status.Errorf(codes.Internal, "read index files: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read index files: %v", err))
 	}
 	for subject, summary := range indexSummaries {
 		fileLabel := fmt.Sprintf("%d files", summary.fileCount)
@@ -280,10 +282,10 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 
 	diskUsedPercent, err := storage.DiskUsedPercent(s.logsRoot)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "check disk usage: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("check disk usage: %v", err))
 	}
 
-	return &pb.ListLogFilesResponse{
+	return connect.NewResponse(&pb.ListLogFilesResponse{
 		Files:                files,
 		TotalSizeBytes:       totalSize,
 		TotalLogFileCount:    totalLogFileCount,
@@ -291,7 +293,7 @@ func (s *LogService) ListLogFiles(_ context.Context, _ *pb.ListLogFilesRequest) 
 		DiskUsedPercent:      int32(diskUsedPercent),
 		DiskHighWaterPercent: int32(s.diskHighWaterPercent),
 		DiskLowWaterPercent:  int32(s.diskLowWaterPercent),
-	}, nil
+	}), nil
 }
 
 func indexFileGroup(relativePath string) string {
@@ -395,11 +397,11 @@ func encodeLogsPageToken(t logsPageToken) string {
 func decodeLogsPageToken(token string) (logsPageToken, error) {
 	raw, err := base64.StdEncoding.DecodeString(token)
 	if err != nil {
-		return logsPageToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+		return logsPageToken{}, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
 	}
 	var t logsPageToken
 	if err := json.Unmarshal(raw, &t); err != nil {
-		return logsPageToken{}, status.Error(codes.InvalidArgument, "invalid page_token")
+		return logsPageToken{}, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
 	}
 	return t, nil
 }
@@ -567,9 +569,10 @@ func findChunkPageStartBefore(chunks []logChunk, chunkIdx int, offset int64, n i
 // GetLogs returns a paginated, optionally time-filtered page of log lines for
 // a specific pod, across all of its stored log segments. Pagination is
 // cursor-based: the cursor identifies a segment and a byte offset within it.
-func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.GetLogsResponse, error) {
+func (s *LogService) GetLogs(_ context.Context, r *connect.Request[pb.GetLogsRequest]) (*connect.Response[pb.GetLogsResponse], error) {
+	req := r.Msg
 	if req.Namespace == "" || req.Pod == "" {
-		return nil, status.Error(codes.InvalidArgument, "namespace and pod are required")
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("namespace and pod are required"))
 	}
 
 	pageSize := int(req.PageSize)
@@ -582,10 +585,10 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 
 	chunks, err := podChunks(s.logsRoot, req.Namespace, req.Pod)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "list log segments: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list log segments: %v", err))
 	}
 	if len(chunks) == 0 {
-		return nil, status.Errorf(codes.NotFound, "no logs found for pod %s/%s", req.Namespace, req.Pod)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for pod %s/%s", req.Namespace, req.Pod))
 	}
 
 	var startChunk int
@@ -595,11 +598,11 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 		lastIdx := len(chunks) - 1
 		info, statErr := os.Stat(chunks[lastIdx].path)
 		if statErr != nil {
-			return nil, status.Errorf(codes.Internal, "stat log segment: %v", statErr)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("stat log segment: %v", statErr))
 		}
 		startChunk, startOffset, err = findChunkPageStartBefore(chunks, lastIdx, info.Size(), pageSize)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "scan log segments: %v", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scan log segments: %v", err))
 		}
 	case req.PageToken != "":
 		tok, terr := decodeLogsPageToken(req.PageToken)
@@ -608,14 +611,14 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 		}
 		idx := findChunkIndex(chunks, tok.Container, tok.Segment)
 		if idx < 0 {
-			return nil, status.Error(codes.InvalidArgument, "invalid page_token")
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
 		}
 		startChunk, startOffset = idx, tok.Offset
 	}
 
 	reader, err := openChunkReader(chunks, startChunk, startOffset)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "open log segment: %v", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open log segment: %v", err))
 	}
 	defer reader.close()
 
@@ -632,7 +635,7 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 	for len(lines) < pageSize {
 		line, ok, readErr := reader.readLine()
 		if readErr != nil {
-			return nil, status.Errorf(codes.Internal, "read log segment: %v", readErr)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read log segment: %v", readErr))
 		}
 		if !ok {
 			break
@@ -658,7 +661,7 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 	if startChunk > 0 || startOffset > 0 {
 		prevChunk, prevOffset, perr := findChunkPageStartBefore(chunks, startChunk, startOffset, pageSize)
 		if perr != nil {
-			return nil, status.Errorf(codes.Internal, "scan log segments: %v", perr)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("scan log segments: %v", perr))
 		}
 		resp.PrevPageToken = encodeLogsPageToken(logsPageToken{
 			Container: chunks[prevChunk].container,
@@ -667,7 +670,7 @@ func (s *LogService) GetLogs(_ context.Context, req *pb.GetLogsRequest) (*pb.Get
 		})
 	}
 
-	return resp, nil
+	return connect.NewResponse(resp), nil
 }
 
 // matchesTimeRange returns true when the log line's RFC3339 timestamp (the
@@ -778,19 +781,20 @@ func tailLatestSegment(ctx context.Context, logsRoot, namespace, pod string, onL
 // they arrive, switching segments across a UTC day rollover. It starts from
 // the current end of the segment so only lines written after the call begins
 // are delivered. The stream runs until the client cancels the context.
-func (s *LogService) StreamLogs(req *pb.StreamLogsRequest, stream pb.LogService_StreamLogsServer) error {
+func (s *LogService) StreamLogs(ctx context.Context, r *connect.Request[pb.StreamLogsRequest], stream *connect.ServerStream[pb.StreamLogsResponse]) error {
+	req := r.Msg
 	if req.Namespace == "" || req.Pod == "" {
-		return status.Error(codes.InvalidArgument, "namespace and pod are required")
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("namespace and pod are required"))
 	}
 
-	err := tailLatestSegment(stream.Context(), s.logsRoot, req.Namespace, req.Pod, func(line string) error {
+	err := tailLatestSegment(ctx, s.logsRoot, req.Namespace, req.Pod, func(line string) error {
 		return stream.Send(&pb.StreamLogsResponse{Line: line})
 	})
 	if err != nil {
 		if os.IsNotExist(err) {
-			return status.Errorf(codes.NotFound, "no logs found for pod %s/%s", req.Namespace, req.Pod)
+			return connect.NewError(connect.CodeNotFound, fmt.Errorf("no logs found for pod %s/%s", req.Namespace, req.Pod))
 		}
-		return status.Errorf(codes.Internal, "read log segment: %v", err)
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("read log segment: %v", err))
 	}
 	return nil
 }

@@ -1,4 +1,10 @@
-.PHONY: test test-go test-unit test-e2e install-hooks
+.PHONY: build test test-go test-unit test-e2e install-hooks
+
+## build: build the frontend and a server binary with it embedded, into server/bin/
+build:
+	cd frontend && npm run build
+	rm -rf server/internal/ui/dist/* && cp -r frontend/dist/. server/internal/ui/dist/
+	$(MAKE) -C server build
 
 ## test: run all tests (Go, frontend unit, and Playwright E2E)
 test: test-go test-unit test-e2e

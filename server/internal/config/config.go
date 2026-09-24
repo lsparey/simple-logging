@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -12,8 +13,19 @@ type Config struct {
 	// LogsRoot is the root directory where pod log files are stored (PVC mount path).
 	LogsRoot string
 
-	// GRPCWebPort is the port the gRPC-Web HTTP server listens on.
-	GRPCWebPort int
+	// Port is the single HTTP port serving the UI, the API, /download,
+	// /healthz and /readyz.
+	Port int
+
+	// APIURL is the API base URL handed to the frontend via /config.js.
+	// Empty (the default) means the frontend's own origin, which is right
+	// whenever the UI is served by this binary.
+	APIURL string
+
+	// CORSAllowedOrigins lists the browser origins allowed to call the API
+	// cross-origin, parsed from the comma-separated CORS_ALLOWED_ORIGINS.
+	// Empty (the default) disables CORS.
+	CORSAllowedOrigins []string
 
 	// RetentionDays is how many days a log file is kept after its last write.
 	RetentionDays int
@@ -23,10 +35,6 @@ type Config struct {
 
 	// LogLevel controls the application's structured log verbosity.
 	LogLevel string
-
-	// RESTDebugEnabled enables plain JSON REST endpoints at /debug/* for
-	// testing purposes. Defaults to false; set REST_DEBUG=true to enable.
-	RESTDebugEnabled bool
 
 	// MigrateLegacy controls whether the v0.11 single-file-per-pod log layout
 	// is migrated to the segmented layout at startup. Defaults to true; set
@@ -91,7 +99,8 @@ func (c *Config) CollectionMode() string {
 func Load() (*Config, error) {
 	cfg := &Config{
 		LogsRoot:               getEnv("LOGS_ROOT", "/var/pod-logs"),
-		GRPCWebPort:            8080,
+		Port:                   8080,
+		APIURL:                 os.Getenv("API_URL"),
 		RetentionDays:          30,
 		RetentionCheckInterval: 24 * time.Hour,
 		LogLevel:               getEnv("LOG_LEVEL", "info"),
@@ -100,12 +109,18 @@ func Load() (*Config, error) {
 		DiskLowWaterPercent:    80,
 	}
 
-	if raw := os.Getenv("GRPC_WEB_PORT"); raw != "" {
+	if raw := os.Getenv("PORT"); raw != "" {
 		port, err := strconv.Atoi(raw)
 		if err != nil || port < 1 || port > 65535 {
-			return nil, fmt.Errorf("invalid GRPC_WEB_PORT %q: must be an integer between 1 and 65535", raw)
+			return nil, fmt.Errorf("invalid PORT %q: must be an integer between 1 and 65535", raw)
 		}
-		cfg.GRPCWebPort = port
+		cfg.Port = port
+	}
+
+	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		if origin = strings.TrimSpace(origin); origin != "" {
+			cfg.CORSAllowedOrigins = append(cfg.CORSAllowedOrigins, origin)
+		}
 	}
 
 	if raw := os.Getenv("RETENTION_DAYS"); raw != "" {
@@ -122,10 +137,6 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid RETENTION_CHECK_INTERVAL %q: must be a positive duration (e.g. 24h)", raw)
 		}
 		cfg.RetentionCheckInterval = d
-	}
-
-	if raw := os.Getenv("REST_DEBUG"); raw == "true" || raw == "1" {
-		cfg.RESTDebugEnabled = true
 	}
 
 	if raw := os.Getenv("MIGRATE_LEGACY"); raw == "false" || raw == "0" {
