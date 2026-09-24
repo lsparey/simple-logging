@@ -89,6 +89,19 @@ describe('PodSidebar', () => {
     expect(screen.getByText('kube-system')).toBeInTheDocument();
   });
 
+  it('lists the default namespace first, ahead of alphabetically earlier ones', () => {
+    mockUseNamespaces.mockReturnValue({ namespaces: ['cert-manager', 'default', 'kube-system'], loading: false, error: null });
+    mockUseWorkloadsByNamespace.mockReturnValue({
+      workloadsByNamespace: { 'cert-manager': [{ ...COREDNS, namespace: 'cert-manager' }], default: [WEB_APP], 'kube-system': [COREDNS] },
+      loading: false,
+      error: null,
+    });
+    render(<PodSidebar />, { wrapper: Wrapper });
+    const labels = ['cert-manager', 'default', 'kube-system'].map((ns) => screen.getByText(ns));
+    expect(labels[1].compareDocumentPosition(labels[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(labels[0].compareDocumentPosition(labels[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('hides a namespace with no workloads at all', () => {
     mockUseNamespaces.mockReturnValue({ namespaces: ['default', 'empty-ns'], loading: false, error: null });
     mockUseWorkloadsByNamespace.mockReturnValue({

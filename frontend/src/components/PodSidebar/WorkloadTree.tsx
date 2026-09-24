@@ -39,7 +39,10 @@ export default function WorkloadTree({ onLeafSelect }: Props) {
     const pods = (podsByNamespace[ns] ?? []).map(podAsSidebarWorkload);
     workloadsByNamespace[ns] = [...grouped, ...pods];
   }
-  const namespacesWithItems = namespaces.filter((ns) => (workloadsByNamespace[ns]?.length ?? 0) > 0);
+  // `default` is the app's home namespace (the root URL opens it), so it leads the list.
+  const namespacesWithItems = namespaces
+    .filter((ns) => (workloadsByNamespace[ns]?.length ?? 0) > 0)
+    .sort((a, b) => Number(b === 'default') - Number(a === 'default'));
 
   const loading = namespacesLoading || groupedLoading || podsLoading;
   const error = namespacesError ?? groupedError ?? podsError;

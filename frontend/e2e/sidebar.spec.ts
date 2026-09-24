@@ -5,15 +5,18 @@ test.describe('PodSidebar', () => {
     await page.goto('/');
   });
 
-  test('shows Indexes and every namespace at the top level, with nothing expanded yet', async ({ page }) => {
+  test('the root URL lands on /ns/default with default listed first and pre-expanded', async ({ page }) => {
+    await expect(page).toHaveURL(/\/ns\/default$/);
     await expect(page.getByText('Indexes')).toBeVisible();
-    await expect(page.getByText('default')).toBeVisible();
     await expect(page.getByText('kube-system')).toBeVisible();
-    await expect(page.getByText('Deployments')).not.toBeVisible();
+    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('Deployments')).toBeVisible();
+    const defaultBox = await page.getByText('default', { exact: true }).boundingBox();
+    const kubeSystemBox = await page.getByText('kube-system', { exact: true }).boundingBox();
+    expect(defaultBox!.y).toBeLessThan(kubeSystemBox!.y);
   });
 
-  test('expanding a namespace shows only the workload kinds present in it', async ({ page }) => {
-    await page.getByText('default').click();
+  test('the default namespace shows only the workload kinds present in it', async ({ page }) => {
     await expect(page.getByText('Deployments')).toBeVisible();
     await expect(page.getByText('StatefulSets')).toBeVisible();
     await expect(page.getByText('Pods')).toBeVisible();
@@ -23,14 +26,12 @@ test.describe('PodSidebar', () => {
   });
 
   test('expanding a kind shows its workloads', async ({ page }) => {
-    await page.getByText('default').click();
     await page.getByText('Deployments').click();
     await expect(page.getByText('web-app')).toBeVisible();
     await expect(page.getByText('api-server')).toBeVisible();
   });
 
   test('the Pods kind lists every pod, including ones owned by a Deployment', async ({ page }) => {
-    await page.getByText('default').click();
     await page.getByText('Pods').click();
     // standalone-pod has no owner; web-app-6d8c7f is owned by the web-app
     // Deployment. Both are individual pods, so both show up here.
@@ -39,7 +40,6 @@ test.describe('PodSidebar', () => {
   });
 
   test('collapsing a namespace hides its kind rows', async ({ page }) => {
-    await page.getByText('default').click();
     await expect(page.getByText('Deployments')).toBeVisible();
 
     await page.getByText('default').click();
@@ -47,7 +47,6 @@ test.describe('PodSidebar', () => {
   });
 
   test('selecting a Deployment-kind workload shows the log panel toolbar header', async ({ page }) => {
-    await page.getByText('default').click();
     await page.getByText('Deployments').click();
     await page.getByText('web-app').first().click();
 
@@ -56,7 +55,6 @@ test.describe('PodSidebar', () => {
   });
 
   test('selecting a Deployment-owned pod under Pods scopes the log view to that pod alone', async ({ page }) => {
-    await page.getByText('default').click();
     await page.getByText('Pods').click();
     await page.getByText('web-app-6d8c7f').click();
 
@@ -99,8 +97,7 @@ test.describe('MobileSidebarNav', () => {
 
     await page.getByRole('button', { name: 'Workloads' }).click();
     await expect(page.getByText('default')).toBeVisible();
-
-    await page.getByText('default').click();
+    // default is pre-expanded, since the root URL lands on /ns/default.
     await expect(page.getByText('Deployments')).toBeVisible();
 
     await page.getByText('Deployments').click();
