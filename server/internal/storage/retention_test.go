@@ -187,3 +187,20 @@ func TestRetentionManager_KeepsRecentLegacyFiles(t *testing.T) {
 		t.Errorf("expected recent legacy log file to be kept after sweep: %v", err)
 	}
 }
+
+func TestNextDailySweep(t *testing.T) {
+	for _, tc := range []struct{ now, want string }{
+		{"2026-09-24T12:00:00Z", "2026-09-25T00:05:00Z"},
+		{"2026-09-24T00:04:59Z", "2026-09-24T00:05:00Z"},
+		{"2026-09-24T00:05:00Z", "2026-09-25T00:05:00Z"},
+		{"2026-12-31T23:59:00Z", "2027-01-01T00:05:00Z"},
+		// Non-UTC input is still scheduled against UTC midnight.
+		{"2026-09-24T01:00:00+02:00", "2026-09-24T00:05:00Z"},
+	} {
+		now, _ := time.Parse(time.RFC3339, tc.now)
+		want, _ := time.Parse(time.RFC3339, tc.want)
+		if got := nextDailySweep(now); !got.Equal(want) {
+			t.Errorf("nextDailySweep(%s) = %s, want %s", tc.now, got.UTC().Format(time.RFC3339), tc.want)
+		}
+	}
+}

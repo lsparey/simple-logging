@@ -276,7 +276,9 @@ or with `grpcurl -plaintext -proto proto/simplelog/v1/log_service.proto localhos
 
 ## Retention
 
-`config.retentionDays` (default 30) controls how long log lines are kept. Logs are stored as one file per container per UTC day; retention deletes any day's file once it is strictly older than `retentionDays`, independent of whether the pod is still logging. Worst-case overshoot is under 24 hours (a day's file isn't deleted until the day itself has fully expired), which is the normal reading of "retain for `retentionDays`".
+`config.retentionDays` (default 30) controls how long log lines are kept. Logs are stored as one file per container per UTC day; retention deletes any day's file once it is strictly older than `retentionDays`, independent of whether the pod is still logging. Retention sweeps at 00:05 UTC every day (as well as at startup and every `config.retentionCheckInterval`), so an expired day is deleted within five minutes of expiring.
+
+The guarantee is therefore: no log line is kept for more than `retentionDays` + 1 day (plus those five minutes). A line written just after midnight UTC is kept for the full extra day, because its whole day's file expires together; a line written just before midnight is kept for barely more than `retentionDays`.
 
 Upgrading from a v0.11 install migrates existing `<namespace>/<pod>.log` files into this layout automatically on first startup (see [Upgrading](#upgrading)); set `MIGRATE_LEGACY=false` to opt out and leave legacy files in place, in which case they're swept by their file modification time instead (matching the old, less precise behaviour) rather than participating in the day-based cutoff.
 

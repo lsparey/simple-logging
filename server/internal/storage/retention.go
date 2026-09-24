@@ -46,8 +46,17 @@ func NewRetentionManager(logsRoot string, retentionDays int, checkInterval time.
 	}
 }
 
-// Run starts the retention loop. It performs an initial sweep immediately, then
-// repeats on every checkInterval tick. It blocks until ctx is cancelled.
+// dailySweepDelay is how long after each UTC midnight the extra daily sweep
+// runs: late enough that the previous day's segments are closed, early
+// enough that the day that just expired is deleted promptly.
+const dailySweepDelay = 5 * time.Minute
+
+// Run starts the retention loop. It performs an initial sweep immediately,
+// then repeats on every checkInterval tick and also shortly after every UTC
+// midnight. The midnight sweep is what bounds the retention overshoot: a
+// day's segment expires at a midnight, and without it a 24h interval that
+// happened to start just after midnight would leave the segment in place for
+// almost another day. It blocks until ctx is cancelled.
 func (r *RetentionManager) Run(ctx context.Context) {
 	r.log.Info("retention manager starting",
 		zap.Int("retention_days", r.retentionDays),
@@ -58,16 +67,32 @@ func (r *RetentionManager) Run(ctx context.Context) {
 
 	ticker := time.NewTicker(r.checkInterval)
 	defer ticker.Stop()
+	daily := time.NewTimer(time.Until(nextDailySweep(time.Now())))
+	defer daily.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
 			r.sweep()
+		case <-daily.C:
+			r.sweep()
+			daily.Reset(time.Until(nextDailySweep(time.Now())))
 		case <-ctx.Done():
 			r.log.Info("retention manager stopped")
 			return
 		}
 	}
+}
+
+// nextDailySweep returns the first UTC midnight plus dailySweepDelay that is
+// after now.
+func nextDailySweep(now time.Time) time.Time {
+	now = now.UTC()
+	next := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Add(dailySweepDelay)
+	if !next.After(now) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next
 }
 
 // sweep deletes expired log segments (and any expired legacy log files),
