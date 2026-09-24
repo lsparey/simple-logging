@@ -1,0 +1,5 @@
+# ct install: metrics served at /metrics, with persistence off.
+metrics:
+  enabled: true
+persistence:
+  enabled: false

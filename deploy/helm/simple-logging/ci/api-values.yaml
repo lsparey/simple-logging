@@ -1,0 +1,3 @@
+# ct install: api collection mode (no host paths mounted).
+config:
+  logCollectionMode: api

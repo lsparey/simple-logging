@@ -195,7 +195,7 @@ function renderJsonHighlighted(pretty: string, darkMode: boolean): ReactNode[] {
 
   if (lastIndex < pretty.length) {
     nodes.push(
-      <span key={key++} style={{ color: JSON_SYNTAX_COLOURS.punctuation[mode] }}>
+      <span key={key} style={{ color: JSON_SYNTAX_COLOURS.punctuation[mode] }}>
         {pretty.slice(lastIndex)}
       </span>,
     );

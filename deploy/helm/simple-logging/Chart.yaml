@@ -2,5 +2,13 @@ apiVersion: v2
 name: simple-logging
 description: Collects Kubernetes pod logs, stores them on a PVC, and serves the web UI and the log API (gRPC, gRPC-Web and Connect) from a single non-root binary on one port.
 type: application
+home: https://github.com/lsparey/simple-logging
+sources:
+  - https://github.com/lsparey/simple-logging
+icon: https://raw.githubusercontent.com/lsparey/simple-logging/main/frontend/public/logo.svg
+keywords:
+  - logging
+  - logs
+  - kubernetes
 version: 0.14.1
 appVersion: "0.14.1"

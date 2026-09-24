@@ -1,0 +1,3 @@
+# ct install: the default hybrid collection mode.
+config:
+  logCollectionMode: hybrid

@@ -7,6 +7,9 @@ on:
       - 'frontend/**'
       - 'proto/**'
       - 'deploy/**'
+      - 'scripts/**'
+      - 'Dockerfile'
+      - 'ct.yaml'
       - '.github/workflows/test.yml'
 
 jobs:
@@ -21,8 +24,14 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2
+
       - name: Lint chart
         run: helm lint deploy/helm/simple-logging
+
+      - name: Lint chart (chart-testing)
+        run: ct lint --config ct.yaml --all
 
       - name: Template chart (default values)
         run: helm template simple-logging deploy/helm/simple-logging
@@ -49,7 +58,7 @@ jobs:
             --set auth.basic.existingSecret=simple-logging-htpasswd
 
   backend:
-    name: Go tests
+    name: Go lint & tests
     runs-on: ubuntu-latest
 
     steps:
@@ -62,12 +71,18 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14
+          working-directory: server
+
       - name: Run tests
         working-directory: server
-        run: go test ./... -timeout 120s
+        run: go test -race ./... -timeout 180s
 
   frontend-unit:
-    name: Frontend unit tests
+    name: Frontend lint & unit tests
     runs-on: ubuntu-latest
 
     steps:
@@ -84,6 +99,16 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint -- --max-warnings 0
+
+      - name: Typecheck (app and e2e)
+        working-directory: frontend
+        run: |
+          npx tsc -b
+          npx tsc -p e2e --noEmit
 
       - name: Run unit tests
         working-directory: frontend
@@ -123,3 +148,59 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 14
+
+  image:
+    name: Image scan, chart install & smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: simple-logging:ci
+          build-args: |
+            VERSION=ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: simple-logging:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1
+        with:
+          cluster_name: ci
+
+      - name: Load image into kind
+        run: kind load docker-image simple-logging:ci --name ci
+
+      - name: Install chart (chart-testing, every ci/*-values.yaml)
+        run: |
+          ct install --config ct.yaml --all \
+            --helm-extra-set-args "--set=image.repository=simple-logging --set=image.tag=ci --set=image.pullPolicy=Never"
+
+      - name: Smoke test (hybrid mode)
+        run: IMAGE=simple-logging:ci scripts/smoke-test.sh
+
+      - name: Smoke test (api mode)
+        run: IMAGE=simple-logging:ci scripts/smoke-test.sh --set config.logCollectionMode=api

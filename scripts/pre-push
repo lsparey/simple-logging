@@ -6,6 +6,9 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 
+echo "==> Running linters..."
+make -C "$ROOT" lint
+
 echo "==> Running Go tests..."
 (cd "$ROOT/server" && go test ./... -timeout 120s)
 

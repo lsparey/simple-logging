@@ -1,0 +1,26 @@
+version: "2"
+
+linters:
+  # The standard set (errcheck, govet, ineffassign, staticcheck, unused).
+  default: standard
+  settings:
+    errcheck:
+      # Close errors are only meaningful for files being written, and those
+      # check Close explicitly (see indexes.Manager.saveLocked). Deferred
+      # closes of read-only files, network streams and watchers can't fail
+      # in a way the caller could act on.
+      exclude-functions:
+        - (*os.File).Close
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*github.com/fsnotify/fsnotify.Watcher).Close
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # Tests set up fixtures with writes whose errors would fail the test a
+      # line later anyway.
+      - path: _test\.go
+        linters: [errcheck]
+    paths:
+      - gen/
