@@ -5,7 +5,7 @@ ARG VERSION=dev
 # Go cross-compiles. Only the final stage is per-platform, and it only copies
 # the binary, so multi-arch builds never execute anything under QEMU (where
 # `npm ci` for arm64 took minutes and sometimes hung indefinitely).
-FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend-build
+FROM --platform=$BUILDPLATFORM node:25-alpine AS frontend-build
 ARG VERSION
 WORKDIR /app
 COPY frontend/package*.json ./
