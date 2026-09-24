@@ -52,8 +52,17 @@ stream_rpc() {
     # shellcheck disable=SC2059 # the inner printf builds the \x escapes
     printf "$(printf '\\x%02x\\x%02x\\x%02x\\x%02x' $((n >> 24 & 255)) $((n >> 16 & 255)) $((n >> 8 & 255)) $((n & 255)))"
     printf '%s' "$body"
-  } | curl -sf -X POST -H 'Content-Type: application/connect+json' --data-binary @- \
+  } | curl -sf ${STREAM_MAX_TIME:+--max-time "$STREAM_MAX_TIME"} \
+    -X POST -H 'Content-Type: application/connect+json' --data-binary @- \
     "http://localhost:$LOCAL_PORT/simplelog.v1.LogService/$1"
+}
+
+# stream_rpc_for <seconds> <rpc> <body> reads a stream that doesn't end on
+# its own (a live tail) for that long, printing what arrived.
+stream_rpc_for() {
+  local seconds=$1
+  shift
+  STREAM_MAX_TIME=$seconds stream_rpc "$@" || true # curl exits 28 on the timeout
 }
 
 # retry <seconds> <description> <command...> runs command until it succeeds.
@@ -78,10 +87,23 @@ helm install "$RELEASE" "$ROOT/deploy/helm/simple-logging" \
   --wait --timeout 3m \
   "$@"
 
-echo "==> Starting a pod that logs $MARKER"
+echo "==> Starting a pod with a sidecar, both logging $MARKER"
 kubectl create namespace "$LOGGER_NAMESPACE"
-kubectl -n "$LOGGER_NAMESPACE" run logger --image=busybox:1.37 --restart=Never -- \
-  sh -c "i=0; while true; do i=\$((i+1)); echo \"$MARKER line \$i\"; sleep 1; done"
+kubectl -n "$LOGGER_NAMESPACE" apply -f - <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: logger
+spec:
+  restartPolicy: Never
+  containers:
+    - name: app
+      image: busybox:1.37
+      command: [sh, -c, 'i=0; while true; do i=\$((i+1)); echo "$MARKER app line \$i"; sleep 1; done']
+    - name: sidecar
+      image: busybox:1.37
+      command: [sh, -c, 'i=0; while true; do i=\$((i+1)); echo "$MARKER sidecar line \$i"; sleep 1; done']
+YAML
 kubectl -n "$LOGGER_NAMESPACE" wait --for=condition=Ready pod/logger --timeout=2m
 
 kubectl -n "$NAMESPACE" port-forward "svc/$RELEASE-simple-logging" "$LOCAL_PORT:80" >/dev/null 2>&1 &
@@ -93,10 +115,27 @@ curl -sf "http://localhost:$LOCAL_PORT/" | grep -q '<div id="root">'
 
 has_logger_lines() {
   rpc GetWorkloadLogs "{\"namespace\":\"$LOGGER_NAMESPACE\",\"kind\":\"Pod\",\"name\":\"logger\",\"loadLastPage\":true}" |
-    jq -e --arg m "$MARKER" '[.lines[]? | select(contains($m))] | length >= 3' >/dev/null
+    jq -e --arg m "$MARKER" '
+      [.lines[]? | select(contains($m + " app"))] | length >= 3
+    ' >/dev/null &&
+  rpc GetWorkloadLogs "{\"namespace\":\"$LOGGER_NAMESPACE\",\"kind\":\"Pod\",\"name\":\"logger\",\"loadLastPage\":true}" |
+    jq -e --arg m "$MARKER" '[.lines[]? | select(contains($m + " sidecar"))] | length >= 3' >/dev/null
 }
-echo "==> Waiting for the pod's lines to be collected"
+echo "==> Waiting for both containers' lines to be collected"
 retry 90 "the logger pod's lines via GetWorkloadLogs" has_logger_lines
+
+echo "==> Checking GetLogs merges the containers in timestamp order"
+rpc GetLogs "{\"namespace\":\"$LOGGER_NAMESPACE\",\"pod\":\"logger\",\"loadLastPage\":true}" |
+  jq -e '
+    # RFC3339Nano trims trailing zeros, so pad the fraction before comparing.
+    def sortable: capture("^(?<s>[^.Z]+)(\\.(?<f>[0-9]+))?Z$") | .s + "." + ((.f // "") + "000000000")[0:9];
+    [.lines[] | split(" ")[0] | sortable] as $ts | ($ts == ($ts | sort)) and ([.lines[] | select(contains("/logger/sidecar]"))] | length > 0) and ([.lines[] | select(contains("/logger/app]"))] | length > 0)' >/dev/null
+
+echo "==> Checking a live tail follows both containers"
+# The stream never ends by itself, so read it for a few seconds.
+tail_out="$(stream_rpc_for 6 StreamLogs "{\"namespace\":\"$LOGGER_NAMESPACE\",\"pod\":\"logger\"}")"
+grep -q "$MARKER app line" <<<"$tail_out"
+grep -q "$MARKER sidecar line" <<<"$tail_out"
 
 echo "==> Checking the namespace and pod are listed"
 rpc ListNamespaces '{}' | jq -e --arg ns "$LOGGER_NAMESPACE" '.namespaces | index($ns) != null' >/dev/null
