@@ -8,10 +8,22 @@ interface StatsState {
   refresh: () => void;
 }
 
-/** The server's self-metrics (GetStats), fetched once and on refresh. */
+/** How often the dashboard re-reads the collection counters on its own. */
+export const STATS_POLL_INTERVAL_MS = 30_000;
+
+/**
+ * The server's self-metrics (GetStats): fetched on mount, every
+ * STATS_POLL_INTERVAL_MS while mounted, and on refresh, so a dropped-lines
+ * warning appears without reloading the page.
+ */
 export function useStats(): StatsState {
   const [stats, setStats] = useState<GetStatsResponse | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setRefreshKey((key) => key + 1), STATS_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

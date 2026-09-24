@@ -94,3 +94,16 @@ test.describe('LogPanel — dark mode', () => {
     await expect(toggle).toBeVisible();
   });
 });
+
+test.describe('LogPanel — namespace-wide live tail', () => {
+  test('the namespace page can tail every pod in it, and stop', async ({ page }) => {
+    await page.goto('/ns/default');
+    await page.getByRole('button', { name: 'Live tail every pod in default' }).click();
+
+    await expect(page.getByText('default · all pods')).toBeVisible();
+    await expect(page.getByText('live workload line 1 from every pod in default')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Stop' }).click();
+    await expect(page.getByRole('button', { name: 'Live tail every pod in default' })).toBeVisible();
+  });
+});

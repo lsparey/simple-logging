@@ -209,7 +209,9 @@ function routes(router: ConnectRouter) {
 
     async *streamWorkloadLogs(req) {
       for (let i = 0; i < 5; i++) {
-        yield { line: `2024-01-15T10:00:0${i}Z INFO live workload line ${i + 1} from ${req.name}` };
+        // An empty kind and name is the namespace-wide tail.
+        const source = req.name || `every pod in ${req.namespace}`;
+        yield { line: `2024-01-15T10:00:0${i}Z INFO live workload line ${i + 1} from ${source}` };
         await new Promise<void>((resolve) => setTimeout(resolve, 200));
       }
     },

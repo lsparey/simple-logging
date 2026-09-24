@@ -20,6 +20,8 @@ export interface SidebarWorkload {
   active: boolean;
   jsonLogging: boolean;
   pods: string[];
+  /** The pod's containers, for Pods-section rows (unset for other kinds). */
+  containers?: string[];
 }
 
 export const WORKLOAD_KIND_SECTIONS: { key: WorkloadKind; label: string; Icon: SvgIconComponent }[] = [

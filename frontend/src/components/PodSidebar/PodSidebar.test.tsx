@@ -324,3 +324,23 @@ describe('KindNode', () => {
     expect(screen.queryByText('2')).not.toBeInTheDocument();
   });
 });
+
+describe('WorkloadNode — container badge', () => {
+  it('shows how many containers a pod has when it has more than one', async () => {
+    render(
+      <KindNode
+        namespace="default"
+        kind="Pod"
+        workloads={[
+          { kind: 'Pod', name: 'with-sidecar', namespace: 'default', active: true, jsonLogging: false, pods: ['with-sidecar'], containers: ['app', 'istio-proxy'] },
+          { kind: 'Pod', name: 'single', namespace: 'default', active: true, jsonLogging: false, pods: ['single'], containers: ['app'] },
+        ]}
+      />,
+      { wrapper: Wrapper },
+    );
+    fireEvent.click(screen.getByText('Pods'));
+    await waitFor(() => expect(screen.getByText('with-sidecar')).toBeInTheDocument());
+    expect(screen.getByLabelText('2 containers')).toBeInTheDocument();
+    expect(screen.queryByLabelText('1 containers')).not.toBeInTheDocument();
+  });
+});
