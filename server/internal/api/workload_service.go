@@ -287,8 +287,7 @@ func (s *LogService) StreamWorkloadLogs(ctx context.Context, r *connect.Request[
 }
 
 // streamWorkloadLines implements StreamWorkloadLogs, delivering each line to
-// send. It is shared with the deprecated StreamDeploymentLogs, whose stream
-// carries a different response type.
+// send.
 func (s *LogService) streamWorkloadLines(ctx context.Context, req *pb.StreamWorkloadLogsRequest, send func(line string) error) error {
 	namespaceWide := req.Kind == "" && req.Name == ""
 	if req.Namespace == "" || (!namespaceWide && (req.Kind == "" || req.Name == "")) {

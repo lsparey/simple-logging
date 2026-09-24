@@ -9,11 +9,11 @@ import (
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
 )
 
-// TestGetDeploymentLogs_SameTimestampPreservesOrder verifies that a burst of
+// TestGetWorkloadLogs_Deployment_SameTimestampPreservesOrder verifies that a burst of
 // log lines from a single pod that all share an identical RFC3339 timestamp
 // (e.g. rapid app startup messages) are returned in file-insertion order and
 // not arbitrarily reordered by the merge heap.
-func TestGetDeploymentLogs_SameTimestampPreservesOrder(t *testing.T) {
+func TestGetWorkloadLogs_Deployment_SameTimestampPreservesOrder(t *testing.T) {
 	dir := t.TempDir()
 
 	// Pod name follows Kubernetes convention: <deployment>-<rsHash>-<podHash>
@@ -29,12 +29,13 @@ func TestGetDeploymentLogs_SameTimestampPreservesOrder(t *testing.T) {
 	writeLogFile(t, dir, "default", pod, lines)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
-		Namespace:  "default",
-		Deployment: deployment,
+	resp, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+		Kind:      "Deployment",
+		Namespace: "default",
+		Name:      deployment,
 	})
 	if err != nil {
-		t.Fatalf("GetDeploymentLogs: %v", err)
+		t.Fatalf("GetWorkloadLogs: %v", err)
 	}
 
 	if len(resp.Lines) != n {
@@ -47,11 +48,11 @@ func TestGetDeploymentLogs_SameTimestampPreservesOrder(t *testing.T) {
 	}
 }
 
-// TestGetDeploymentLogs_SameTimestampAcrossPodsPreservesOrder verifies that
+// TestGetWorkloadLogs_Deployment_SameTimestampAcrossPodsPreservesOrder verifies that
 // when two pods each emit a burst of startup messages at the same timestamp,
 // the lines from each pod are returned in their original file order (i.e. the
 // heap merge does not interleave lines from the same pod out of sequence).
-func TestGetDeploymentLogs_SameTimestampAcrossPodsPreservesOrder(t *testing.T) {
+func TestGetWorkloadLogs_Deployment_SameTimestampAcrossPodsPreservesOrder(t *testing.T) {
 	dir := t.TempDir()
 
 	const deployment = "myapp"
@@ -73,12 +74,13 @@ func TestGetDeploymentLogs_SameTimestampAcrossPodsPreservesOrder(t *testing.T) {
 	writeLogFile(t, dir, "default", podB, linesB)
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
-		Namespace:  "default",
-		Deployment: deployment,
+	resp, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+		Kind:      "Deployment",
+		Namespace: "default",
+		Name:      deployment,
 	})
 	if err != nil {
-		t.Fatalf("GetDeploymentLogs: %v", err)
+		t.Fatalf("GetWorkloadLogs: %v", err)
 	}
 
 	if len(resp.Lines) != n*2 {

@@ -1,6 +1,6 @@
 package api
 
-// Paging tests for GetLogs and GetDeploymentLogs using a 3-day, 2160-line
+// Paging tests for GetLogs and GetWorkloadLogs using a 3-day, 2160-line
 // fixture that mirrors the front-end mock.
 //
 // Fixture layout (per source)
@@ -328,12 +328,12 @@ func TestGetLogs_3Day_BurstLinesIncludedOnCorrectPage(t *testing.T) {
 	}
 }
 
-// ── GetDeploymentLogs paging ──────────────────────────────────────────────────
+// ── GetWorkloadLogs paging ──────────────────────────────────────────────────
 
-// TestGetDeploymentLogs_3Day_LoadLastPageShowsMostRecent verifies that
+// TestGetWorkloadLogs_Deployment_3Day_LoadLastPageShowsMostRecent verifies that
 // LoadLastPage=true for a deployment returns pageSize lines, all from the
 // newest day (2024-01-15).
-func TestGetDeploymentLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
+func TestGetWorkloadLogs_Deployment_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	// Pod name must satisfy the Kubernetes naming heuristic:
 	// <deployment>-<rsHash>-<podHash>
 	const (
@@ -344,14 +344,15 @@ func TestGetDeploymentLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	writeLogFile(t, dir, "default", pod, generate3DayLogLines(pod))
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
+	resp, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+		Kind:         "Deployment",
 		Namespace:    "default",
-		Deployment:   deployment,
+		Name:         deployment,
 		PageSize:     pagingPageSize,
 		LoadLastPage: true,
 	})
 	if err != nil {
-		t.Fatalf("GetDeploymentLogs: %v", err)
+		t.Fatalf("GetWorkloadLogs: %v", err)
 	}
 	if len(resp.Lines) != pagingPageSize {
 		t.Fatalf("expected %d lines, got %d", pagingPageSize, len(resp.Lines))
@@ -379,11 +380,11 @@ func TestGetDeploymentLogs_3Day_LoadLastPageShowsMostRecent(t *testing.T) {
 	}
 }
 
-// TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs starts from
+// TestGetWorkloadLogs_Deployment_3Day_BackwardPaginationReachesOldestLogs starts from
 // the most recent page and pages backwards until prevPageToken is exhausted.
 // The final page must contain day-1 content, with the very first line being
 // the oldest log entry in the fixture.
-func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T) {
+func TestGetWorkloadLogs_Deployment_3Day_BackwardPaginationReachesOldestLogs(t *testing.T) {
 	const (
 		deployment = "myworker"
 		pod        = "myworker-6abc1-def2345"
@@ -393,14 +394,15 @@ func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
-	initial, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
+	initial, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+		Kind:         "Deployment",
 		Namespace:    "default",
-		Deployment:   deployment,
+		Name:         deployment,
 		PageSize:     pagingPageSize,
 		LoadLastPage: true,
 	})
 	if err != nil {
-		t.Fatalf("initial GetDeploymentLogs (LoadLastPage): %v", err)
+		t.Fatalf("initial GetWorkloadLogs (LoadLastPage): %v", err)
 	}
 	for _, line := range initial.Lines {
 		if !strings.Contains(line, "2024-01-15") {
@@ -410,19 +412,20 @@ func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T
 
 	const maxPages = 25
 	prevToken := initial.PrevPageToken
-	var finalResp *pb.GetDeploymentLogsResponse
+	var finalResp *pb.GetWorkloadLogsResponse
 	for i := 0; i < maxPages; i++ {
 		if prevToken == "" {
 			break
 		}
-		r, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
-			Namespace:  "default",
-			Deployment: deployment,
-			PageSize:   pagingPageSize,
-			PageToken:  prevToken,
+		r, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+			Kind:      "Deployment",
+			Namespace: "default",
+			Name:      deployment,
+			PageSize:  pagingPageSize,
+			PageToken: prevToken,
 		})
 		if err != nil {
-			t.Fatalf("GetDeploymentLogs backward page %d: %v", i+1, err)
+			t.Fatalf("GetWorkloadLogs backward page %d: %v", i+1, err)
 		}
 		finalResp = r
 		prevToken = r.PrevPageToken
@@ -451,11 +454,11 @@ func TestGetDeploymentLogs_3Day_BackwardPaginationReachesOldestLogs(t *testing.T
 	}
 }
 
-// TestGetDeploymentLogs_3Day_MultiPod_LoadLastPageShowsMostRecent verifies
+// TestGetWorkloadLogs_Deployment_3Day_MultiPod_LoadLastPageShowsMostRecent verifies
 // that with two pods contributing to the same deployment (4320 lines total),
 // the initial load returns lines from the newest day only and merges them in
 // timestamp order.
-func TestGetDeploymentLogs_3Day_MultiPod_LoadLastPageShowsMostRecent(t *testing.T) {
+func TestGetWorkloadLogs_Deployment_3Day_MultiPod_LoadLastPageShowsMostRecent(t *testing.T) {
 	const deployment = "myworker"
 	// Pod names must satisfy the Kubernetes naming heuristic.
 	const podA = "myworker-6abc1-aaa11111"
@@ -465,14 +468,15 @@ func TestGetDeploymentLogs_3Day_MultiPod_LoadLastPageShowsMostRecent(t *testing.
 	writeLogFile(t, dir, "default", podB, generate3DayLogLines(podB))
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
-	resp, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
+	resp, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+		Kind:         "Deployment",
 		Namespace:    "default",
-		Deployment:   deployment,
+		Name:         deployment,
 		PageSize:     pagingPageSize,
 		LoadLastPage: true,
 	})
 	if err != nil {
-		t.Fatalf("GetDeploymentLogs: %v", err)
+		t.Fatalf("GetWorkloadLogs: %v", err)
 	}
 	if len(resp.Lines) != pagingPageSize {
 		t.Fatalf("expected %d lines, got %d", pagingPageSize, len(resp.Lines))
@@ -494,10 +498,10 @@ func TestGetDeploymentLogs_3Day_MultiPod_LoadLastPageShowsMostRecent(t *testing.
 	}
 }
 
-// TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs
+// TestGetWorkloadLogs_Deployment_3Day_MultiPod_BackwardPaginationReachesOldestLogs
 // verifies that with two pods (4320 merged lines), paging all the way back
 // reaches day-1 content, and the oldest line in the final page comes from day 1.
-func TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *testing.T) {
+func TestGetWorkloadLogs_Deployment_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *testing.T) {
 	const deployment = "myworker"
 	const podA = "myworker-6abc1-aaa11111"
 	const podB = "myworker-6abc1-bbb22222"
@@ -507,14 +511,15 @@ func TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *
 
 	svc := NewLogService(dir, &fakeChecker{}, &fakeChecker{})
 
-	initial, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
+	initial, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+		Kind:         "Deployment",
 		Namespace:    "default",
-		Deployment:   deployment,
+		Name:         deployment,
 		PageSize:     pagingPageSize,
 		LoadLastPage: true,
 	})
 	if err != nil {
-		t.Fatalf("initial GetDeploymentLogs: %v", err)
+		t.Fatalf("initial GetWorkloadLogs: %v", err)
 	}
 	for _, line := range initial.Lines {
 		if !strings.Contains(line, "2024-01-15") {
@@ -525,19 +530,20 @@ func TestGetDeploymentLogs_3Day_MultiPod_BackwardPaginationReachesOldestLogs(t *
 	// Page backwards to the oldest content.
 	const maxPages = 40
 	prevToken := initial.PrevPageToken
-	var finalResp *pb.GetDeploymentLogsResponse
+	var finalResp *pb.GetWorkloadLogsResponse
 	for i := 0; i < maxPages; i++ {
 		if prevToken == "" {
 			break
 		}
-		r, err := call(context.Background(), svc.GetDeploymentLogs, &pb.GetDeploymentLogsRequest{
-			Namespace:  "default",
-			Deployment: deployment,
-			PageSize:   pagingPageSize,
-			PageToken:  prevToken,
+		r, err := call(context.Background(), svc.GetWorkloadLogs, &pb.GetWorkloadLogsRequest{
+			Kind:      "Deployment",
+			Namespace: "default",
+			Name:      deployment,
+			PageSize:  pagingPageSize,
+			PageToken: prevToken,
 		})
 		if err != nil {
-			t.Fatalf("GetDeploymentLogs backward page %d: %v", i+1, err)
+			t.Fatalf("GetWorkloadLogs backward page %d: %v", i+1, err)
 		}
 		finalResp = r
 		prevToken = r.PrevPageToken
