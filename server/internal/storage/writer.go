@@ -140,12 +140,21 @@ func (w *SegmentWriter) markUnhealthyLocked(now time.Time) {
 // be held by the caller.
 func (w *SegmentWriter) rollToLocked(date string) error {
 	if w.f != nil {
-		// Clear w.f before checking the close error: if opening the new
-		// segment below then fails, w.f must not be left pointing at this
-		// now-closed handle, or the next attempt would double-close it and
-		// fail every time regardless of whether the real problem cleared.
+		// Sync the finished segment so it's durable, not just the last one
+		// Close syncs: the legacy migration deletes its source file once the
+		// writer closes, relying on every segment it wrote being on disk.
+		// This costs one fsync per container per day.
+		//
+		// Clear w.f before checking the errors: if opening the new segment
+		// below then fails, w.f must not be left pointing at this now-closed
+		// handle, or the next attempt would double-close it and fail every
+		// time regardless of whether the real problem cleared.
+		syncErr := w.f.Sync()
 		closeErr := w.f.Close()
 		w.f = nil
+		if syncErr != nil {
+			return fmt.Errorf("sync previous segment: %w", syncErr)
+		}
 		if closeErr != nil {
 			return fmt.Errorf("close previous segment: %w", closeErr)
 		}
