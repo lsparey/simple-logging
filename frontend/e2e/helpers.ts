@@ -7,10 +7,9 @@ function kindSectionLabel(kind: WorkloadKind): string {
   return section.label;
 }
 
-/** Navigate to the app, expand a namespace, expand a workload kind within it, and click a workload. */
+/** Open a namespace's URL (which pre-expands it), expand a workload kind within it, and click a workload. */
 export async function selectWorkload(page: Page, namespace: string, kind: WorkloadKind, name: string) {
-  await page.goto('/');
-  await page.getByText(namespace).click();
+  await page.goto(`/ns/${encodeURIComponent(namespace)}`);
   await page.getByText(kindSectionLabel(kind)).click();
   await page.getByText(name).first().click();
 }

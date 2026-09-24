@@ -6,8 +6,14 @@ import ErrorBoundary from './components/ErrorBoundary.js';
 import { useLogStore } from './store/logStore.js';
 
 // Initialise selection from the URL before first render so that the sidebar can
-// auto-expand the right namespace on load.
+// auto-expand the right namespace on load. The bare root is the `default`
+// namespace, so it opens pre-expanded.
+const HOME_PATH = '/ns/default';
+
 (function initStoreFromUrl() {
+  if (window.location.pathname === '/') {
+    window.history.replaceState(null, '', HOME_PATH + window.location.search + window.location.hash);
+  }
   const pathname = window.location.pathname;
   const indexMatch = pathname.match(/^\/index\/([^/]+)\/?$/);
   const indexesMatch = pathname.match(/^\/indexes\/?$/);
