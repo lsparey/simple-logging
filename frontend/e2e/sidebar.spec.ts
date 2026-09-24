@@ -9,7 +9,7 @@ test.describe('PodSidebar', () => {
     await expect(page).toHaveURL(/\/ns\/default$/);
     await expect(page.getByText('Indexes')).toBeVisible();
     await expect(page.getByText('kube-system')).toBeVisible();
-    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('default', { exact: true })).toBeVisible();
     await expect(page.getByText('Deployments')).toBeVisible();
     const defaultBox = await page.getByText('default', { exact: true }).boundingBox();
     const kubeSystemBox = await page.getByText('kube-system', { exact: true }).boundingBox();
@@ -42,7 +42,7 @@ test.describe('PodSidebar', () => {
   test('collapsing a namespace hides its kind rows', async ({ page }) => {
     await expect(page.getByText('Deployments')).toBeVisible();
 
-    await page.getByText('default').click();
+    await page.getByText('default', { exact: true }).click();
     await expect(page.getByText('Deployments')).not.toBeVisible();
   });
 
@@ -66,7 +66,7 @@ test.describe('PodSidebar', () => {
     await page.getByText('Indexes').click();
     await expect(page.getByText('companyUuid')).toBeVisible();
     // Indexes expanded in place — the namespace tree stays visible too.
-    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('default', { exact: true })).toBeVisible();
 
     await page.getByText('Indexes').click();
     await expect(page.getByText('companyUuid')).not.toBeVisible();
@@ -77,7 +77,7 @@ test.describe('PodSidebar', () => {
     await page.getByText('companyUuid').click();
 
     await expect(page.locator('.MuiChip-root').filter({ hasText: 'companyUuid' })).toBeVisible();
-    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('default', { exact: true })).toBeVisible();
   });
 });
 
@@ -88,7 +88,7 @@ test.describe('MobileSidebarNav', () => {
 
     await expect(page.getByRole('button', { name: 'Workloads' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Indexes' })).toBeVisible();
-    await expect(page.getByText('default')).not.toBeVisible();
+    await expect(page.getByText('default', { exact: true })).not.toBeVisible();
   });
 
   test('tapping Workloads opens the namespace tree directly, then drills into a kind and a workload', async ({ page }) => {
@@ -96,7 +96,7 @@ test.describe('MobileSidebarNav', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'Workloads' }).click();
-    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('default', { exact: true })).toBeVisible();
     // default is pre-expanded, since the root URL lands on /ns/default.
     await expect(page.getByText('Deployments')).toBeVisible();
 
@@ -104,7 +104,7 @@ test.describe('MobileSidebarNav', () => {
     await page.getByText('web-app').first().click();
 
     // The overlay auto-closes back down to just the bottom icons after a selection.
-    await expect(page.getByText('default')).not.toBeVisible();
+    await expect(page.getByText('default', { exact: true })).not.toBeVisible();
     await expect(page.locator('.MuiChip-root').filter({ hasText: 'web-app' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Workloads' })).toBeVisible();
   });
@@ -114,9 +114,9 @@ test.describe('MobileSidebarNav', () => {
     await page.goto('/');
 
     await page.getByRole('button', { name: 'Workloads' }).click();
-    await expect(page.getByText('default')).toBeVisible();
+    await expect(page.getByText('default', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Back' }).click();
-    await expect(page.getByText('default')).not.toBeVisible();
+    await expect(page.getByText('default', { exact: true })).not.toBeVisible();
   });
 });
