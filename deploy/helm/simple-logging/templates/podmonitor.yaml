@@ -1,0 +1,29 @@
+{{- if .Values.metrics.podMonitor.enabled }}
+{{- if not .Values.metrics.enabled }}
+{{- fail "metrics.podMonitor.enabled needs metrics.enabled=true, or there is no /metrics to scrape" }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "simple-logging.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "simple-logging.labels" . | nindent 4 }}
+    {{- with .Values.metrics.podMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "simple-logging.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.metrics.podMonitor.interval }}
+      {{- with .Values.metrics.podMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+{{- end }}

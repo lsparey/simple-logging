@@ -23,4 +23,14 @@ test.describe('Storage dashboard', () => {
     await expect(table.getByRole('columnheader', { name: 'Last updated' })).toBeVisible();
     await expect(table.getByRole('columnheader', { name: 'Bytes' })).toHaveCount(0);
   });
+
+  test('shows collection counters from the server', async ({ page }) => {
+    await page.goto('/dashboard');
+
+    await expect(page.getByRole('heading', { name: 'Collection' })).toBeVisible();
+    await expect(page.getByText('Active streams', { exact: true }).locator('..')).toContainText('5');
+    await expect(page.getByText('4 from node files, 1 from the API')).toBeVisible();
+    await expect(page.getByText('96.0 KB')).toBeVisible();
+    await expect(page.getByText(/log lines were dropped/)).toHaveCount(0);
+  });
 });

@@ -66,6 +66,10 @@ Once the pod is running, open `http://logs.example.com` in your browser to view 
 | `persistence.claimSuffix` | `logs-v3` | Suffix for the chart-created PVC |
 | `service.port` | `80` | Service port for the UI and API |
 | `cors.allowedOrigins` | `[]` | Browser origins allowed to call the API cross-origin; only needed if you host the UI elsewhere |
+| `metrics.enabled` | `false` | Serve Prometheus metrics at `/metrics` (see [Metrics](#metrics)) |
+| `metrics.serviceMonitor.enabled` / `metrics.podMonitor.enabled` | `false` | Create a prometheus-operator ServiceMonitor or PodMonitor |
+| `auth.basic.enabled` | `false` | Built-in HTTP basic auth from an htpasswd Secret (see [Authentication](#authentication)) |
+| `auth.basic.existingSecret` / `auth.basic.secretKey` | `""` / `htpasswd` | Secret holding the htpasswd file, and its key |
 | `networkPolicy.enabled` | `false` | Restrict traffic to the ingress controller namespace in, and DNS + API server out (see [Security](#security)) |
 | `volumePermissions.enabled` | `false` | Chown the PVC to the app user on start; see [Upgrading](#upgrading-to-v0140-single-binary) |
 | `podSecurityContext` / `securityContext` | non-root, see [Security](#security) | Pod and container security contexts |
@@ -148,7 +152,111 @@ In `hybrid` and `fileTail` modes the chart also adds supplemental group `0` to t
 
 `networkPolicy.enabled=true` adds a NetworkPolicy that only accepts traffic from the ingress controller's namespace (`networkPolicy.ingressNamespace`, default `ingress-nginx`, plus any `networkPolicy.extraIngressFrom` peers), and only allows egress to DNS and the Kubernetes API server. Log streams from other nodes go through the API server, so kubelets never need to be reachable directly. Set `networkPolicy.apiServerCIDRs` to pin egress to your API server's address.
 
-simple-logging has no built-in authentication. Put it behind an authenticating proxy or ingress if it is reachable by anyone who shouldn't read your cluster's logs.
+## Authentication
+
+Authentication is off by default: anyone who can reach the service can read every pod's logs. If it is reachable by anyone who shouldn't, put authentication in front of it. The recommended way is at the edge, in your ingress, so simple-logging never sees an unauthenticated request. For small installs without an ingress to do that, there's a minimal [built-in option](#built-in-basic-auth).
+
+The UI and API share one origin, and the browser sends the ingress's session cookie or basic credentials with every API call, so each of these works without any change to simple-logging.
+
+### oauth2-proxy (OIDC) with ingress-nginx
+
+Run [oauth2-proxy](https://oauth2-proxy.github.io/oauth2-proxy/) against your identity provider, serve it under `/oauth2` on the same host, and point the ingress at it:
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  host: logs.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/auth-url: "https://$host/oauth2/auth"
+    nginx.ingress.kubernetes.io/auth-signin: "https://$host/oauth2/start?rd=$escaped_request_uri"
+```
+
+### Authelia with Traefik
+
+With [Authelia](https://www.authelia.com) installed, create a ForwardAuth middleware and attach it to the ingress:
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia
+  namespace: simple-logging
+spec:
+  forwardAuth:
+    address: http://authelia.authelia.svc.cluster.local/api/authz/forward-auth
+    trustForwardHeader: true
+    authResponseHeaders: [Remote-User, Remote-Groups, Remote-Email, Remote-Name]
+```
+
+```yaml
+ingress:
+  enabled: true
+  className: traefik
+  host: logs.example.com
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: simple-logging-authelia@kubernetescrd
+```
+
+### Basic auth in the ingress
+
+ingress-nginx reads the htpasswd file from the `auth` key of a Secret:
+
+```bash
+htpasswd -c auth alice
+kubectl create secret generic logs-basic-auth -n simple-logging --from-file=auth
+```
+
+```yaml
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: logs-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: simple-logging
+```
+
+Traefik reads it from the `users` key, through a BasicAuth middleware:
+
+```bash
+htpasswd -c users alice
+kubectl create secret generic logs-basic-auth -n simple-logging --from-file=users
+```
+
+```yaml
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: basic-auth
+  namespace: simple-logging
+spec:
+  basicAuth:
+    secret: logs-basic-auth
+```
+
+```yaml
+ingress:
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: simple-logging-basic-auth@kubernetescrd
+```
+
+### Built-in basic auth
+
+When there's no ingress to authenticate for you, simple-logging can check HTTP basic credentials itself. It reads users from an htpasswd file of bcrypt hashes (`htpasswd -B`; other hash schemes are rejected at startup), in an existing Secret:
+
+```bash
+htpasswd -cB htpasswd alice
+kubectl create secret generic simple-logging-htpasswd -n simple-logging --from-file=htpasswd
+```
+
+```bash
+helm upgrade simple-logging simple-logging/simple-logging -n simple-logging \
+  --set auth.basic.enabled=true \
+  --set auth.basic.existingSecret=simple-logging-htpasswd
+```
+
+Every request then needs credentials, except `/healthz` and `/readyz` (so probes keep working) and `/metrics` (so Prometheus can scrape it). The browser shows its own login prompt. The file is read at startup, so restart the pod after changing the Secret. Use HTTPS in front of it, since basic auth sends the password with every request.
+
+This is deliberately minimal: no sessions, no logout, and every user can see everything. Use one of the edge options above if you need more.
 
 ## API
 
@@ -173,6 +281,14 @@ or with `grpcurl -plaintext -proto proto/simplelog/v1/log_service.proto localhos
 Upgrading from a v0.11 install migrates existing `<namespace>/<pod>.log` files into this layout automatically on first startup (see [Upgrading](#upgrading)); set `MIGRATE_LEGACY=false` to opt out and leave legacy files in place, in which case they're swept by their file modification time instead (matching the old, less precise behaviour) rather than participating in the day-based cutoff.
 
 As a safety net for when retention alone doesn't keep up (e.g. a burst of unusually verbose logging), a background check deletes the globally oldest segments — across every namespace and pod — whenever PVC usage reaches `config.diskHighWaterPercent` (default 90), continuing until usage is back below `config.diskLowWaterPercent` (default 80). This should rarely trigger; `retentionDays` is the primary control.
+
+## Metrics
+
+simple-logging keeps counters about itself: active log streams (by source, node file or API), lines and bytes written per namespace, lines dropped because a storage write failed, API stream reconnects, segments deleted by retention and by the disk guard, disk usage, and server-side search duration and bytes scanned. The storage dashboard in the UI shows the collection counters, and warns if any lines have been dropped. They count from when the server last started.
+
+To scrape them with Prometheus, set `metrics.enabled=true`, which serves them at `/metrics` on the main port. All series are prefixed `simplelog_`, alongside the standard Go runtime and process metrics. With the [prometheus-operator](https://prometheus-operator.dev), also set `metrics.serviceMonitor.enabled=true` (or `metrics.podMonitor.enabled=true`), plus `metrics.serviceMonitor.labels` if your Prometheus selects monitors by label.
+
+`/metrics` is served on the same port as the UI, so with an ingress it's reachable from outside too. It contains counts and namespace names, but no log content. If you use `networkPolicy.enabled`, add your Prometheus namespace to `networkPolicy.extraIngressFrom`.
 
 ## Upgrading
 

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/lsparey/simple-logging/internal/metrics"
 )
 
 func TestAllSegmentsByAge_SortsOldestFirstAcrossNamespacesPodsContainers(t *testing.T) {
@@ -55,7 +57,9 @@ func TestDiskGuard_DeletesOldestSegmentsUntilBelowLowWaterMark(t *testing.T) {
 	// -> 75 (< 80, stop). Two segments should be deleted.
 	usage := []int{95, 85, 75}
 	call := 0
+	m := metrics.New(nil)
 	g := NewDiskGuard(dir, 90, 80, time.Hour, zap.NewNop())
+	g.SetMetrics(m)
 	g.usedPercent = func(string) (int, error) {
 		v := usage[call]
 		if call < len(usage)-1 {
@@ -65,6 +69,10 @@ func TestDiskGuard_DeletesOldestSegmentsUntilBelowLowWaterMark(t *testing.T) {
 	}
 
 	g.check()
+
+	if got := m.Snapshot().DiskGuardSegmentsDeleted; got != 2 {
+		t.Errorf("DiskGuardSegmentsDeleted: got %d, want 2", got)
+	}
 
 	segments, err := ListSegments(dir, "ns", "pod", "app")
 	if err != nil {

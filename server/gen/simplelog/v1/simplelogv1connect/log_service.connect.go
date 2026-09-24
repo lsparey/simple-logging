@@ -75,6 +75,8 @@ const (
 	LogServiceGetIndexLogsProcedure = "/simplelog.v1.LogService/GetIndexLogs"
 	// LogServiceSearchLogsProcedure is the fully-qualified name of the LogService's SearchLogs RPC.
 	LogServiceSearchLogsProcedure = "/simplelog.v1.LogService/SearchLogs"
+	// LogServiceGetStatsProcedure is the fully-qualified name of the LogService's GetStats RPC.
+	LogServiceGetStatsProcedure = "/simplelog.v1.LogService/GetStats"
 )
 
 // LogServiceClient is a client for the simplelog.v1.LogService service.
@@ -139,6 +141,9 @@ type LogServiceClient interface {
 	// one or more pods/containers, optionally scoped by namespace, workload, or
 	// time range, and bounded by max_results.
 	SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest]) (*connect.ServerStreamForClient[v1.SearchLogsResponse], error)
+	// GetStats returns the server's self-metrics (the same counters /metrics
+	// exposes to Prometheus), summed across labels, for the data dashboard.
+	GetStats(context.Context, *connect.Request[v1.GetStatsRequest]) (*connect.Response[v1.GetStatsResponse], error)
 }
 
 // NewLogServiceClient constructs a client for the simplelog.v1.LogService service. By default, it
@@ -254,6 +259,12 @@ func NewLogServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(logServiceMethods.ByName("SearchLogs")),
 			connect.WithClientOptions(opts...),
 		),
+		getStats: connect.NewClient[v1.GetStatsRequest, v1.GetStatsResponse](
+			httpClient,
+			baseURL+LogServiceGetStatsProcedure,
+			connect.WithSchema(logServiceMethods.ByName("GetStats")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -276,6 +287,7 @@ type logServiceClient struct {
 	listIndexValues      *connect.Client[v1.ListIndexValuesRequest, v1.ListIndexValuesResponse]
 	getIndexLogs         *connect.Client[v1.GetIndexLogsRequest, v1.GetIndexLogsResponse]
 	searchLogs           *connect.Client[v1.SearchLogsRequest, v1.SearchLogsResponse]
+	getStats             *connect.Client[v1.GetStatsRequest, v1.GetStatsResponse]
 }
 
 // ListNamespaces calls simplelog.v1.LogService.ListNamespaces.
@@ -363,6 +375,11 @@ func (c *logServiceClient) SearchLogs(ctx context.Context, req *connect.Request[
 	return c.searchLogs.CallServerStream(ctx, req)
 }
 
+// GetStats calls simplelog.v1.LogService.GetStats.
+func (c *logServiceClient) GetStats(ctx context.Context, req *connect.Request[v1.GetStatsRequest]) (*connect.Response[v1.GetStatsResponse], error) {
+	return c.getStats.CallUnary(ctx, req)
+}
+
 // LogServiceHandler is an implementation of the simplelog.v1.LogService service.
 type LogServiceHandler interface {
 	// ListNamespaces returns all namespaces for which log files exist on disk.
@@ -425,6 +442,9 @@ type LogServiceHandler interface {
 	// one or more pods/containers, optionally scoped by namespace, workload, or
 	// time range, and bounded by max_results.
 	SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest], *connect.ServerStream[v1.SearchLogsResponse]) error
+	// GetStats returns the server's self-metrics (the same counters /metrics
+	// exposes to Prometheus), summed across labels, for the data dashboard.
+	GetStats(context.Context, *connect.Request[v1.GetStatsRequest]) (*connect.Response[v1.GetStatsResponse], error)
 }
 
 // NewLogServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -536,6 +556,12 @@ func NewLogServiceHandler(svc LogServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(logServiceMethods.ByName("SearchLogs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	logServiceGetStatsHandler := connect.NewUnaryHandler(
+		LogServiceGetStatsProcedure,
+		svc.GetStats,
+		connect.WithSchema(logServiceMethods.ByName("GetStats")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/simplelog.v1.LogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LogServiceListNamespacesProcedure:
@@ -572,6 +598,8 @@ func NewLogServiceHandler(svc LogServiceHandler, opts ...connect.HandlerOption) 
 			logServiceGetIndexLogsHandler.ServeHTTP(w, r)
 		case LogServiceSearchLogsProcedure:
 			logServiceSearchLogsHandler.ServeHTTP(w, r)
+		case LogServiceGetStatsProcedure:
+			logServiceGetStatsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -647,4 +675,8 @@ func (UnimplementedLogServiceHandler) GetIndexLogs(context.Context, *connect.Req
 
 func (UnimplementedLogServiceHandler) SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest], *connect.ServerStream[v1.SearchLogsResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("simplelog.v1.LogService.SearchLogs is not implemented"))
+}
+
+func (UnimplementedLogServiceHandler) GetStats(context.Context, *connect.Request[v1.GetStatsRequest]) (*connect.Response[v1.GetStatsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("simplelog.v1.LogService.GetStats is not implemented"))
 }

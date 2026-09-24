@@ -39,6 +39,15 @@ jobs:
           helm template simple-logging deploy/helm/simple-logging \
             --set config.logCollectionMode=api
 
+      - name: Template chart (metrics, monitors and basic auth)
+        run: |
+          helm template simple-logging deploy/helm/simple-logging \
+            --set metrics.enabled=true \
+            --set metrics.serviceMonitor.enabled=true \
+            --set metrics.podMonitor.enabled=true \
+            --set auth.basic.enabled=true \
+            --set auth.basic.existingSecret=simple-logging-htpasswd
+
   backend:
     name: Go tests
     runs-on: ubuntu-latest

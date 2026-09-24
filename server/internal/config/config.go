@@ -68,6 +68,17 @@ type Config struct {
 	// DiskLowWaterPercent is the LOGS_ROOT usage percentage the disk guard
 	// deletes segments down to once triggered by DiskHighWaterPercent.
 	DiskLowWaterPercent int
+
+	// MetricsEnabled serves Prometheus metrics at /metrics. Off by default;
+	// set METRICS_ENABLED=true. The counters are kept either way, since the
+	// GetStats RPC reports them to the UI.
+	MetricsEnabled bool
+
+	// AuthHTPasswdFile is the path to an htpasswd file of bcrypt hashes.
+	// When set, every request except /healthz, /readyz and /metrics needs
+	// HTTP basic credentials from it. Empty (the default) disables the
+	// built-in auth.
+	AuthHTPasswdFile string
 }
 
 // Collection modes reported by Config.CollectionMode.
@@ -150,6 +161,16 @@ func Load() (*Config, error) {
 		}
 		cfg.PPROFPort = port
 	}
+
+	if raw := os.Getenv("METRICS_ENABLED"); raw != "" {
+		enabled, err := strconv.ParseBool(raw)
+		if err != nil {
+			return nil, fmt.Errorf("invalid METRICS_ENABLED %q: must be true or false", raw)
+		}
+		cfg.MetricsEnabled = enabled
+	}
+
+	cfg.AuthHTPasswdFile = os.Getenv("AUTH_HTPASSWD_FILE")
 
 	if raw := os.Getenv("NODE_LOGS_ROOT"); raw != "" {
 		cfg.NodeLogsRoot = raw

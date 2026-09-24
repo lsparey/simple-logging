@@ -2460,6 +2460,172 @@ func (x *SearchLogsResponse) GetTruncated() bool {
 	return false
 }
 
+type GetStatsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetStatsRequest) Reset() {
+	*x = GetStatsRequest{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStatsRequest) ProtoMessage() {}
+
+func (x *GetStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStatsRequest.ProtoReflect.Descriptor instead.
+func (*GetStatsRequest) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{40}
+}
+
+// Counters are totals since the server started (started_at_unix_ms), so they
+// reset on restart; streams_active_* and searches_active are current values.
+type GetStatsResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	StartedAtUnixMs   int64                  `protobuf:"varint,1,opt,name=started_at_unix_ms,json=startedAtUnixMs,proto3" json:"started_at_unix_ms,omitempty"`
+	StreamsActiveFile int64                  `protobuf:"varint,2,opt,name=streams_active_file,json=streamsActiveFile,proto3" json:"streams_active_file,omitempty"`
+	StreamsActiveApi  int64                  `protobuf:"varint,3,opt,name=streams_active_api,json=streamsActiveApi,proto3" json:"streams_active_api,omitempty"`
+	LinesWrittenTotal int64                  `protobuf:"varint,4,opt,name=lines_written_total,json=linesWrittenTotal,proto3" json:"lines_written_total,omitempty"`
+	BytesWrittenTotal int64                  `protobuf:"varint,5,opt,name=bytes_written_total,json=bytesWrittenTotal,proto3" json:"bytes_written_total,omitempty"`
+	// lines_dropped_total counts lines lost to storage write failures (e.g. a
+	// full or read-only volume). Non-zero means some logs were not kept.
+	LinesDroppedTotal             int64 `protobuf:"varint,6,opt,name=lines_dropped_total,json=linesDroppedTotal,proto3" json:"lines_dropped_total,omitempty"`
+	ApiReconnectsTotal            int64 `protobuf:"varint,7,opt,name=api_reconnects_total,json=apiReconnectsTotal,proto3" json:"api_reconnects_total,omitempty"`
+	RetentionSegmentsDeletedTotal int64 `protobuf:"varint,8,opt,name=retention_segments_deleted_total,json=retentionSegmentsDeletedTotal,proto3" json:"retention_segments_deleted_total,omitempty"`
+	// disk_guard_segments_deleted_total counts segments deleted early because
+	// the volume crossed its high water mark.
+	DiskGuardSegmentsDeletedTotal int64 `protobuf:"varint,9,opt,name=disk_guard_segments_deleted_total,json=diskGuardSegmentsDeletedTotal,proto3" json:"disk_guard_segments_deleted_total,omitempty"`
+	SearchesActive                int64 `protobuf:"varint,10,opt,name=searches_active,json=searchesActive,proto3" json:"searches_active,omitempty"`
+	SearchBytesScannedTotal       int64 `protobuf:"varint,11,opt,name=search_bytes_scanned_total,json=searchBytesScannedTotal,proto3" json:"search_bytes_scanned_total,omitempty"`
+	unknownFields                 protoimpl.UnknownFields
+	sizeCache                     protoimpl.SizeCache
+}
+
+func (x *GetStatsResponse) Reset() {
+	*x = GetStatsResponse{}
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetStatsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetStatsResponse) ProtoMessage() {}
+
+func (x *GetStatsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_simplelog_v1_log_service_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetStatsResponse.ProtoReflect.Descriptor instead.
+func (*GetStatsResponse) Descriptor() ([]byte, []int) {
+	return file_simplelog_v1_log_service_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *GetStatsResponse) GetStartedAtUnixMs() int64 {
+	if x != nil {
+		return x.StartedAtUnixMs
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetStreamsActiveFile() int64 {
+	if x != nil {
+		return x.StreamsActiveFile
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetStreamsActiveApi() int64 {
+	if x != nil {
+		return x.StreamsActiveApi
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetLinesWrittenTotal() int64 {
+	if x != nil {
+		return x.LinesWrittenTotal
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetBytesWrittenTotal() int64 {
+	if x != nil {
+		return x.BytesWrittenTotal
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetLinesDroppedTotal() int64 {
+	if x != nil {
+		return x.LinesDroppedTotal
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetApiReconnectsTotal() int64 {
+	if x != nil {
+		return x.ApiReconnectsTotal
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetRetentionSegmentsDeletedTotal() int64 {
+	if x != nil {
+		return x.RetentionSegmentsDeletedTotal
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetDiskGuardSegmentsDeletedTotal() int64 {
+	if x != nil {
+		return x.DiskGuardSegmentsDeletedTotal
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetSearchesActive() int64 {
+	if x != nil {
+		return x.SearchesActive
+	}
+	return 0
+}
+
+func (x *GetStatsResponse) GetSearchBytesScannedTotal() int64 {
+	if x != nil {
+		return x.SearchBytesScannedTotal
+	}
+	return 0
+}
+
 var File_simplelog_v1_log_service_proto protoreflect.FileDescriptor
 
 const file_simplelog_v1_log_service_proto_rawDesc = "" +
@@ -2637,7 +2803,21 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03pod\x18\x03 \x01(\tR\x03pod\x12\x1c\n" +
 	"\tcontainer\x18\x04 \x01(\tR\tcontainer\x12\x1c\n" +
-	"\ttruncated\x18\x05 \x01(\bR\ttruncated2\x88\f\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated\"\x11\n" +
+	"\x0fGetStatsRequest\"\xd8\x04\n" +
+	"\x10GetStatsResponse\x12+\n" +
+	"\x12started_at_unix_ms\x18\x01 \x01(\x03R\x0fstartedAtUnixMs\x12.\n" +
+	"\x13streams_active_file\x18\x02 \x01(\x03R\x11streamsActiveFile\x12,\n" +
+	"\x12streams_active_api\x18\x03 \x01(\x03R\x10streamsActiveApi\x12.\n" +
+	"\x13lines_written_total\x18\x04 \x01(\x03R\x11linesWrittenTotal\x12.\n" +
+	"\x13bytes_written_total\x18\x05 \x01(\x03R\x11bytesWrittenTotal\x12.\n" +
+	"\x13lines_dropped_total\x18\x06 \x01(\x03R\x11linesDroppedTotal\x120\n" +
+	"\x14api_reconnects_total\x18\a \x01(\x03R\x12apiReconnectsTotal\x12G\n" +
+	" retention_segments_deleted_total\x18\b \x01(\x03R\x1dretentionSegmentsDeletedTotal\x12H\n" +
+	"!disk_guard_segments_deleted_total\x18\t \x01(\x03R\x1ddiskGuardSegmentsDeletedTotal\x12'\n" +
+	"\x0fsearches_active\x18\n" +
+	" \x01(\x03R\x0esearchesActive\x12;\n" +
+	"\x1asearch_bytes_scanned_total\x18\v \x01(\x03R\x17searchBytesScannedTotal2\xd3\f\n" +
 	"\n" +
 	"LogService\x12[\n" +
 	"\x0eListNamespaces\x12#.simplelog.v1.ListNamespacesRequest\x1a$.simplelog.v1.ListNamespacesResponse\x12I\n" +
@@ -2658,7 +2838,8 @@ const file_simplelog_v1_log_service_proto_rawDesc = "" +
 	"\x0fListIndexValues\x12$.simplelog.v1.ListIndexValuesRequest\x1a%.simplelog.v1.ListIndexValuesResponse\x12U\n" +
 	"\fGetIndexLogs\x12!.simplelog.v1.GetIndexLogsRequest\x1a\".simplelog.v1.GetIndexLogsResponse\x12Q\n" +
 	"\n" +
-	"SearchLogs\x12\x1f.simplelog.v1.SearchLogsRequest\x1a .simplelog.v1.SearchLogsResponse0\x01B@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
+	"SearchLogs\x12\x1f.simplelog.v1.SearchLogsRequest\x1a .simplelog.v1.SearchLogsResponse0\x01\x12I\n" +
+	"\bGetStats\x12\x1d.simplelog.v1.GetStatsRequest\x1a\x1e.simplelog.v1.GetStatsResponseB@Z>github.com/lsparey/simple-logging/gen/simplelog/v1;simplelogv1b\x06proto3"
 
 var (
 	file_simplelog_v1_log_service_proto_rawDescOnce sync.Once
@@ -2672,7 +2853,7 @@ func file_simplelog_v1_log_service_proto_rawDescGZIP() []byte {
 	return file_simplelog_v1_log_service_proto_rawDescData
 }
 
-var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_simplelog_v1_log_service_proto_msgTypes = make([]protoimpl.MessageInfo, 42)
 var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*ListNamespacesRequest)(nil),        // 0: simplelog.v1.ListNamespacesRequest
 	(*ListNamespacesResponse)(nil),       // 1: simplelog.v1.ListNamespacesResponse
@@ -2714,6 +2895,8 @@ var file_simplelog_v1_log_service_proto_goTypes = []any{
 	(*GetIndexLogsResponse)(nil),         // 37: simplelog.v1.GetIndexLogsResponse
 	(*SearchLogsRequest)(nil),            // 38: simplelog.v1.SearchLogsRequest
 	(*SearchLogsResponse)(nil),           // 39: simplelog.v1.SearchLogsResponse
+	(*GetStatsRequest)(nil),              // 40: simplelog.v1.GetStatsRequest
+	(*GetStatsResponse)(nil),             // 41: simplelog.v1.GetStatsResponse
 }
 var file_simplelog_v1_log_service_proto_depIdxs = []int32{
 	3,  // 0: simplelog.v1.ListPodsResponse.pods:type_name -> simplelog.v1.PodInfo
@@ -2740,25 +2923,27 @@ var file_simplelog_v1_log_service_proto_depIdxs = []int32{
 	33, // 21: simplelog.v1.LogService.ListIndexValues:input_type -> simplelog.v1.ListIndexValuesRequest
 	36, // 22: simplelog.v1.LogService.GetIndexLogs:input_type -> simplelog.v1.GetIndexLogsRequest
 	38, // 23: simplelog.v1.LogService.SearchLogs:input_type -> simplelog.v1.SearchLogsRequest
-	1,  // 24: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
-	4,  // 25: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
-	6,  // 26: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
-	8,  // 27: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
-	11, // 28: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
-	13, // 29: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
-	15, // 30: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
-	18, // 31: simplelog.v1.LogService.ListWorkloads:output_type -> simplelog.v1.ListWorkloadsResponse
-	20, // 32: simplelog.v1.LogService.GetWorkloadLogs:output_type -> simplelog.v1.GetWorkloadLogsResponse
-	22, // 33: simplelog.v1.LogService.StreamWorkloadLogs:output_type -> simplelog.v1.StreamWorkloadLogsResponse
-	25, // 34: simplelog.v1.LogService.ListLogFiles:output_type -> simplelog.v1.ListLogFilesResponse
-	28, // 35: simplelog.v1.LogService.ListIndexes:output_type -> simplelog.v1.ListIndexesResponse
-	30, // 36: simplelog.v1.LogService.CreateIndex:output_type -> simplelog.v1.CreateIndexResponse
-	32, // 37: simplelog.v1.LogService.DeleteIndex:output_type -> simplelog.v1.DeleteIndexResponse
-	35, // 38: simplelog.v1.LogService.ListIndexValues:output_type -> simplelog.v1.ListIndexValuesResponse
-	37, // 39: simplelog.v1.LogService.GetIndexLogs:output_type -> simplelog.v1.GetIndexLogsResponse
-	39, // 40: simplelog.v1.LogService.SearchLogs:output_type -> simplelog.v1.SearchLogsResponse
-	24, // [24:41] is the sub-list for method output_type
-	7,  // [7:24] is the sub-list for method input_type
+	40, // 24: simplelog.v1.LogService.GetStats:input_type -> simplelog.v1.GetStatsRequest
+	1,  // 25: simplelog.v1.LogService.ListNamespaces:output_type -> simplelog.v1.ListNamespacesResponse
+	4,  // 26: simplelog.v1.LogService.ListPods:output_type -> simplelog.v1.ListPodsResponse
+	6,  // 27: simplelog.v1.LogService.GetLogs:output_type -> simplelog.v1.GetLogsResponse
+	8,  // 28: simplelog.v1.LogService.StreamLogs:output_type -> simplelog.v1.StreamLogsResponse
+	11, // 29: simplelog.v1.LogService.ListDeployments:output_type -> simplelog.v1.ListDeploymentsResponse
+	13, // 30: simplelog.v1.LogService.GetDeploymentLogs:output_type -> simplelog.v1.GetDeploymentLogsResponse
+	15, // 31: simplelog.v1.LogService.StreamDeploymentLogs:output_type -> simplelog.v1.StreamDeploymentLogsResponse
+	18, // 32: simplelog.v1.LogService.ListWorkloads:output_type -> simplelog.v1.ListWorkloadsResponse
+	20, // 33: simplelog.v1.LogService.GetWorkloadLogs:output_type -> simplelog.v1.GetWorkloadLogsResponse
+	22, // 34: simplelog.v1.LogService.StreamWorkloadLogs:output_type -> simplelog.v1.StreamWorkloadLogsResponse
+	25, // 35: simplelog.v1.LogService.ListLogFiles:output_type -> simplelog.v1.ListLogFilesResponse
+	28, // 36: simplelog.v1.LogService.ListIndexes:output_type -> simplelog.v1.ListIndexesResponse
+	30, // 37: simplelog.v1.LogService.CreateIndex:output_type -> simplelog.v1.CreateIndexResponse
+	32, // 38: simplelog.v1.LogService.DeleteIndex:output_type -> simplelog.v1.DeleteIndexResponse
+	35, // 39: simplelog.v1.LogService.ListIndexValues:output_type -> simplelog.v1.ListIndexValuesResponse
+	37, // 40: simplelog.v1.LogService.GetIndexLogs:output_type -> simplelog.v1.GetIndexLogsResponse
+	39, // 41: simplelog.v1.LogService.SearchLogs:output_type -> simplelog.v1.SearchLogsResponse
+	41, // 42: simplelog.v1.LogService.GetStats:output_type -> simplelog.v1.GetStatsResponse
+	25, // [25:43] is the sub-list for method output_type
+	7,  // [7:25] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -2775,7 +2960,7 @@ func file_simplelog_v1_log_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_simplelog_v1_log_service_proto_rawDesc), len(file_simplelog_v1_log_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   40,
+			NumMessages:   42,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/lsparey/simple-logging/gen/simplelog/v1/simplelogv1connect"
+	"github.com/lsparey/simple-logging/internal/auth"
 )
 
 // ServerOptions configures NewServer.
@@ -33,6 +34,13 @@ type ServerOptions struct {
 	// browser. Empty (the default) disables CORS, which is all a same-origin
 	// deployment needs.
 	CORSAllowedOrigins []string
+
+	// Metrics, when non-nil, is served at /metrics.
+	Metrics http.Handler
+
+	// Auth, when non-nil, requires HTTP basic credentials on every route
+	// except /healthz, /readyz and /metrics.
+	Auth *auth.Basic
 }
 
 // Server serves the frontend and the LogService API over one HTTP port.
@@ -68,12 +76,22 @@ func NewServer(opts ServerOptions, log *zap.Logger) *Server {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+	if opts.Metrics != nil {
+		mux.Handle("GET /metrics", opts.Metrics)
+	}
 	mux.Handle("GET /config.js", configJSHandler(opts.APIURL))
 	mux.Handle("/download", http.HandlerFunc(s.serveAPI))
 	mux.Handle("/"+simplelogv1connect.LogServiceName+"/", http.HandlerFunc(s.serveAPI))
 	mux.Handle("/", spaHandler(opts.UI))
 
 	var handler http.Handler = mux
+	if opts.Auth != nil {
+		// Probes and Prometheus scrapes can't answer a login prompt. /metrics
+		// only exists when opts.Metrics is set.
+		handler = opts.Auth.Middleware(handler, "/healthz", "/readyz", "/metrics")
+	}
+	// CORS wraps auth, so browser preflights (which never carry
+	// credentials) are answered before the credentials check.
 	if len(opts.CORSAllowedOrigins) > 0 {
 		handler = cors.New(cors.Options{
 			AllowedOrigins: opts.CORSAllowedOrigins,

@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/lsparey/simple-logging/internal/indexes"
+	"github.com/lsparey/simple-logging/internal/metrics"
 	"github.com/lsparey/simple-logging/internal/storage"
 
 	pb "github.com/lsparey/simple-logging/gen/simplelog/v1"
@@ -59,6 +60,16 @@ type LogService struct {
 	// until SetDiskWaterMarks is called.
 	diskHighWaterPercent int
 	diskLowWaterPercent  int
+
+	// metrics backs GetStats and the search counters. Nil (the default)
+	// makes GetStats report zeros.
+	metrics *metrics.Metrics
+}
+
+// SetMetrics makes the service record search metrics in m and report m from
+// GetStats.
+func (s *LogService) SetMetrics(m *metrics.Metrics) {
+	s.metrics = m
 }
 
 // SetDiskWaterMarks records the disk guard's configured thresholds so

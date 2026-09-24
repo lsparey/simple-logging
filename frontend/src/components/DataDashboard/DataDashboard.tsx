@@ -14,8 +14,10 @@ import Typography from '@mui/material/Typography';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import StorageIcon from '@mui/icons-material/Storage';
 import { useLogFiles } from '../../hooks/useLogFiles.js';
+import { useStats } from '../../hooks/useStats.js';
 import { formatBytes } from '../../utils/formatBytes.js';
 import { formatDateTime } from '../../utils/formatDateTime.js';
+import type { GetStatsResponse } from '../../gen/simplelog/v1/log_service_pb.js';
 
 // Below the low water mark there's plenty of headroom (success); between the
 // low and high water marks the disk guard hasn't kicked in yet but is close
@@ -29,6 +31,7 @@ function diskUsageColor(usedPercent: number, highWaterPercent: number, lowWaterP
 }
 
 export default function DataDashboard() {
+  const { stats, refresh: refreshStats } = useStats();
   const {
     files,
     totalSizeBytes,
@@ -39,8 +42,12 @@ export default function DataDashboard() {
     diskLowWaterPercent,
     loading,
     error,
-    refresh,
+    refresh: refreshFiles,
   } = useLogFiles();
+  const refresh = () => {
+    refreshFiles();
+    refreshStats();
+  };
   const totalFileCount = totalLogFileCount + totalIndexFileCount;
   const diskColor = diskUsageColor(diskUsedPercent, diskHighWaterPercent, diskLowWaterPercent);
 
@@ -97,6 +104,8 @@ export default function DataDashboard() {
         </Paper>
       </Box>
 
+      {stats && <CollectionStats stats={stats} />}
+
       {error && (
         <Alert
           severity="error"
@@ -149,6 +158,50 @@ export default function DataDashboard() {
           The list is limited to the largest 50 summaries.
         </Typography>
       )}
+    </Box>
+  );
+}
+
+function StatTile({ label, value, caption }: { label: string; value: string; caption?: string }) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2.5 }}>
+      <Typography variant="body2" color="text.secondary">{label}</Typography>
+      <Typography variant="h4" sx={{ fontFamily: 'monospace', mt: 2 }}>{value}</Typography>
+      {caption && <Typography variant="caption" color="text.secondary">{caption}</Typography>}
+    </Paper>
+  );
+}
+
+/** Collector counters from GetStats, which reset whenever the server restarts. */
+function CollectionStats({ stats }: { stats: GetStatsResponse }) {
+  const since = stats.startedAtUnixMs > 0n ? formatDateTime(stats.startedAtUnixMs) : null;
+  const streams = stats.streamsActiveFile + stats.streamsActiveApi;
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" component="h2">Collection</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        {since ? `Since the server started at ${since}.` : 'Since the server started.'}
+      </Typography>
+      {stats.linesDroppedTotal > 0n && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {stats.linesDroppedTotal.toLocaleString()} log lines were dropped because writes to storage failed.
+          Check that the log volume isn't full or read-only.
+        </Alert>
+      )}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 2 }}>
+        <StatTile
+          label="Active streams"
+          value={streams.toLocaleString()}
+          caption={`${stats.streamsActiveFile.toLocaleString()} from node files, ${stats.streamsActiveApi.toLocaleString()} from the API`}
+        />
+        <StatTile
+          label="Lines written"
+          value={stats.linesWrittenTotal.toLocaleString()}
+          caption={formatBytes(stats.bytesWrittenTotal)}
+        />
+        <StatTile label="Lines dropped" value={stats.linesDroppedTotal.toLocaleString()} />
+        <StatTile label="API reconnects" value={stats.apiReconnectsTotal.toLocaleString()} />
+      </Box>
     </Box>
   );
 }

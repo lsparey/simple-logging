@@ -286,3 +286,45 @@ func TestLoad_CORSAllowedOriginsParsed(t *testing.T) {
 		t.Errorf("APIURL: got %q, want https://api.example.com", cfg.APIURL)
 	}
 }
+
+func TestLoad_MetricsAndAuthOffByDefault(t *testing.T) {
+	t.Setenv("LOGS_ROOT", t.TempDir())
+	t.Setenv("METRICS_ENABLED", "")
+	t.Setenv("AUTH_HTPASSWD_FILE", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.MetricsEnabled {
+		t.Error("MetricsEnabled: got true, want false")
+	}
+	if cfg.AuthHTPasswdFile != "" {
+		t.Errorf("AuthHTPasswdFile: got %q, want empty", cfg.AuthHTPasswdFile)
+	}
+}
+
+func TestLoad_MetricsAndAuthEnabled(t *testing.T) {
+	t.Setenv("LOGS_ROOT", t.TempDir())
+	t.Setenv("METRICS_ENABLED", "true")
+	t.Setenv("AUTH_HTPASSWD_FILE", "/etc/simple-logging/htpasswd")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.MetricsEnabled {
+		t.Error("MetricsEnabled: got false, want true")
+	}
+	if cfg.AuthHTPasswdFile != "/etc/simple-logging/htpasswd" {
+		t.Errorf("AuthHTPasswdFile: got %q", cfg.AuthHTPasswdFile)
+	}
+}
+
+func TestLoad_InvalidMetricsEnabled(t *testing.T) {
+	t.Setenv("LOGS_ROOT", t.TempDir())
+	t.Setenv("METRICS_ENABLED", "yes please")
+	if _, err := Load(); err == nil {
+		t.Error("expected error")
+	}
+}

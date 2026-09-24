@@ -83,6 +83,10 @@ service LogService {
   // one or more pods/containers, optionally scoped by namespace, workload, or
   // time range, and bounded by max_results.
   rpc SearchLogs(SearchLogsRequest) returns (stream SearchLogsResponse);
+
+  // GetStats returns the server's self-metrics (the same counters /metrics
+  // exposes to Prometheus), summed across labels, for the data dashboard.
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
 }
 
 // ── ListNamespaces ────────────────────────────────────────────────────────────
@@ -456,4 +460,28 @@ message SearchLogsResponse {
   // truncated is set on the final message when max_results was reached
   // before every matching file was scanned.
   bool truncated = 5;
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+
+message GetStatsRequest {}
+
+// Counters are totals since the server started (started_at_unix_ms), so they
+// reset on restart; streams_active_* and searches_active are current values.
+message GetStatsResponse {
+  int64 started_at_unix_ms = 1;
+  int64 streams_active_file = 2;
+  int64 streams_active_api = 3;
+  int64 lines_written_total = 4;
+  int64 bytes_written_total = 5;
+  // lines_dropped_total counts lines lost to storage write failures (e.g. a
+  // full or read-only volume). Non-zero means some logs were not kept.
+  int64 lines_dropped_total = 6;
+  int64 api_reconnects_total = 7;
+  int64 retention_segments_deleted_total = 8;
+  // disk_guard_segments_deleted_total counts segments deleted early because
+  // the volume crossed its high water mark.
+  int64 disk_guard_segments_deleted_total = 9;
+  int64 searches_active = 10;
+  int64 search_bytes_scanned_total = 11;
 }

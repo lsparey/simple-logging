@@ -82,6 +82,47 @@ service:
   # Serves the UI and the API (gRPC, gRPC-Web and Connect) on one port.
   port: 80
 
+# Prometheus metrics. The counters are always kept (the UI's data dashboard
+# shows them), but /metrics is only served when enabled. /metrics is on the
+# same port as the UI, so with ingress.enabled it is reachable through the
+# ingress too, and it stays open when auth.basic is enabled so Prometheus
+# can scrape it. It exposes counts and namespace names, not log content.
+metrics:
+  enabled: false
+  # Create a prometheus-operator ServiceMonitor (requires metrics.enabled
+  # and the monitoring.coreos.com CRDs).
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: ""
+    # Extra labels, e.g. the release label your Prometheus selects on.
+    labels: {}
+  # Or a PodMonitor, for setups that select PodMonitors instead.
+  podMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: ""
+    labels: {}
+
+# Built-in HTTP basic auth, off by default. Meant for small installs; for
+# anything more, put an authenticating proxy (oauth2-proxy, Authelia, or
+# your ingress controller's auth) in front instead. See the README.
+#
+# When enabled, every request except /healthz, /readyz and /metrics needs a
+# username and password from an htpasswd file of bcrypt hashes, read from an
+# existing Secret:
+#
+#   htpasswd -cB htpasswd alice
+#   kubectl create secret generic simple-logging-htpasswd --from-file=htpasswd
+#
+# The file is read at startup, so restart the pod after changing the Secret.
+auth:
+  basic:
+    enabled: false
+    existingSecret: ""
+    # Key in the Secret holding the htpasswd file.
+    secretKey: htpasswd
+
 # Browser origins allowed to call the API cross-origin. Leave empty (CORS
 # off) when the UI is served by this chart, which is the normal setup; set it
 # only if you host the frontend build somewhere else.
