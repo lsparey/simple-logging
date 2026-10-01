@@ -2,6 +2,20 @@
 
 All notable changes to simple-logging. From v1.0.0 on, each release's entry is written by the Release workflow from its release notes; see [CONTRIBUTING.md](CONTRIBUTING.md#releases). Versions before v0.6.0 were early development releases of the chart only.
 
+## 1.0.1 (2026-10-01)
+
+- build: move to Node 24 LTS (#41) (`f45baec`)
+- build(deps-dev): bump jsdom from 29.1.1 to 30.1.1 in /frontend (#37) (`0a13900`)
+- build(deps): bump the npm group across 1 directory with 26 updates (#40) (`68826b7`)
+- build(deps): bump azure/setup-helm from 4 to 5 (#32) (`1de017b`)
+- build(deps): bump actions/setup-node from 4 to 7 (#35) (`2d44fe7`)
+- build(deps): bump actions/setup-go from 5 to 7 (#33) (`a5b1e5e`)
+- build(deps): bump docker/build-push-action from 6 to 7 (#34) (`0242f4b`)
+- build(deps): bump helm/chart-releaser-action (#31) (`427407d`)
+- build(deps): bump the go group across 1 directory with 5 updates (#30) (`b8b7716`)
+- build(deps): bump golang (#28) (`7014f6f`)
+- build(deps-dev): bump vitest from 4.1.7 to 5.0.1 in /frontend (#39) (`73fa562`)
+
 ## 1.0.0 (2026-09-24)
 
 - Phase 6: v1.0 — docs, CI, shim removal, and fixes from a Phase 0–5 audit (#27) (`0ff03a6`)
