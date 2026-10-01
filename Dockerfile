@@ -14,7 +14,7 @@ COPY frontend/ .
 RUN npm pkg set version="${VERSION#v}" && npm run build
 
 # Build the server with the frontend embedded (see server/internal/ui).
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS backend-build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS backend-build
 ARG VERSION
 ARG TARGETOS
 ARG TARGETARCH
