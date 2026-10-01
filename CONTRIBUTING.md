@@ -7,7 +7,7 @@ Thanks for helping. This covers setting up, running and testing simple-logging, 
 | Tool | Used for |
 |---|---|
 | Go (the version in `server/go.mod`) | The server |
-| Node.js 22 | The frontend |
+| Node.js 24 | The frontend |
 | [buf](https://buf.build/docs/installation) | Regenerating API code from `proto/` |
 | [golangci-lint](https://golangci-lint.run) v2 | Linting the server |
 | Helm 3 | Linting and installing the chart |
