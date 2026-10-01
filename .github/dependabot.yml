@@ -17,6 +17,11 @@ updates:
     groups:
       npm:
         update-types: [minor, patch]
+    ignore:
+      # typescript-eslint doesn't support TypeScript 7 (the native compiler)
+      # yet. Drop this once its typescript peer range allows 7.
+      - dependency-name: typescript
+        versions: [">=7"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -34,3 +39,7 @@ updates:
     groups:
       docker:
         update-types: [minor, patch]
+    ignore:
+      # Only even-numbered Node majors become LTS; skip the odd ones.
+      - dependency-name: node
+        versions: ["25.x", "27.x", "29.x"]
