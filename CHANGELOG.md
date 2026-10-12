@@ -2,6 +2,17 @@
 
 All notable changes to simple-logging. From v1.0.0 on, each release's entry is written by the Release workflow from its release notes; see [CONTRIBUTING.md](CONTRIBUTING.md#releases). Versions before v0.6.0 were early development releases of the chart only.
 
+## 1.0.2 (2026-10-12)
+
+- build(deps): bump docker/setup-buildx-action from 3 to 4 (#46) (`9ed18c8`)
+- build(deps): bump docker/metadata-action from 5 to 6 (#45) (`b6a8d0e`)
+- build(deps): bump docker/login-action from 3 to 4 (#47) (`e0e0bf1`)
+- build(deps): bump actions/upload-artifact from 4 to 7 (#48) (`1c84c19`)
+- build(deps): bump actions/checkout from 4 to 7 (#49) (`83a47ff`)
+- build(deps-dev): bump @testing-library/jest-dom in /frontend (#43) (`cf45665`)
+- build(deps): bump the npm group in /frontend with 7 updates (#50) (`6501f4b`)
+- fix: build with Go 1.27.2 and bump golang.org/x/net to v0.60.0 (#52) (`ed32138`)
+
 ## 1.0.1 (2026-10-01)
 
 - build: move to Node 24 LTS (#41) (`f45baec`)
