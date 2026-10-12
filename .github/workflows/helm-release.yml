@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # chart-releaser needs full git history
           token: ${{ secrets.ADMIN_BYPASS_TOKEN }}  # Pass the admin token here so the git operations inherit the Admin bypass role
