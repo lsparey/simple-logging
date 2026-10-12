@@ -22,6 +22,10 @@ updates:
       # yet. Drop this once its typescript peer range allows 7.
       - dependency-name: typescript
         versions: [">=7"]
+      # Node types track the Node runtime (node:24-alpine and CI's
+      # node-version). Raise this when the runtime moves to a new major.
+      - dependency-name: "@types/node"
+        versions: [">=25"]
 
   - package-ecosystem: github-actions
     directory: /
